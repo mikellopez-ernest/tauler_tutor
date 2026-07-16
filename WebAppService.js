@@ -1,0 +1,52 @@
+function renderApp_() {
+  try {
+    var email = getCurrentUserEmail_();
+    var tutorGroup = resolveTutorGroupForEmail_(email);
+    var students = fetchDinantiaStudentsInGroup_(tutorGroup.dinantiaGroupId);
+
+    return renderTemplate_({
+      ok: true,
+      error: null,
+      tutorGroup: tutorGroup,
+      students: students,
+      showBirthdate: students.some(function(student) {
+        return Boolean(student.birthdate);
+      })
+    });
+  } catch (error) {
+    console.error(error && error.stack ? error.stack : error);
+    return renderTemplate_({
+      ok: false,
+      error: errorToViewModel_(error),
+      tutorGroup: null,
+      students: [],
+      showBirthdate: false
+    });
+  }
+}
+
+function renderTemplate_(viewModel) {
+  var template = HtmlService.createTemplateFromFile('Index');
+  template.viewModel = viewModel;
+
+  return template.evaluate()
+    .setTitle('Tauler de tutoria')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function getCurrentUserEmail_() {
+  var email = Session.getActiveUser().getEmail();
+
+  if (!email || !String(email).trim()) {
+    throw accessError_("No s'ha pogut identificar l'usuari actiu.");
+  }
+
+  email = String(email).trim().toLowerCase();
+
+  if (email.split('@').pop() !== APP_CONFIG.domain) {
+    throw accessError_('Aquest aplicatiu només és accessible per a usuaris del domini ' + APP_CONFIG.domain + '.');
+  }
+
+  return email;
+}
+

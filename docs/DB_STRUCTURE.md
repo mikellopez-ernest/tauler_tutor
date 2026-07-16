@@ -2,15 +2,17 @@
 
 This document describes the database structure used by the app. The app must treat database locations as configurable data, not as hardcoded connector configuration.
 
-## Script Property
+## Script Properties
 
-The Apps Script project must define a script property named `db`.
+The Apps Script project must define these script properties.
 
 | Property | Meaning |
 | --- | --- |
 | `db` | Spreadsheet ID of the database registry spreadsheet. |
+| `dinantia_api_user` | Dinantia API Basic Auth user. |
+| `dinantia_api_secret` | Dinantia API Basic Auth secret. |
 
-The app reads this value from script properties. If the property is missing, blank, or only whitespace, the app must stop with a clear configuration error.
+The app reads these values from script properties. If a required property is missing, blank, or only whitespace, the app must stop with a clear configuration error.
 
 Apps Script access pattern:
 
@@ -110,13 +112,13 @@ Row 1 contains headers. Data starts in row 2.
 | `NOM` | First name. |
 | `COGNOM1` | First surname. |
 | `COGNOM2` | Second surname. |
-| `REDUIT` | Short teacher code used by timetable logic. |
+| `REDUÏT` | Short teacher code used by timetable logic. |
 | `SITUACIO` | Status text. Do not infer substitute status from this. |
 | `JORNADA` | Workload fraction. |
 | `DNI` | ID document value. |
 | `TELF` | Phone number. |
 | `XTEC` | XTEC email. |
-| `CORREU` | Institutional/main email. |
+| `CORREU INSTIT` | Institutional/main email used for app teacher lookup. |
 | `NOUS` | New teacher boolean flag. |
 | `ACTIU` | Active teacher boolean flag. |
 | `BAIXA?` | Leave-of-absence boolean flag. |
@@ -125,9 +127,9 @@ Row 1 contains headers. Data starts in row 2.
 ### Teacher Identity Rules
 
 - `ESP` is the original teacher code.
-- `REDUIT` is the short teacher code used by timetable logic.
-- `REDUIT` joins to teacher codes in timetable sheets such as `Horaris` -> `GPU001`.
-- `REDUIT` joins to both `leave_absence.teacher_code` and `leave_absence.substitute_code`.
+- `REDUÏT` is the short teacher code used by timetable logic.
+- `REDUÏT` joins to teacher codes in timetable sheets such as `Horaris` -> `GPU001`.
+- `REDUÏT` joins to both `leave_absence.teacher_code` and `leave_absence.substitute_code`.
 - Full name is built as `NOM COGNOM1 COGNOM2`, omitting blank parts.
 - Teacher names should be sorted by `COGNOM1`, then `COGNOM2`, then `NOM`.
 
@@ -175,8 +177,8 @@ Row 1 contains headers. Data starts in row 2.
 | Header | Meaning |
 | --- | --- |
 | `row_id` | Original row number in `Llista`. |
-| `teacher_code` | Original teacher `REDUIT`. |
-| `substitute_code` | Substitute teacher `REDUIT`. |
+| `teacher_code` | Original teacher `REDUÏT`. |
+| `substitute_code` | Substitute teacher `REDUÏT`. |
 | `start_date` | Leave start date. |
 | `end_date` | Leave end date. Blank means still active. |
 | `comments` | Free comments. |
@@ -186,9 +188,9 @@ Row 1 contains headers. Data starts in row 2.
 - A leave is active when the relevant date is between `start_date` and `end_date`, inclusive.
 - Blank `end_date` means the leave is active until further notice.
 - The relevant date is usually today in the Apps Script timezone `Europe/Madrid`.
-- `teacher_code` stores the original teacher `REDUIT`.
-- `substitute_code` stores the substitute teacher `REDUIT`.
-- Both `teacher_code` and `substitute_code` refer to teachers in `Llista` using `REDUIT`.
+- `teacher_code` stores the original teacher `REDUÏT`.
+- `substitute_code` stores the substitute teacher `REDUÏT`.
+- Both `teacher_code` and `substitute_code` refer to teachers in `Llista` using `REDUÏT`.
 - If a substitute cannot be resolved, keep the original teacher and continue.
 
 ## Effective Teacher Resolution
@@ -198,9 +200,9 @@ Apps that need the effective teacher for a timetable or source row must resolve 
 Resolution process:
 
 1. Read the timetable/source teacher code.
-2. Treat the source teacher code as `REDUIT`.
-3. Find an active `leave_absence` row where `teacher_code` matches that `REDUIT`.
-4. If an active leave is found, replace the teacher with the substitute whose `REDUIT` equals `substitute_code`.
+2. Treat the source teacher code as `REDUÏT`.
+3. Find an active `leave_absence` row where `teacher_code` matches that `REDUÏT`.
+4. If an active leave is found, replace the teacher with the substitute whose `REDUÏT` equals `substitute_code`.
 5. If no active leave exists, keep the original teacher.
 6. If the substitute code is invalid or cannot be resolved, keep the original teacher.
 
@@ -219,12 +221,12 @@ Relationships:
 
 | From | To | Rule |
 | --- | --- | --- |
-| `leave_absence.teacher_code` | `Llista.REDUIT` | Original teacher on leave. |
-| `leave_absence.substitute_code` | `Llista.REDUIT` | Substitute teacher covering the leave. |
+| `leave_absence.teacher_code` | `Llista.REDUÏT` | Original teacher on leave. |
+| `leave_absence.substitute_code` | `Llista.REDUÏT` | Substitute teacher covering the leave. |
 | `carrecs.asignado?` | `Llista` full name | Teacher responsible for the group. Full name is `NOM COGNOM1 COGNOM2`, omitting blanks. |
 | `class_groups.tutor_carrec` | `carrecs.carrec` | Dinantia group maps to a tutor responsibility/group entry. |
 
-Both teacher fields in `leave_absence` always refer to `Llista.REDUIT`.
+Both teacher fields in `leave_absence` always refer to `Llista.REDUÏT`.
 
 ## Shared Table: `Càrrega lectiva` -> `carrecs`
 
@@ -257,13 +259,13 @@ Row 1 contains headers. Data starts in row 2.
 | Header | Meaning |
 | --- | --- |
 | `id` | Autonumeric field for every row. |
-| `dinantia_group_name` | Student group name used with the Dinantia app. |
+| `dinantia_group_name` | Dinantia group ID used with the Dinantia app. |
 | `tutor_carrec` | Responsibility/group name that relates this row to `Càrrega lectiva` -> `carrecs`. |
 
 ### `class_groups` Rules
 
 - `id` is an autonumeric row identifier.
-- `dinantia_group_name` is the group name that will be used with Dinantia.
+- `dinantia_group_name` stores the Dinantia group `id`.
 - `tutor_carrec` relates to `Càrrega lectiva` -> `carrecs`.`carrec`.
 - Dinantia is an ERP software for schools. Integration details are outside the current database structure spec and will be specified separately.
 
@@ -283,11 +285,11 @@ String comparisons for `class_groups`.`tutor_carrec` to `carrecs`.`carrec`, and 
 
 ## Teacher Lookup By Email
 
-One app query must find a teacher from `Dades de professors` -> `Llista` using the `CORREU` column.
+One app query must find a teacher from `Dades de professors` -> `Llista` using the `CORREU INSTIT` column.
 
 Lookup rules:
 
-- Match the requested email against `CORREU`.
+- Match the requested email against `CORREU INSTIT`.
 - Email matching should trim surrounding whitespace.
 - Once the teacher row is found, inspect the `SUBST?` flag.
 - If `SUBST?` is not true, use the found teacher row as the teacher.
@@ -295,15 +297,15 @@ Lookup rules:
 
 ### Substitute Email Lookup Resolution
 
-When a teacher found by `CORREU` has `SUBST?` true:
+When a teacher found by `CORREU INSTIT` has `SUBST?` true:
 
-1. Read the substitute teacher's `REDUIT` from `Llista`.
-2. Search `Dades de professors` -> `leave_absence` for an active row where `substitute_code` matches that `REDUIT`.
+1. Read the substitute teacher's `REDUÏT` from `Llista`.
+2. Search `Dades de professors` -> `leave_absence` for an active row where `substitute_code` matches that `REDUÏT`.
 3. Active means `start_date` is on or before the current date and `end_date` is blank or on or after the current date.
 4. The current date is evaluated in the Apps Script timezone `Europe/Madrid`.
-5. If an active substitution row is found, use `teacher_code` from that row to find the main teacher in `Llista` by `REDUIT`.
+5. If an active substitution row is found, use `teacher_code` from that row to find the main teacher in `Llista` by `REDUÏT`.
 6. Use the main teacher's information for the app query.
-7. If no active substitution row is found, or if the main teacher cannot be resolved, keep using the substitute teacher row that matched `CORREU`.
+7. If no active substitution row is found, or if the main teacher cannot be resolved, keep using the substitute teacher row that matched `CORREU INSTIT`.
 
 All teacher code comparisons in this process must use `codeKey_`.
 

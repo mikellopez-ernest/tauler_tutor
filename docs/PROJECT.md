@@ -16,6 +16,12 @@ Suggested structure:
 | `docs/api/` | Endpoint and request/response specs. |
 | `docs/security/` | Security, permissions, credentials, and data-handling specs. |
 
+Current feature specs:
+
+| Path | Purpose |
+| --- | --- |
+| `docs/features/TUTOR_GROUP_ENDPOINT.md` | GAS tutor endpoint that resolves the current user to a Dinantia group and lists students. |
+
 ## Architecture Principles
 
 - Keep database access registry-driven.
@@ -24,4 +30,3 @@ Suggested structure:
 - Prefer small feature specs over one large mixed document when the app grows.
 - Treat credentials and local tool configuration as non-documentation and non-source artifacts.
 - Do not commit `.clasp.json` or clasp credential files.
-

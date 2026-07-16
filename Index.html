@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ca">
+  <head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tauler de tutoria</title>
+    <?!= include_('Styles'); ?>
+  </head>
+  <body>
+    <? if (viewModel.ok) { ?>
+      <div class="app-shell">
+        <aside class="sidebar" aria-label="Menú principal">
+          <div class="brand">
+            <span class="brand-mark">T</span>
+            <span class="brand-text">Tutoria</span>
+          </div>
+
+          <nav class="nav">
+            <a class="nav-link active" href="#" data-view="inici">Inici</a>
+            <a class="nav-link" href="#" data-view="telefons">Telèfons</a>
+            <a class="nav-link" href="#" data-view="autoritzacions">Autoritzacions</a>
+          </nav>
+        </aside>
+
+        <main class="main">
+          <section class="view active" id="view-inici">
+            <header class="page-header">
+              <p class="eyebrow">Grup Dinantia</p>
+              <h1><?= viewModel.tutorGroup.dinantiaGroupId ?></h1>
+              <p class="subtle">
+                <?= viewModel.tutorGroup.teacher.fullName ?> · <?= viewModel.tutorGroup.responsibility.name ?>
+              </p>
+            </header>
+
+            <section class="table-section" aria-labelledby="students-title">
+              <div class="section-header">
+                <h2 id="students-title">Alumnat</h2>
+                <span class="count"><?= viewModel.students.length ?> alumnes</span>
+              </div>
+
+              <? if (viewModel.students.length) { ?>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Nom</th>
+                        <? if (viewModel.showBirthdate) { ?>
+                          <th>Data de naixement</th>
+                        <? } ?>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <? viewModel.students.forEach(function(student) { ?>
+                        <tr>
+                          <td><?= student.name ?></td>
+                          <? if (viewModel.showBirthdate) { ?>
+                            <td><?= student.birthdate || '' ?></td>
+                          <? } ?>
+                        </tr>
+                      <? }); ?>
+                    </tbody>
+                  </table>
+                </div>
+              <? } else { ?>
+                <p class="empty">No s'ha trobat cap alumne en aquest grup.</p>
+              <? } ?>
+            </section>
+          </section>
+
+          <section class="view" id="view-telefons">
+            <header class="page-header">
+              <h1>Telèfons</h1>
+            </header>
+          </section>
+
+          <section class="view" id="view-autoritzacions">
+            <header class="page-header">
+              <h1>Autoritzacions</h1>
+            </header>
+          </section>
+        </main>
+      </div>
+    <? } else { ?>
+      <main class="error-page">
+        <section class="error-box">
+          <p class="eyebrow">Tauler de tutoria</p>
+          <h1><?= viewModel.error.title ?></h1>
+          <p><?= viewModel.error.message ?></p>
+          <? if (viewModel.error.details) { ?>
+            <pre><?= viewModel.error.details ?></pre>
+          <? } ?>
+        </section>
+      </main>
+    <? } ?>
+
+    <?!= include_('Client'); ?>
+  </body>
+</html>
+
