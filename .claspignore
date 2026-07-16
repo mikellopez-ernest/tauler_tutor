@@ -1,0 +1,14 @@
+# Keep local-only project files out of Apps Script.
+.git/**
+.clasp.json
+.gitignore
+.claspignore
+README.md
+package.json
+package-lock.json
+node_modules/**
+.env
+.env.*
+.DS_Store
+.vscode/**
+.idea/**

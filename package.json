@@ -1,0 +1,13 @@
+{
+  "name": "tauler-tutor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Google Apps Script endpoint synced with clasp.",
+  "scripts": {
+    "pull": "clasp pull",
+    "push": "clasp push",
+    "deploy": "clasp deploy",
+    "deployments": "clasp deployments"
+  },
+  "devDependencies": {}
+}
