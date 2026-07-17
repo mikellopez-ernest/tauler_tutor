@@ -66,7 +66,7 @@ function fetchDinantiaContactsForStudents_(students) {
   var contactById = {};
 
   students.forEach(function(student) {
-    (student.parents || []).slice(0, 2).forEach(function(parentId) {
+    (student.parents || []).forEach(function(parentId) {
       if (parentId && !contactById[parentId]) {
         contactById[parentId] = fetchDinantiaAccount_(parentId, credentials);
       }
@@ -74,11 +74,11 @@ function fetchDinantiaContactsForStudents_(students) {
   });
 
   return students.map(function(student) {
-    var parentIds = (student.parents || []).slice(0, 2);
-    var contacts = [0, 1].map(function(index) {
-      var parentId = parentIds[index] || '';
+    var contacts = (student.parents || []).map(function(parentId, index) {
       var account = parentId ? contactById[parentId] : null;
-      return contactFromAccount_(account, parentId);
+      var contact = contactFromAccount_(account, parentId);
+      contact.position = index + 1;
+      return contact;
     });
 
     return {

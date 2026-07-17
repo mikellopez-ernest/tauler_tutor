@@ -341,12 +341,9 @@ Initial known values:
 | Field value | Meaning |
 | --- | --- |
 | `Birthdate` | Student birthdate, sourced from `Dades alumnes`.`Data Naixement`. |
-| `Contact1Name` | First contact/parent name. |
-| `Contact1Phone` | First contact/parent phone. |
-| `Contact1Email` | First contact/parent email. |
-| `Contact2Name` | Second contact/parent name. |
-| `Contact2Phone` | Second contact/parent phone. |
-| `Contact2Email` | Second contact/parent email. |
+| `Contact{n}Name` | Contact/parent name, where `{n}` is the 1-based contact position for that student. |
+| `Contact{n}Phone` | Contact/parent phone, where `{n}` is the 1-based contact position for that student. |
+| `Contact{n}Email` | Contact/parent email, where `{n}` is the 1-based contact position for that student. |
 
 Additional values, such as phone or authorization fields, must be added to the controlled list when their editing specs are defined.
 

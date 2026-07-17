@@ -1,53 +1,212 @@
 <script>
   (function() {
+    var state = {
+      saving: false,
+      students: [],
+      contacts: []
+    };
+
+    var appShell = document.querySelector('.app-shell');
+    var errorPage = document.querySelector('.error-page');
     var saveButton = document.querySelector('.save-button');
-    var loadingOverlay = document.querySelector('.loading-overlay');
-    var saving = false;
+    var saveLoading = document.querySelector('.save-loading');
+    var initialLoading = document.querySelector('.initial-loading');
 
-    document.querySelectorAll('[data-view]').forEach(function(link) {
-      link.addEventListener('click', function(event) {
-        event.preventDefault();
+    bindNavigation();
+    bindSorting();
+    bindSaveButton();
+    loadInitialData();
 
-        var viewName = link.getAttribute('data-view');
+    function loadInitialData() {
+      setInitialLoading(true);
+      google.script.run
+        .withSuccessHandler(function(result) {
+          setInitialLoading(false);
+          var parsed = parseInitialData(result);
 
-        document.querySelectorAll('[data-view]').forEach(function(item) {
-          item.classList.toggle('active', item === link);
-        });
+          if (!parsed || !parsed.ok) {
+            showError(parsed && parsed.error ? parsed.error : {
+              title: "S'ha produït un error",
+              message: "S'ha produït un error",
+              details: 'Resposta buida del servidor.'
+            });
+            return;
+          }
 
-        document.querySelectorAll('.view').forEach(function(view) {
-          view.classList.toggle('active', view.id === 'view-' + viewName);
-        });
-      });
-    });
-
-    document.querySelectorAll('[data-sort-table]').forEach(function(button) {
-      button.addEventListener('click', function() {
-        var tableId = button.getAttribute('data-sort-table');
-        var key = button.getAttribute('data-sort-key');
-        var direction = button.classList.contains('sorted-asc') ? 'desc' : 'asc';
-
-        document.querySelectorAll('[data-sort-table="' + tableId + '"]').forEach(function(item) {
-          item.classList.remove('sorted-asc', 'sorted-desc');
-        });
-        button.classList.add(direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
-
-        sortRows(tableId, key, direction);
-      });
-    });
-
-    document.querySelectorAll('.contact-input').forEach(function(input) {
-      input.addEventListener('input', function() {
-        var row = input.closest('[data-contact-row]');
-        row.classList.toggle('dirty-row', rowHasChanges(row));
-        updateSaveButton();
-      });
-    });
-
-    if (saveButton) {
-      saveButton.addEventListener('click', saveContactChanges);
+          renderApp(parsed);
+        })
+        .withFailureHandler(function(error) {
+          setInitialLoading(false);
+          showError({
+            title: "S'ha produït un error",
+            message: "S'ha produït un error",
+            details: error && error.message ? error.message : String(error)
+          });
+        })
+        .loadInitialDataJson();
     }
 
-    updateSaveButton();
+    function parseInitialData(result) {
+      if (!result) return null;
+
+      if (typeof result === 'string') {
+        try {
+          return JSON.parse(result);
+        } catch (error) {
+          return {
+            ok: false,
+            error: {
+              title: "S'ha produït un error",
+              message: "S'ha produït un error",
+              details: 'Resposta del servidor no vàlida: ' + error.message
+            }
+          };
+        }
+      }
+
+      return result;
+    }
+
+    function renderApp(data) {
+      state.students = data.students || [];
+      state.contacts = data.contacts || [];
+
+      document.getElementById('group-title').textContent = data.tutorGroup.dinantiaGroupId || '';
+      document.getElementById('teacher-label').textContent = (data.tutorGroup.teacherLabel || '') + ' · ' + (data.tutorGroup.responsibility.name || '');
+
+      renderStudents(state.students);
+      renderContacts(state.contacts);
+
+      appShell.classList.remove('is-hidden');
+      errorPage.classList.add('is-hidden');
+      updateSaveButton();
+    }
+
+    function showError(error) {
+      appShell.classList.add('is-hidden');
+      errorPage.classList.remove('is-hidden');
+      document.getElementById('error-title').textContent = error.title || "S'ha produït un error";
+      document.getElementById('error-message').textContent = error.message || "S'ha produït un error";
+      var details = document.getElementById('error-details');
+      details.textContent = error.details || '';
+      details.hidden = !error.details;
+    }
+
+    function renderStudents(students) {
+      var tbody = document.getElementById('students-table');
+      var empty = document.getElementById('students-empty');
+      tbody.textContent = '';
+      document.getElementById('students-count').textContent = students.length + ' alumnes';
+      empty.classList.toggle('is-hidden', students.length > 0);
+
+      students.forEach(function(student) {
+        var row = document.createElement('tr');
+        row.setAttribute('data-name', student.name || '');
+        row.setAttribute('data-birthdate', student.birthdateSortKey || '');
+        row.setAttribute('data-age', student.age || '');
+
+        appendCell(row, student.name || '');
+        appendCell(row, student.birthdate || '');
+        appendCell(row, student.age || '');
+        tbody.appendChild(row);
+      });
+    }
+
+    function renderContacts(students) {
+      var tbody = document.getElementById('contacts-table');
+      var empty = document.getElementById('contacts-empty');
+      tbody.textContent = '';
+      document.getElementById('contacts-count').textContent = students.length + ' alumnes';
+      empty.classList.toggle('is-hidden', students.length > 0);
+
+      students.forEach(function(student, studentIndex) {
+        var contacts = student.contacts && student.contacts.length ? student.contacts : [{ id: '', name: '', email: '', phone: '', position: 1 }];
+        var bandClass = studentIndex % 2 === 0 ? 'student-band-even' : 'student-band-odd';
+
+        contacts.forEach(function(contact, contactIndex) {
+          var row = document.createElement('tr');
+          row.className = bandClass;
+          row.setAttribute('data-contact-row', '');
+          row.setAttribute('data-student-id', student.id || '');
+
+          if (contactIndex === 0) {
+            var studentCell = appendCell(row, student.name || '');
+            studentCell.rowSpan = contacts.length;
+          }
+
+          appendContactCell(row, contact, 'Name', 'text');
+          appendContactCell(row, contact, 'Email', 'email');
+          appendContactCell(row, contact, 'Phone', 'tel');
+          tbody.appendChild(row);
+        });
+      });
+
+      bindContactInputs();
+    }
+
+    function appendContactCell(row, contact, suffix, type) {
+      var cell = document.createElement('td');
+      if (!contact.id) {
+        var missing = document.createElement('span');
+        missing.className = 'missing';
+        missing.textContent = '-';
+        cell.appendChild(missing);
+        row.appendChild(cell);
+        return;
+      }
+
+      var input = document.createElement('input');
+      var value = contact[suffix.toLowerCase()] || '';
+      input.className = 'contact-input';
+      input.type = type;
+      input.value = value;
+      input.setAttribute('data-contact-id', contact.id);
+      input.setAttribute('data-field', 'Contact' + (contact.position || 1) + suffix);
+      input.setAttribute('data-original', value);
+      cell.appendChild(input);
+      row.appendChild(cell);
+    }
+
+    function appendCell(row, text) {
+      var cell = document.createElement('td');
+      cell.textContent = text;
+      row.appendChild(cell);
+      return cell;
+    }
+
+    function bindNavigation() {
+      document.querySelectorAll('[data-view]').forEach(function(link) {
+        link.addEventListener('click', function(event) {
+          event.preventDefault();
+          var viewName = link.getAttribute('data-view');
+
+          document.querySelectorAll('[data-view]').forEach(function(item) {
+            item.classList.toggle('active', item === link);
+          });
+
+          document.querySelectorAll('.view').forEach(function(view) {
+            view.classList.toggle('active', view.id === 'view-' + viewName);
+          });
+        });
+      });
+    }
+
+    function bindSorting() {
+      document.querySelectorAll('[data-sort-table]').forEach(function(button) {
+        button.addEventListener('click', function() {
+          var tableId = button.getAttribute('data-sort-table');
+          var key = button.getAttribute('data-sort-key');
+          var direction = button.classList.contains('sorted-asc') ? 'desc' : 'asc';
+
+          document.querySelectorAll('[data-sort-table="' + tableId + '"]').forEach(function(item) {
+            item.classList.remove('sorted-asc', 'sorted-desc');
+          });
+          button.classList.add(direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
+
+          sortRows(tableId, key, direction);
+        });
+      });
+    }
 
     function sortRows(tableId, key, direction) {
       var tbody = document.getElementById(tableId);
@@ -78,6 +237,23 @@
       return aNumber - bNumber;
     }
 
+    function bindContactInputs() {
+      document.querySelectorAll('.contact-input').forEach(function(input) {
+        input.addEventListener('input', function() {
+          input.classList.remove('invalid');
+          var row = input.closest('[data-contact-row]');
+          row.classList.toggle('dirty-row', rowHasChanges(row));
+          updateSaveButton();
+        });
+      });
+    }
+
+    function bindSaveButton() {
+      if (saveButton) {
+        saveButton.addEventListener('click', saveContactChanges);
+      }
+    }
+
     function rowHasChanges(row) {
       return Array.prototype.some.call(row.querySelectorAll('.contact-input'), function(input) {
         return input.value !== input.getAttribute('data-original');
@@ -90,7 +266,7 @@
 
     function updateSaveButton() {
       if (!saveButton) return;
-      saveButton.disabled = saving || getDirtyRows().length === 0;
+      saveButton.disabled = state.saving || getDirtyRows().length === 0;
     }
 
     function collectChanges() {
@@ -101,7 +277,7 @@
 
         row.querySelectorAll('.contact-input').forEach(function(input) {
           var oldValue = input.getAttribute('data-original');
-          var newValue = input.value;
+          var newValue = input.value.trim();
 
           if (oldValue !== newValue) {
             changes.push({
@@ -109,7 +285,8 @@
               contactId: input.getAttribute('data-contact-id'),
               fieldChanged: input.getAttribute('data-field'),
               oldValue: oldValue,
-              newValue: newValue
+              newValue: newValue,
+              input: input
             });
           }
         });
@@ -118,44 +295,117 @@
       return changes;
     }
 
-    function saveContactChanges() {
-      if (saving) return;
+    function validateChanges(changes) {
+      var errors = [];
 
-      var changes = collectChanges();
+      changes.forEach(function(change) {
+        change.input.classList.remove('invalid');
+
+        if (/Email$/.test(change.fieldChanged) && !isValidEmail(change.newValue)) {
+          errors.push('Email no vàlid: ' + change.newValue);
+          change.input.classList.add('invalid');
+        }
+
+        if (/Phone$/.test(change.fieldChanged) && !isValidPhone(change.newValue)) {
+          errors.push('Telèfon no vàlid: ' + change.newValue);
+          change.input.classList.add('invalid');
+        }
+      });
+
+      return errors;
+    }
+
+    function isValidEmail(value) {
+      var text = String(value || '').trim();
+      return !text || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
+    }
+
+    function isValidPhone(value) {
+      var text = String(value || '').trim();
+      if (!text) return true;
+
+      var compact = text.replace(/[\s().-]/g, '');
+      if (/^\+\d{8,15}$/.test(compact)) return true;
+      if (/^00\d{8,15}$/.test(compact)) return true;
+      return /^[6789]\d{8}$/.test(compact);
+    }
+
+    function saveContactChanges() {
+      if (state.saving) return;
+
+      var collected = collectChanges();
+      var errors = validateChanges(collected);
+
+      if (errors.length) {
+        alert(errors.join('\n'));
+        return;
+      }
+
+      var changes = collected.map(function(change) {
+        return {
+          studentId: change.studentId,
+          contactId: change.contactId,
+          fieldChanged: change.fieldChanged,
+          oldValue: change.oldValue,
+          newValue: change.newValue
+        };
+      });
+
       if (!changes.length) {
         updateSaveButton();
         return;
       }
 
-      saving = true;
-      setLoading(true);
+      state.saving = true;
+      setSaveLoading(true);
       updateSaveButton();
 
       google.script.run
-        .withSuccessHandler(function() {
-          getDirtyRows().forEach(function(row) {
-            row.querySelectorAll('.contact-input').forEach(function(input) {
-              input.setAttribute('data-original', input.value);
+        .withSuccessHandler(function(result) {
+          (result && result.changes ? result.changes : []).forEach(function(change) {
+            var selector = '.contact-input[data-contact-id="' + cssEscape(change.contactId) + '"][data-field="' + cssEscape(change.fieldChanged) + '"]';
+            document.querySelectorAll(selector).forEach(function(input) {
+              input.value = change.newValue;
+              input.setAttribute('data-original', change.newValue);
+              input.classList.remove('invalid');
+              var row = input.closest('[data-contact-row]');
+              if (row) {
+                row.classList.toggle('dirty-row', rowHasChanges(row));
+              }
             });
-            row.classList.remove('dirty-row');
           });
 
-          saving = false;
-          setLoading(false);
+          getDirtyRows().forEach(function(row) {
+            if (!rowHasChanges(row)) {
+              row.classList.remove('dirty-row');
+            }
+          });
+
+          state.saving = false;
+          setSaveLoading(false);
           updateSaveButton();
         })
         .withFailureHandler(function(error) {
           alert("No s'han pogut desar els canvis: " + (error && error.message ? error.message : error));
-          saving = false;
-          setLoading(false);
+          state.saving = false;
+          setSaveLoading(false);
           updateSaveButton();
         })
         .saveContactChanges(changes);
     }
 
-    function setLoading(isLoading) {
-      if (!loadingOverlay) return;
-      loadingOverlay.hidden = !isLoading;
+    function setInitialLoading(isLoading) {
+      if (!initialLoading) return;
+      initialLoading.classList.toggle('is-hidden', !isLoading);
+    }
+
+    function setSaveLoading(isLoading) {
+      if (!saveLoading) return;
+      saveLoading.hidden = !isLoading;
+    }
+
+    function cssEscape(value) {
+      return String(value || '').replace(/["\\]/g, '\\$&');
     }
   })();
 </script>

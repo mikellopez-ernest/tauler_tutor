@@ -13,6 +13,13 @@ function include_(filename) {
 }
 
 /**
+ * Client-callable initial data endpoint.
+ */
+function loadInitialDataJson() {
+  return JSON.stringify(loadInitialData_());
+}
+
+/**
  * Client-callable save endpoint for edited contact fields.
  */
 function saveContactChanges(changes) {

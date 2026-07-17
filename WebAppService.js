@@ -1,35 +1,41 @@
 function renderApp_() {
+  return renderTemplate_();
+}
+
+function loadInitialData_() {
   try {
     var email = getCurrentUserEmail_();
     var tutorGroup = resolveTutorGroupForEmail_(email);
     var dinantiaStudents = fetchDinantiaStudentsInGroup_(tutorGroup.dinantiaGroupId);
     var students = enrichStudentsWithLocalBirthdates_(dinantiaStudents, tutorGroup.studentDataSheetName);
+    students.sort(function(a, b) {
+      return String(a.name || '').localeCompare(String(b.name || ''), 'ca', { sensitivity: 'base' });
+    });
     var contacts = fetchDinantiaContactsForStudents_(students);
 
-    return renderTemplate_({
+    return {
       ok: true,
       error: null,
       tutorGroup: tutorGroup,
       students: students,
       contacts: contacts,
       showBirthdate: true
-    });
+    };
   } catch (error) {
     console.error(error && error.stack ? error.stack : error);
-    return renderTemplate_({
+    return {
       ok: false,
       error: errorToViewModel_(error),
       tutorGroup: null,
       students: [],
       contacts: [],
       showBirthdate: false
-    });
+    };
   }
 }
 
-function renderTemplate_(viewModel) {
+function renderTemplate_() {
   var template = HtmlService.createTemplateFromFile('Index');
-  template.viewModel = viewModel;
 
   return template.evaluate()
     .setTitle('Tauler de tutoria')
