@@ -2,16 +2,17 @@ function renderApp_() {
   try {
     var email = getCurrentUserEmail_();
     var tutorGroup = resolveTutorGroupForEmail_(email);
-    var students = fetchDinantiaStudentsInGroup_(tutorGroup.dinantiaGroupId);
+    var dinantiaStudents = fetchDinantiaStudentsInGroup_(tutorGroup.dinantiaGroupId);
+    var students = enrichStudentsWithLocalBirthdates_(dinantiaStudents, tutorGroup.studentDataSheetName);
+    var contacts = fetchDinantiaContactsForStudents_(students);
 
     return renderTemplate_({
       ok: true,
       error: null,
       tutorGroup: tutorGroup,
       students: students,
-      showBirthdate: students.some(function(student) {
-        return Boolean(student.birthdate);
-      })
+      contacts: contacts,
+      showBirthdate: true
     });
   } catch (error) {
     console.error(error && error.stack ? error.stack : error);
@@ -20,6 +21,7 @@ function renderApp_() {
       error: errorToViewModel_(error),
       tutorGroup: null,
       students: [],
+      contacts: [],
       showBirthdate: false
     });
   }
@@ -49,4 +51,3 @@ function getCurrentUserEmail_() {
 
   return email;
 }
-

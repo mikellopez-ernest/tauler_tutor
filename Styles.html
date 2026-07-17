@@ -8,6 +8,8 @@
     --muted: #617080;
     --accent: #0f766e;
     --accent-dark: #115e59;
+    --dirty: #fff3d6;
+    --dirty-line: #f59e0b;
     --danger: #b42318;
     --shadow: 0 16px 40px rgba(21, 34, 50, 0.10);
   }
@@ -170,8 +172,114 @@
     font-size: 13px;
   }
 
+  th[colspan] {
+    text-align: center;
+  }
+
+  .sort-button {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 800;
+    padding: 0;
+    text-align: left;
+  }
+
+  .sort-button::after {
+    color: var(--muted);
+    content: "↕";
+    margin-left: 6px;
+  }
+
+  .sort-button.sorted-asc::after {
+    content: "↑";
+  }
+
+  .sort-button.sorted-desc::after {
+    content: "↓";
+  }
+
   tr:last-child td {
     border-bottom: 0;
+  }
+
+  tr.dirty-row td {
+    background: var(--dirty);
+    box-shadow: inset 3px 0 0 var(--dirty-line);
+  }
+
+  .contacts-table input {
+    width: 100%;
+    min-width: 150px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    padding: 7px 8px;
+  }
+
+  .contacts-table input:focus {
+    border-color: var(--accent);
+    background: #fff;
+    outline: none;
+  }
+
+  .missing {
+    color: var(--muted);
+  }
+
+  .save-button {
+    position: fixed;
+    right: 28px;
+    bottom: 28px;
+    z-index: 20;
+    width: 58px;
+    height: 58px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: var(--shadow);
+    color: #fff;
+    cursor: pointer;
+    font-size: 25px;
+    line-height: 1;
+  }
+
+  .save-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  .loading-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    display: grid;
+    place-items: center;
+    background: rgba(246, 247, 249, 0.62);
+  }
+
+  .loading-overlay[hidden] {
+    display: none;
+  }
+
+  .loader {
+    width: 54px;
+    height: 54px;
+    border: 6px solid #d9e0e8;
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .empty {
@@ -242,6 +350,10 @@
     td {
       padding: 11px 14px;
     }
+
+    .save-button {
+      right: 18px;
+      bottom: 18px;
+    }
   }
 </style>
-

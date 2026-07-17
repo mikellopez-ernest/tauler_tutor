@@ -12,3 +12,9 @@ function include_(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
+/**
+ * Client-callable save endpoint for edited contact fields.
+ */
+function saveContactChanges(changes) {
+  return saveContactChanges_(changes);
+}

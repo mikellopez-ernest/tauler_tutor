@@ -15,7 +15,8 @@ var SCRIPT_PROPERTIES = {
 var TABLES = {
   teachers: 'Dades de professors',
   teachingLoad: 'Càrrega lectiva',
-  dinantia: 'Dinantia'
+  dinantia: 'Dinantia',
+  students: 'Dades alumnes'
 };
 
 var SHEETS = {
@@ -23,6 +24,7 @@ var SHEETS = {
   leaveAbsence: 'leave_absence',
   responsibilities: 'carrecs',
   classGroups: 'class_groups',
+  changelog: 'changelog',
   registry: 'tables'
 };
 
@@ -40,6 +42,34 @@ var HEADERS = {
   responsibilityName: 'carrec',
   responsibilityAssignee: 'asignado?',
   classGroupDinantiaId: 'dinantia_group_name',
-  classGroupTutorResponsibility: 'tutor_carrec'
+  classGroupTutorResponsibility: 'tutor_carrec',
+  classGroupStudentDataSheet: 'dades_alumnes_sheet',
+  studentId: 'ID',
+  studentBirthdate: 'Data Naixement',
+  changelogId: 'id',
+  changelogDatetime: 'datetime',
+  changelogUserMail: 'user_mail',
+  changelogFieldChanged: 'field_changed',
+  changelogOldValue: 'old_value',
+  changelogNewValue: 'new_value',
+  changelogStudentId: 'student_id'
 };
 
+var CHANGELOG_FIELDS = {
+  birthdate: 'Birthdate',
+  contact1Name: 'Contact1Name',
+  contact1Phone: 'Contact1Phone',
+  contact1Email: 'Contact1Email',
+  contact2Name: 'Contact2Name',
+  contact2Phone: 'Contact2Phone',
+  contact2Email: 'Contact2Email'
+};
+
+var CONTACT_FIELD_TO_ACCOUNT_FIELD = {
+  Contact1Name: 'name',
+  Contact1Phone: 'phone',
+  Contact1Email: 'email',
+  Contact2Name: 'name',
+  Contact2Phone: 'phone',
+  Contact2Email: 'email'
+};

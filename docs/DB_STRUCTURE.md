@@ -46,7 +46,8 @@ Current examples:
 | `Horaris` | `GPU001` |
 | `Dades de professors` | `Llista`, `leave_absence` |
 | `Càrrega lectiva` | `assignatures`, `carrecs` |
-| `Dinantia` | `class_groups` |
+| `Dinantia` | `class_groups`, `changelog` |
+| `Dades alumnes` | Group-specific student sheets referenced by `Dinantia` -> `class_groups`.`dades_alumnes_sheet` |
 | `Incidències` | `llistat_anual`, `config`, `meeting_records`, `study_group_students`, `study_group_teachers`, `3r_project`, `expulsions` |
 
 These are examples of current shared tables. They may be referenced by app specs, but the connector must still discover their spreadsheet IDs through the registry.
@@ -210,12 +211,14 @@ All teacher code comparisons in this process must use `codeKey_`.
 
 ## Registered Relationships
 
-The current app uses four registered sheets:
+The current app uses these registered sheets:
 
 - `Dades de professors` -> `Llista`
 - `Dades de professors` -> `leave_absence`
 - `Càrrega lectiva` -> `carrecs`
 - `Dinantia` -> `class_groups`
+- `Dinantia` -> `changelog`
+- `Dades alumnes` -> dynamic sheet name from `class_groups.dades_alumnes_sheet`
 
 Relationships:
 
@@ -225,6 +228,7 @@ Relationships:
 | `leave_absence.substitute_code` | `Llista.REDUÏT` | Substitute teacher covering the leave. |
 | `carrecs.asignado?` | `Llista` full name | Teacher responsible for the group. Full name is `NOM COGNOM1 COGNOM2`, omitting blanks. |
 | `class_groups.tutor_carrec` | `carrecs.carrec` | Dinantia group maps to a tutor responsibility/group entry. |
+| `class_groups.dades_alumnes_sheet` | `Dades alumnes` sheet name | Local student-data sheet for the resolved group. |
 
 Both teacher fields in `leave_absence` always refer to `Llista.REDUÏT`.
 
@@ -261,13 +265,90 @@ Row 1 contains headers. Data starts in row 2.
 | `id` | Autonumeric field for every row. |
 | `dinantia_group_name` | Dinantia group ID used with the Dinantia app. |
 | `tutor_carrec` | Responsibility/group name that relates this row to `Càrrega lectiva` -> `carrecs`. |
+| `dades_alumnes_sheet` | Sheet name inside `Dades alumnes` containing local student data for this group. |
 
 ### `class_groups` Rules
 
 - `id` is an autonumeric row identifier.
 - `dinantia_group_name` stores the Dinantia group `id`.
 - `tutor_carrec` relates to `Càrrega lectiva` -> `carrecs`.`carrec`.
+- `dades_alumnes_sheet` stores the name of the sheet to open inside the logical table `Dades alumnes`.
+- `dades_alumnes_sheet` is group-specific and belongs to the same `class_groups` row as the Dinantia group ID in `dinantia_group_name`.
 - Dinantia is an ERP software for schools. Integration details are outside the current database structure spec and will be specified separately.
+
+## Shared Table: `Dades alumnes` -> dynamic group sheet
+
+The logical table `Dades alumnes` contains local student data sheets.
+
+The sheet name is not fixed in the connector. It is read from `Dinantia` -> `class_groups`.`dades_alumnes_sheet` for the resolved group.
+
+Rules:
+
+- `Dades alumnes` must be registered in the registry spreadsheet as a logical table.
+- The app must open the `Dades alumnes` spreadsheet through the registry.
+- The app must then open the sheet whose name is stored in `class_groups.dades_alumnes_sheet`.
+- If `dades_alumnes_sheet` is blank, the app must report a clear configuration or tutor-resolution error.
+- If the referenced sheet does not exist in `Dades alumnes`, the app must report a clear contextual error.
+
+Required columns in the group-specific sheet:
+
+| Header | Meaning |
+| --- | --- |
+| `ID` | Dinantia student account ID. |
+| `Data Naixement` | Student birthdate shown in the main tutor page. |
+
+Student join rule:
+
+- Dinantia API student account `id` matches `Dades alumnes` group sheet `ID`.
+- `Data Naixement` must be read from the matched local row.
+- The student display name still comes from the Dinantia API account `name`.
+
+## Shared Table: `Dinantia` -> `changelog`
+
+The logical table `Dinantia` contains a sheet named `changelog`.
+
+This sheet stores an audit trail for changes made by teachers inside the app.
+
+Row 1 contains headers. Data starts in row 2.
+
+| Header | Meaning |
+| --- | --- |
+| `id` | Autonumeric value for each changelog row. |
+| `datetime` | Date and time when the change was made. |
+| `user_mail` | Email of the teacher who made the change. |
+| `field_changed` | Controlled field name describing what changed. |
+| `old_value` | Value before the change. |
+| `new_value` | Value after the change. |
+| `student_id` | Dinantia student account ID affected by the change. |
+
+### `changelog` Rules
+
+- Every teacher-made data modification must append one row to `Dinantia` -> `changelog`.
+- `datetime` must be written by the app in Apps Script timezone `Europe/Madrid`.
+- `user_mail` must come from `Session.getActiveUser().getEmail()`.
+- `student_id` must store the affected Dinantia student account `id`.
+- `field_changed` must come from a controlled constant/list in app code.
+- If a new editable field is unclear during development, ask before adding a new `field_changed` value.
+- `old_value` and `new_value` should store the displayed/input value in a stable text form.
+- The changelog must be append-only; app features must not edit or delete previous changelog rows.
+
+### Changelog Field Name Registry
+
+The app must maintain a centralized constant/list of allowed `field_changed` values.
+
+Initial known values:
+
+| Field value | Meaning |
+| --- | --- |
+| `Birthdate` | Student birthdate, sourced from `Dades alumnes`.`Data Naixement`. |
+| `Contact1Name` | First contact/parent name. |
+| `Contact1Phone` | First contact/parent phone. |
+| `Contact1Email` | First contact/parent email. |
+| `Contact2Name` | Second contact/parent name. |
+| `Contact2Phone` | Second contact/parent phone. |
+| `Contact2Email` | Second contact/parent email. |
+
+Additional values, such as phone or authorization fields, must be added to the controlled list when their editing specs are defined.
 
 ## Student Group Tutor Resolution
 
@@ -280,6 +361,9 @@ Resolution process:
 3. Read `carrecs`.`asignado?`.
 4. Match `carrecs`.`asignado?` to the teacher full name built from `Dades de professors` -> `Llista` as `NOM COGNOM1 COGNOM2`.
 5. Use the matched `Llista` row as the responsible teacher for the student group.
+6. Read the resolved `class_groups` row to obtain both:
+   - `dinantia_group_name`: Dinantia group ID.
+   - `dades_alumnes_sheet`: local `Dades alumnes` sheet name for the group.
 
 String comparisons for `class_groups`.`tutor_carrec` to `carrecs`.`carrec`, and `carrecs`.`asignado?` to teacher full name, should trim surrounding whitespace.
 

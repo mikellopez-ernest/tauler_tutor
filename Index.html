@@ -18,7 +18,7 @@
 
           <nav class="nav">
             <a class="nav-link active" href="#" data-view="inici">Inici</a>
-            <a class="nav-link" href="#" data-view="telefons">Telèfons</a>
+            <a class="nav-link" href="#" data-view="contactes">Contactes</a>
             <a class="nav-link" href="#" data-view="autoritzacions">Autoritzacions</a>
           </nav>
         </aside>
@@ -26,10 +26,9 @@
         <main class="main">
           <section class="view active" id="view-inici">
             <header class="page-header">
-              <p class="eyebrow">Grup Dinantia</p>
               <h1><?= viewModel.tutorGroup.dinantiaGroupId ?></h1>
               <p class="subtle">
-                <?= viewModel.tutorGroup.teacher.fullName ?> · <?= viewModel.tutorGroup.responsibility.name ?>
+                <?= viewModel.tutorGroup.teacherLabel ?> · <?= viewModel.tutorGroup.responsibility.name ?>
               </p>
             </header>
 
@@ -44,18 +43,20 @@
                   <table>
                     <thead>
                       <tr>
-                        <th>Nom</th>
+                        <th><button class="sort-button" type="button" data-sort-table="students-table" data-sort-key="name">Nom</button></th>
                         <? if (viewModel.showBirthdate) { ?>
-                          <th>Data de naixement</th>
+                          <th><button class="sort-button" type="button" data-sort-table="students-table" data-sort-key="birthdate">Data de naixement</button></th>
+                          <th><button class="sort-button" type="button" data-sort-table="students-table" data-sort-key="age">Edat</button></th>
                         <? } ?>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="students-table">
                       <? viewModel.students.forEach(function(student) { ?>
-                        <tr>
+                        <tr data-name="<?= student.name ?>" data-birthdate="<?= student.birthdateSortKey || '' ?>" data-age="<?= student.age || '' ?>">
                           <td><?= student.name ?></td>
                           <? if (viewModel.showBirthdate) { ?>
                             <td><?= student.birthdate || '' ?></td>
+                            <td><?= student.age || '' ?></td>
                           <? } ?>
                         </tr>
                       <? }); ?>
@@ -68,10 +69,75 @@
             </section>
           </section>
 
-          <section class="view" id="view-telefons">
+          <section class="view" id="view-contactes">
             <header class="page-header">
-              <h1>Telèfons</h1>
+              <h1>Contactes</h1>
+              <p class="subtle">Edició dels dos primers contactes vinculats a cada alumne.</p>
             </header>
+
+            <section class="table-section" aria-labelledby="contacts-title">
+              <div class="section-header">
+                <h2 id="contacts-title">Contactes</h2>
+                <span class="count"><?= viewModel.contacts.length ?> alumnes</span>
+              </div>
+
+              <? if (viewModel.contacts.length) { ?>
+                <div class="table-wrap">
+                  <table class="contacts-table">
+                    <thead>
+                      <tr>
+                        <th rowspan="2">Alumne</th>
+                        <th colspan="3">Contacte 1</th>
+                        <th colspan="3">Contacte 2</th>
+                      </tr>
+                      <tr>
+                        <th>Nom</th>
+                        <th>Telèfon</th>
+                        <th>Email</th>
+                        <th>Nom</th>
+                        <th>Telèfon</th>
+                        <th>Email</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <? viewModel.contacts.forEach(function(student) { ?>
+                        <tr data-contact-row data-student-id="<?= student.id ?>">
+                          <td><?= student.name ?></td>
+                          <? [0, 1].forEach(function(index) {
+                            var contact = student.contacts[index] || { id: '', name: '', phone: '', email: '' };
+                            var prefix = index === 0 ? 'Contact1' : 'Contact2';
+                          ?>
+                            <td>
+                              <? if (contact.id) { ?>
+                                <input class="contact-input" value="<?= contact.name ?>" data-contact-id="<?= contact.id ?>" data-field="<?= prefix ?>Name" data-original="<?= contact.name ?>">
+                              <? } else { ?>
+                                <span class="missing">-</span>
+                              <? } ?>
+                            </td>
+                            <td>
+                              <? if (contact.id) { ?>
+                                <input class="contact-input" value="<?= contact.phone ?>" data-contact-id="<?= contact.id ?>" data-field="<?= prefix ?>Phone" data-original="<?= contact.phone ?>">
+                              <? } else { ?>
+                                <span class="missing">-</span>
+                              <? } ?>
+                            </td>
+                            <td>
+                              <? if (contact.id) { ?>
+                                <input class="contact-input" value="<?= contact.email ?>" data-contact-id="<?= contact.id ?>" data-field="<?= prefix ?>Email" data-original="<?= contact.email ?>">
+                              <? } else { ?>
+                                <span class="missing">-</span>
+                              <? } ?>
+                            </td>
+                          <? }); ?>
+                        </tr>
+                      <? }); ?>
+                    </tbody>
+                  </table>
+                </div>
+              <? } else { ?>
+                <p class="empty">No s'ha trobat cap contacte per a aquest grup.</p>
+              <? } ?>
+            </section>
           </section>
 
           <section class="view" id="view-autoritzacions">
@@ -80,6 +146,11 @@
             </header>
           </section>
         </main>
+
+        <button class="save-button" type="button" aria-label="Desa els canvis" title="Desa els canvis" disabled>💾</button>
+        <div class="loading-overlay" hidden>
+          <div class="loader" aria-label="Carregant"></div>
+        </div>
       </div>
     <? } else { ?>
       <main class="error-page">
@@ -97,4 +168,3 @@
     <?!= include_('Client'); ?>
   </body>
 </html>
-

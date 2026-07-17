@@ -7,13 +7,15 @@ function resolveTutorGroupForEmail_(email) {
 
   var teacher = findTeacherForEmailOrActiveSubstitution_(teachersSheet, leaveSheet, email);
   var responsibility = findResponsibilityByTeacherFullName_(responsibilitiesSheet, teacher.fullName);
-  var dinantiaGroupId = findDinantiaGroupIdByResponsibility_(classGroupsSheet, responsibility.name);
+  var classGroup = findClassGroupByResponsibility_(classGroupsSheet, responsibility.name);
 
   return {
     userEmail: email,
     teacher: teacher,
     responsibility: responsibility,
-    dinantiaGroupId: dinantiaGroupId
+    dinantiaGroupId: classGroup.dinantiaGroupId,
+    studentDataSheetName: classGroup.studentDataSheetName,
+    teacherLabel: buildTeacherLabel_(teacher)
   };
 }
 
@@ -39,10 +41,11 @@ function findResponsibilityByTeacherFullName_(responsibilitiesSheet, fullName) {
   throw tutorResolutionError_('No responsibility found for teacher full name: ' + fullName);
 }
 
-function findDinantiaGroupIdByResponsibility_(classGroupsSheet, responsibilityName) {
+function findClassGroupByResponsibility_(classGroupsSheet, responsibilityName) {
   var headerMap = requireHeaders_(classGroupsSheet, [
     HEADERS.classGroupDinantiaId,
-    HEADERS.classGroupTutorResponsibility
+    HEADERS.classGroupTutorResponsibility,
+    HEADERS.classGroupStudentDataSheet
   ], TABLES.dinantia + ' -> ' + SHEETS.classGroups);
   var values = classGroupsSheet.getDataRange().getValues();
   var target = textKey_(responsibilityName);
@@ -52,13 +55,27 @@ function findDinantiaGroupIdByResponsibility_(classGroupsSheet, responsibilityNa
 
     if (textKey_(row[headerMap[HEADERS.classGroupTutorResponsibility]]) === target) {
       var dinantiaGroupId = String(row[headerMap[HEADERS.classGroupDinantiaId]] || '').trim();
+      var studentDataSheetName = String(row[headerMap[HEADERS.classGroupStudentDataSheet]] || '').trim();
       if (!dinantiaGroupId) {
         throw tutorResolutionError_('Empty Dinantia group id for responsibility: ' + responsibilityName);
       }
-      return dinantiaGroupId;
+      if (!studentDataSheetName) {
+        throw tutorResolutionError_('Empty Dades alumnes sheet name for responsibility: ' + responsibilityName);
+      }
+      return {
+        dinantiaGroupId: dinantiaGroupId,
+        studentDataSheetName: studentDataSheetName
+      };
     }
   }
 
   throw tutorResolutionError_('No Dinantia group mapping found for responsibility: ' + responsibilityName);
 }
 
+function buildTeacherLabel_(teacher) {
+  if (teacher.resolvedFromSubstitute) {
+    return teacher.resolvedFromSubstitute.substituteFullName + ' (substituïnt ' + teacher.fullName + ')';
+  }
+
+  return teacher.fullName;
+}

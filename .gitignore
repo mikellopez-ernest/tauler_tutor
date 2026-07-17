@@ -20,6 +20,9 @@ pnpm-debug.log*
 # Apps Script local project config
 .clasp.json
 
+# Local Codex planning notes
+PENDING_DEVELOPMENTS.local.md
+
 # Build/test output
 dist/
 build/

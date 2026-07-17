@@ -57,31 +57,88 @@ function studentFromAccount_(account) {
   return {
     id: account.id || '',
     name: account.name || '',
-    birthdate: extractBirthdate_(account)
+    parents: account.parents || []
   };
 }
 
-function extractBirthdate_(account) {
-  var topLevelKeys = ['birthdate', 'birth_date', 'date_of_birth', 'data_naixement'];
+function fetchDinantiaContactsForStudents_(students) {
+  var credentials = getDinantiaCredentials_();
+  var contactById = {};
 
-  for (var i = 0; i < topLevelKeys.length; i++) {
-    var key = topLevelKeys[i];
-    if (account[key]) {
-      return String(account[key]);
-    }
-  }
+  students.forEach(function(student) {
+    (student.parents || []).slice(0, 2).forEach(function(parentId) {
+      if (parentId && !contactById[parentId]) {
+        contactById[parentId] = fetchDinantiaAccount_(parentId, credentials);
+      }
+    });
+  });
 
-  var fields = account.fields || [];
-  var fieldIds = ['birthdate', 'birth_date', 'date_of_birth', 'data_naixement', 'DATA_NAIXEMENT'];
+  return students.map(function(student) {
+    var parentIds = (student.parents || []).slice(0, 2);
+    var contacts = [0, 1].map(function(index) {
+      var parentId = parentIds[index] || '';
+      var account = parentId ? contactById[parentId] : null;
+      return contactFromAccount_(account, parentId);
+    });
 
-  for (var j = 0; j < fields.length; j++) {
-    var field = fields[j] || {};
-    var fieldId = String(field.id || '').trim();
-    if (fieldIds.indexOf(fieldId) !== -1 && field.value) {
-      return String(field.value);
-    }
-  }
-
-  return '';
+    return {
+      id: student.id,
+      name: student.name,
+      contacts: contacts
+    };
+  });
 }
 
+function fetchDinantiaAccount_(accountId, credentials) {
+  var body = fetchDinantiaJson_('/v1.2/accounts/view/' + encodeURIComponent(accountId), credentials);
+  return body.data || null;
+}
+
+function contactFromAccount_(account, fallbackId) {
+  if (!account) {
+    return {
+      id: fallbackId || '',
+      name: '',
+      phone: '',
+      email: ''
+    };
+  }
+
+  return {
+    id: account.id || fallbackId || '',
+    name: account.name || '',
+    phone: account.phone || '',
+    email: account.email || ''
+  };
+}
+
+function updateDinantiaAccountFields_(accountId, fields) {
+  var credentials = getDinantiaCredentials_();
+  var auth = Utilities.base64Encode(credentials.user + ':' + credentials.secret);
+  var response = UrlFetchApp.fetch(APP_CONFIG.dinantiaBaseUrl + '/v1.2/accounts/update/' + encodeURIComponent(accountId), {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(fields),
+    headers: {
+      Authorization: 'Basic ' + auth,
+      Accept: 'application/vnd.api+json',
+      'Content-Type': 'application/vnd.api+json'
+    },
+    muteHttpExceptions: true
+  });
+  var status = response.getResponseCode();
+  var bodyText = response.getContentText();
+  var body;
+
+  try {
+    body = JSON.parse(bodyText);
+  } catch (error) {
+    throw new Error('Dinantia update response is not valid JSON. HTTP ' + status + ': ' + bodyText);
+  }
+
+  if (status < 200 || status >= 300 || body.success === false) {
+    throw new Error('Dinantia account update failed. HTTP ' + status + ': ' + bodyText);
+  }
+
+  return body.data;
+}
