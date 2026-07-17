@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ca">
+<head><base target="_top"/>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>Autoritzacions, declaracions i comunicacions</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+
+<?!= include('Styles'); ?></head>
+<body>
+<div class="container form-shell py-4">
+<header class="mb-4">
+<div class="d-flex flex-column flex-md-row justify-content-between gap-3 align-items-md-end">
+<div>
+<div class="text-uppercase small fw-semibold text-secondary">Generalitat de Catalunya · Departament d'Educació i Formació Professional</div>
+<h1 class="h3 mt-2 mb-1">Autoritzacions, declaracions i comunicacions</h1>
+<p class="mb-0 text-secondary" id="documentSubtitle">Escolarització de l'alumnat</p>
+<div class="small text-secondary mt-1">Codi de referència: <span id="documentCodeText">—</span></div>
+</div>
+<div class="translate-box no-print">
+<label class="form-label small fw-semibold" for="languageSelector">Idioma del formulari</label>
+<select aria-describedby="translationStatus" class="form-select" data-i18n-language-selector="true" id="languageSelector"></select>
+<div class="form-text" id="translationStatus">La selecció d’idioma es desa automàticament en aquest navegador.</div>
+
+<div class="row g-2 mt-1">
+<div class="col-6"><label class="form-label small" for="cursInici">Curs inicial</label><input class="form-control" id="cursInici" inputmode="numeric" maxlength="4" placeholder="2026"/></div>
+<div class="col-6"><label class="form-label small" for="cursFi">Curs final</label><input class="form-control" id="cursFi" inputmode="numeric" maxlength="4" placeholder="2027"/></div>
+</div>
+</div>
+</div>
+</header>
+<section class="card section-card mb-4 no-print" id="initialSetup">
+<div class="card-body">
+<h2 class="h5 mb-3">Configuració inicial</h2>
+<p class="text-secondary small">Respon aquestes preguntes i el formulari seleccionarà automàticament el model corresponent.</p>
+<div class="row g-3">
+<div class="col-md-4">
+<label class="form-label required" for="studyType">Quins estudis cursarà l'alumne/a?</label>
+<select class="form-select" id="studyType">
+<option value="">Seleccioneu...</option>
+<option value="eso">ESO</option>
+<option value="batx">Batxillerat</option>
+<option value="fp">Cicle formatiu / altres postobligatoris</option>
+</select>
+</div>
+<div class="col-md-4">
+<label class="form-label required" for="isAdult">L'alumne/a és major d'edat?</label>
+<select class="form-select" id="isAdult">
+<option value="">Seleccioneu...</option>
+<option value="no">No</option>
+<option value="si">Sí</option>
+</select>
+</div>
+<div class="col-md-4 is-hidden" id="age14Wrapper">
+<label class="form-label required" for="is14Plus">Té 14 anys o més?</label>
+<select class="form-select" id="is14Plus">
+<option value="">Seleccioneu...</option>
+<option value="no">No</option>
+<option value="si">Sí</option>
+</select>
+</div>
+</div>
+<div class="alert alert-info py-2 mt-3 mb-0 is-hidden" id="modelSelectionMessage"></div>
+</div>
+</section>
+<form class="needs-validation" id="authorizationForm" novalidate="">
+<input id="documentCode" name="codi_document" type="hidden"/>
+<div class="accordion" id="formAccordion">
+<section class="accordion-item section-card mb-3">
+<h2 class="accordion-header"><button class="accordion-button" data-bs-target="#identificacio" data-bs-toggle="collapse" type="button">1. Identificació</button></h2>
+<div class="accordion-collapse collapse show" data-bs-parent="#formAccordion" id="identificacio"><div class="accordion-body">
+<h3 class="h5 section-title">Tipus d'alumnat</h3>
+<div class="question mb-4 is-hidden" id="modelRadioBlock">
+<label class="form-label required d-block">Model aplicable</label>
+<div class="row g-2">
+<div class="col-md-6"><div class="form-check"><input class="form-check-input" id="esoMenor14" name="tipus_alumne" required="" type="radio" value="eso_menor14"/><label class="form-check-label" for="esoMenor14">ESO — menor de 14 anys</label></div></div>
+<div class="col-md-6"><div class="form-check"><input class="form-check-input" id="esoMajor14" name="tipus_alumne" required="" type="radio" value="eso_14_17"/><label class="form-check-label" for="esoMajor14">ESO — de 14 a 17 anys</label></div></div>
+<div class="col-md-6"><div class="form-check"><input class="form-check-input" id="batxMenor18" name="tipus_alumne" required="" type="radio" value="batx_menor18"/><label class="form-check-label" for="batxMenor18">Batxillerat — menor de 18 anys</label></div></div>
+<div class="col-md-6"><div class="form-check"><input class="form-check-input" id="postMenor18" name="tipus_alumne" required="" type="radio" value="post_menor18"/><label class="form-check-label" for="postMenor18">FP / altres postobligatoris — menor de 18 anys</label></div></div>
+<div class="col-md-6"><div class="form-check"><input class="form-check-input" id="major18" name="tipus_alumne" required="" type="radio" value="major18"/><label class="form-check-label" for="major18">Alumnat major de 18 anys</label></div></div>
+</div>
+<div class="form-text mt-2">El formulari mostra automàticament només els apartats que corresponen al model seleccionat. No s'hi inclou cap apartat de religió.</div>
+</div>
+<h3 class="h5 section-title">Dades del centre</h3>
+<div class="row g-3 mb-4">
+<div class="col-md-8"><label class="form-label required" for="centreNom">Nom del centre</label><input class="form-control" id="centreNom" name="centre_nom" required=""/></div>
+<div class="col-md-4"><label class="form-label required" for="centreCodi">Codi del centre</label><input class="form-control" id="centreCodi" name="centre_codi" required=""/></div>
+<div class="col-md-6"><label class="form-label" for="municipi">Municipi</label><input class="form-control" id="municipi" name="municipi"/></div>
+<div class="col-md-6"><label class="form-label" for="centreEmail">Adreça electrònica</label><input class="form-control" id="centreEmail" name="centre_email" type="email"/></div>
+</div>
+<h3 class="h5 section-title">Dades personals</h3>
+<div class="row g-3">
+<div class="col-md-8"><label class="form-label required" for="alumneNom">Nom i cognoms de l'alumne/a</label><input class="form-control" id="alumneNom" name="alumne_nom" required=""/></div>
+<div class="col-md-4"><label class="form-label" for="alumneDoc" id="alumneDocLabel">DNI/NIE/Passaport</label><input class="form-control" id="alumneDoc" name="alumne_document"/></div>
+<div class="col-12" id="responsableFields">
+<div class="row g-3">
+<div class="col-md-8"><label class="form-label required" for="responsableNom">Nom i cognoms del pare, mare o tutor/a legal</label><input class="form-control" id="responsableNom" name="responsable_nom"/></div>
+<div class="col-md-4"><label class="form-label" for="responsableDoc">DNI/NIE/Passaport</label><input class="form-control" id="responsableDoc" name="responsable_document"/></div>
+</div>
+</div>
+</div>
+</div></div>
+</section>
+<section class="accordion-item section-card mb-3" id="estadaSection">
+<h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-target="#estada" data-bs-toggle="collapse" type="button">2. Estada, sortides i comunicacions</button></h2>
+<div class="accordion-collapse collapse" data-bs-parent="#formAccordion" id="estada"><div class="accordion-body">
+<div class="legal-box p-3 rounded mb-3"><strong>Protecció de dades.</strong> Responsable: direcció del centre educatiu. Finalitat: funció educativa, gestió de la permanència i sortida de l'alumnat i, quan correspongui, comunicació de dades acadèmiques i d'assistència.</div>
+<div id="esoExitBlock">
+<div class="question mb-3">
+<h3 class="h6">Sortida del centre fora de l'horari lectiu</h3>
+<p>Que l'alumne/a surti sol/a fora de l'horari lectiu.</p>
+<div class="d-flex gap-4 flex-wrap"><div class="form-check"><input class="form-check-input" id="sortidaSolaSi" name="sortida_sola" type="radio" value="si"/><label class="form-check-label" for="sortidaSolaSi">Sí, ho autoritzo</label></div><div class="form-check"><input class="form-check-input" id="sortidaSolaNo" name="sortida_sola" type="radio" value="no"/><label class="form-check-label" for="sortidaSolaNo">No, no ho autoritzo</label></div></div>
+</div>
+<div class="question mb-3">
+<h3 class="h6">Persones autoritzades per recollir l'alumne/a</h3>
+<div class="vstack gap-2" id="authorizedPeople"></div>
+<button class="btn btn-outline-secondary btn-sm mt-2 no-print" id="addPerson" type="button">Afegir persona</button>
+</div>
+</div>
+<div class="question mb-3 is-hidden" id="recessExitBlock">
+<h3 class="h6">Sortida del centre en hores d'esbarjo</h3>
+<p>Que l'alumne/a, menor d'edat i matriculat/ada en ensenyaments no obligatoris, surti del centre en hores d'esbarjo.</p>
+<div class="d-flex gap-4 flex-wrap"><div class="form-check"><input class="form-check-input" id="esbarjoSi" name="sortida_esbarjo" type="radio" value="si"/><label class="form-check-label" for="esbarjoSi">Sí, ho autoritzo</label></div><div class="form-check"><input class="form-check-input" id="esbarjoNo" name="sortida_esbarjo" type="radio" value="no"/><label class="form-check-label" for="esbarjoNo">No, no ho autoritzo</label></div></div>
+</div>
+<div class="question mb-3 is-hidden" id="academicCommunicationBlock">
+<h3 class="h6">Comunicació de dades acadèmiques i d'assistència</h3>
+<p>Autoritzo el centre educatiu a comunicar dades acadèmiques rellevants i relatives a l'assistència a una tercera persona.</p>
+<div class="d-flex gap-4 flex-wrap mb-3"><div class="form-check"><input class="form-check-input" id="comAcadSi" name="comunicacio_academica" type="radio" value="si"/><label class="form-check-label" for="comAcadSi">Sí, ho autoritzo</label></div><div class="form-check"><input class="form-check-input" id="comAcadNo" name="comunicacio_academica" type="radio" value="no"/><label class="form-check-label" for="comAcadNo">No, no ho autoritzo</label></div></div>
+<div class="row g-3">
+<div class="col-md-6"><label class="form-label" for="acadContactNom">Nom i cognoms de la persona de contacte</label><input class="form-control" id="acadContactNom" name="acad_contacte_nom"/></div>
+<div class="col-md-6"><label class="form-label" for="acadContactEmail">Adreça electrònica</label><input class="form-control" id="acadContactEmail" name="acad_contacte_email" type="email"/></div>
+<div class="col-12"><label class="form-label">Relació amb l'alumne/a</label><div class="d-flex gap-4 flex-wrap"><div class="form-check"><input class="form-check-input" id="acadPare" name="acad_contacte_relacio" type="radio" value="pare"/><label class="form-check-label" for="acadPare">Pare</label></div><div class="form-check"><input class="form-check-input" id="acadMare" name="acad_contacte_relacio" type="radio" value="mare"/><label class="form-check-label" for="acadMare">Mare</label></div><div class="form-check"><input class="form-check-input" id="acadTutor" name="acad_contacte_relacio" type="radio" value="tutor"/><label class="form-check-label" for="acadTutor">Tutor/a legal</label></div><div class="form-check"><input class="form-check-input" id="acadAltres" name="acad_contacte_relacio" type="radio" value="altres"/><label class="form-check-label" for="acadAltres">Altres</label></div></div></div>
+</div>
+</div>
+<div class="question" id="municipalTripsBlock">
+<h3 class="h6">Sortides pedagògiques dins del terme municipal</h3>
+<p>Participació en activitats programades dins del municipi i en horari lectiu, ús de les dades necessàries i representació de l'alumne/a per una persona responsable del centre.</p>
+<div class="d-flex gap-4 flex-wrap"><div class="form-check"><input class="form-check-input" id="sortidesMunicipiSi" name="sortides_municipi" type="radio" value="si"/><label class="form-check-label" for="sortidesMunicipiSi">Sí, ho autoritzo</label></div><div class="form-check"><input class="form-check-input" id="sortidesMunicipiNo" name="sortides_municipi" type="radio" value="no"/><label class="form-check-label" for="sortidesMunicipiNo">No, no ho autoritzo</label></div></div>
+<div class="alert alert-secondary mt-3 mb-0 small">Les sortides fora del municipi, els desplaçaments llargs o les activitats amb cost econòmic requeriran una autorització específica.</div>
+</div>
+</div></div>
+</section>
+<section class="accordion-item section-card mb-3">
+<h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-target="#publicacions" data-bs-toggle="collapse" type="button">3. Imatges, veu, dades i obres</button></h2>
+<div class="accordion-collapse collapse" data-bs-parent="#formAccordion" id="publicacions"><div class="accordion-body">
+<div class="legal-box p-3 rounded mb-3"><strong>Consentiment.</strong> La publicació d'imatges, veu i material elaborat és opcional, no condiciona l'activitat lectiva i es pot revocar sense efectes retroactius.</div>
+<h3 class="h5 section-title">Consentiment per a la publicació d'imatges, veu, dades de caràcter personal i material elaborat</h3>
+<p>Marqueu les opcions següents segons correspongui:</p>
+<div class="question mb-3">
+<h4 class="h6">Publicació d'imatges i/o de la veu en activitats del centre</h4>
+<div class="row g-3">
+<div class="col-md-8">Intranet amb accés restringit (Moodle, Google Workspace, etc.)</div><div class="col-md-4"><div class="d-flex gap-3"><div class="form-check"><input class="form-check-input" id="imatgeIntranetSi" name="imatge_intranet" type="radio" value="si"/><label class="form-check-label" for="imatgeIntranetSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="imatgeIntranetNo" name="imatge_intranet" type="radio" value="no"/><label class="form-check-label" for="imatgeIntranetNo">No</label></div></div></div>
+<div class="col-md-8">Internet amb accés obert (web o blogs del centre)</div><div class="col-md-4"><div class="d-flex gap-3"><div class="form-check"><input class="form-check-input" id="imatgeWebSi" name="imatge_web" type="radio" value="si"/><label class="form-check-label" for="imatgeWebSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="imatgeWebNo" name="imatge_web" type="radio" value="no"/><label class="form-check-label" for="imatgeWebNo">No</label></div></div></div>
+<div class="col-md-8">Plataformes no administrades pel centre</div><div class="col-md-4"><div class="d-flex gap-3"><div class="form-check"><input class="form-check-input" id="imatgeExternaSi" name="imatge_externa" type="radio" value="si"/><label class="form-check-label" for="imatgeExternaSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="imatgeExternaNo" name="imatge_externa" type="radio" value="no"/><label class="form-check-label" for="imatgeExternaNo">No</label></div></div></div>
+<div class="col-12"><label class="form-label" for="plataformesExternes">Plataformes o accés</label><input class="form-control" id="plataformesExternes" name="plataformes_externes" placeholder="YouTube, Instagram, altres..."/></div>
+</div>
+</div>
+<div class="question mb-3"><h4 class="h6">Publicació de les inicials de l'alumne/a i del centre</h4><div class="d-flex gap-3"><div class="form-check"><input class="form-check-input" id="inicialsSi" name="publicacio_inicials" type="radio" value="si"/><label class="form-check-label" for="inicialsSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="inicialsNo" name="publicacio_inicials" type="radio" value="no"/><label class="form-check-label" for="inicialsNo">No</label></div></div></div>
+<div class="question">
+<h4 class="h6">Publicació i preservació d'obres i creacions</h4>
+<div class="row g-3">
+<div class="col-md-8">Publicació del material elaborat en plataformes d'accés obert</div><div class="col-md-4"><div class="d-flex gap-3"><div class="form-check"><input class="form-check-input" id="obraObertaSi" name="obra_oberta" type="radio" value="si"/><label class="form-check-label" for="obraObertaSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="obraObertaNo" name="obra_oberta" type="radio" value="no"/><label class="form-check-label" for="obraObertaNo">No</label></div></div></div>
+<div class="col-md-8">Publicació en espais de comunicació del centre</div><div class="col-md-4"><div class="d-flex gap-3"><div class="form-check"><input class="form-check-input" id="obraCentreSi" name="obra_centre" type="radio" value="si"/><label class="form-check-label" for="obraCentreSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="obraCentreNo" name="obra_centre" type="radio" value="no"/><label class="form-check-label" for="obraCentreNo">No</label></div></div></div>
+<div class="col-md-8">Preservació a la biblioteca física o digital del centre</div><div class="col-md-4"><div class="d-flex gap-3"><div class="form-check"><input class="form-check-input" id="obraBibliotecaSi" name="obra_biblioteca" type="radio" value="si"/><label class="form-check-label" for="obraBibliotecaSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="obraBibliotecaNo" name="obra_biblioteca" type="radio" value="no"/><label class="form-check-label" for="obraBibliotecaNo">No</label></div></div></div>
+<div class="col-md-8">Preservació al repositori del Departament</div><div class="col-md-4"><div class="d-flex gap-3"><div class="form-check"><input class="form-check-input" id="obraRepositoriSi" name="obra_repositori" type="radio" value="si"/><label class="form-check-label" for="obraRepositoriSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="obraRepositoriNo" name="obra_repositori" type="radio" value="no"/><label class="form-check-label" for="obraRepositoriNo">No</label></div></div></div>
+</div>
+</div>
+</div></div>
+</section>
+<section class="accordion-item section-card mb-3">
+<h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-target="#plataformes" data-bs-toggle="collapse" type="button">4. Plataformes i eines digitals</button></h2>
+<div class="accordion-collapse collapse" data-bs-parent="#formAccordion" id="plataformes"><div class="accordion-body">
+<div class="legal-box p-3 rounded mb-3"><strong>Informació.</strong> El centre pot utilitzar Google Workspace for Education, Microsoft 365 Educació, Moodle i altres eines autoritzades amb finalitats educatives, docents i organitzatives, aplicant mesures de control, seguretat i minimització de dades.</div>
+<div class="form-check question"><input class="form-check-input" id="declaracioPlataformes" name="declaracio_plataformes" type="checkbox" value="acceptada"/><label class="form-check-label" for="declaracioPlataformes">Declaro que he rebut informació sobre l'ús de plataformes i eines digitals, les seves finalitats pedagògiques i educatives i el tractament de dades personals associat.</label></div>
+</div></div>
+</section>
+<section class="accordion-item section-card mb-3">
+<h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-target="#salut" data-bs-toggle="collapse" type="button">5. Salut i medicació</button></h2>
+<div class="accordion-collapse collapse" data-bs-parent="#formAccordion" id="salut"><div class="accordion-body">
+<div class="legal-box p-3 rounded mb-3"><strong>Protecció de dades de salut.</strong> Les dades es tracten per atendre les necessitats de salut de l'alumnat al centre educatiu.</div>
+<h3 class="h5 section-title">Fitxa de salut</h3>
+<div class="row g-3 mb-3">
+<div class="col-md-8"><label class="form-label" for="emergenciaNom">Nom i cognoms del contacte d'emergència</label><input class="form-control" id="emergenciaNom" name="emergencia_nom"/></div>
+<div class="col-md-4"><label class="form-label" for="emergenciaTelefon">Telèfon de contacte</label><input class="form-control" id="emergenciaTelefon" name="emergencia_telefon" type="tel"/></div>
+<div class="col-12"><label class="form-label">Relació amb l'alumne/a</label><div class="d-flex gap-4 flex-wrap"><div class="form-check"><input class="form-check-input" id="relPare" name="emergencia_relacio" type="radio" value="pare"/><label class="form-check-label" for="relPare">Pare</label></div><div class="form-check"><input class="form-check-input" id="relMare" name="emergencia_relacio" type="radio" value="mare"/><label class="form-check-label" for="relMare">Mare</label></div><div class="form-check"><input class="form-check-input" id="relTutor" name="emergencia_relacio" type="radio" value="tutor"/><label class="form-check-label" for="relTutor">Tutor/a legal</label></div><div class="form-check"><input class="form-check-input" id="relAltres" name="emergencia_relacio" type="radio" value="altres"/><label class="form-check-label" for="relAltres">Altres</label></div></div></div>
+</div>
+<div class="question mb-3 is-hidden" id="healthCommunicationBlock">
+<h3 class="h6">Comunicació de situacions relacionades amb la salut</h3>
+<p>Autoritzo el centre educatiu a comunicar, si es considera necessari, qualsevol situació relacionada amb la salut de l'alumne/a al contacte d'emergència indicat.</p>
+<div class="d-flex gap-4 flex-wrap"><div class="form-check"><input class="form-check-input" id="comSalutSi" name="comunicacio_salut" type="radio" value="si"/><label class="form-check-label" for="comSalutSi">Sí, ho autoritzo</label></div><div class="form-check"><input class="form-check-input" id="comSalutNo" name="comunicacio_salut" type="radio" value="no"/><label class="form-check-label" for="comSalutNo">No, no ho autoritzo</label></div></div>
+</div>
+<div class="row g-3 mb-3">
+<div class="col-12"><label class="form-label" for="problemesSalut">Problemes de salut diagnosticats, tipus de contacte i reaccions</label><textarea class="form-control" id="problemesSalut" name="problemes_salut" rows="4"></textarea></div>
+<div class="col-12"><label class="form-label" for="altresSalut">Altres aspectes de salut per destacar</label><textarea class="form-control" id="altresSalut" name="altres_salut" rows="3"></textarea></div>
+</div>
+<div class="question mb-3"><h3 class="h6">Medicació en horari lectiu</h3><div class="row g-3"><div class="col-md-6"><label class="form-label" for="medicacio">Medicació</label><input class="form-control" id="medicacio" name="medicacio"/></div><div class="col-md-4"><label class="form-label" for="posologia">Posologia</label><input class="form-control" id="posologia" name="posologia"/></div><div class="col-md-2"><label class="form-label" for="dosi">Dosi</label><input class="form-control" id="dosi" name="dosi"/></div></div><div class="d-flex gap-4 flex-wrap mt-3"><div class="form-check"><input class="form-check-input" id="adminMedSi" name="administracio_medicacio" type="radio" value="si"/><label class="form-check-label" for="adminMedSi">Sí, autoritzo l'administració</label></div><div class="form-check"><input class="form-check-input" id="adminMedNo" name="administracio_medicacio" type="radio" value="no"/><label class="form-check-label" for="adminMedNo">No, no ho autoritzo</label></div></div><div class="alert alert-warning small mt-3 mb-0">L'autorització només tindrà efectes si s'aporta l'informe mèdic i el pla de medicació corresponents.</div></div>
+<div class="question" id="paracetamolBlock"><h3 class="h6">Administració de paracetamol</h3><p>En cas de febre superior a 38 °C mentre s'espera l'arribada d'un familiar, incloses les sortides escolars i colònies considerades activitats lectives.</p><div class="d-flex gap-4 flex-wrap"><div class="form-check"><input class="form-check-input" id="paracetamolSi" name="paracetamol" type="radio" value="si"/><label class="form-check-label" for="paracetamolSi">Sí, ho autoritzo</label></div><div class="form-check"><input class="form-check-input" id="paracetamolNo" name="paracetamol" type="radio" value="no"/><label class="form-check-label" for="paracetamolNo">No, no ho autoritzo</label></div></div></div>
+</div></div>
+</section>
+<section class="accordion-item section-card mb-3">
+<h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-target="#signatures" data-bs-toggle="collapse" type="button">6. Lloc, data i signatures</button></h2>
+<div class="accordion-collapse collapse" data-bs-parent="#formAccordion" id="signatures"><div class="accordion-body">
+<div class="row g-3 mb-4"><div class="col-md-6"><label class="form-label required" for="lloc">Lloc</label><input class="form-control" id="lloc" name="lloc" required=""/></div><div class="col-md-6"><label class="form-label required" for="dataSignatura">Data</label><input class="form-control" id="dataSignatura" name="data_signatura" required="" type="date"/></div></div>
+<div class="row g-4">
+<div class="col-lg-6" id="responsibleSignatureBlock"><label class="form-label required">Signatura del pare, mare o tutor/a legal</label><canvas class="signature-pad" id="signatureResponsible"></canvas><div class="mt-2 no-print"><button class="btn btn-outline-secondary btn-sm" data-clear-signature="signatureResponsible" type="button">Esborra</button></div><input id="signatureResponsibleData" name="signatura_responsable" type="hidden"/></div>
+<div class="col-lg-6 is-hidden" id="studentSignatureBlock"><label class="form-label required" id="studentSignatureLabel">Signatura de l'alumne/a</label><canvas class="signature-pad" id="signatureStudent"></canvas><div class="mt-2 no-print"><button class="btn btn-outline-secondary btn-sm" data-clear-signature="signatureStudent" type="button">Esborra</button></div><input id="signatureStudentData" name="signatura_alumne" type="hidden"/></div>
+</div>
+<p class="small text-secondary mt-4 mb-0">Les autoritzacions de consentiment són vàlides fins a la seva modificació o revocació, sense efectes retroactius.</p>
+</div></div>
+</section>
+</div>
+<div class="sticky-actions mt-4 py-3 no-print"><div class="d-flex flex-wrap gap-2 justify-content-end"><button class="btn btn-outline-secondary" id="saveLocal" type="button">Desa al navegador</button><button class="btn btn-outline-secondary" id="loadLocal" type="button">Recupera</button><button class="btn btn-outline-primary" id="downloadJson" type="button">Descarrega JSON</button><button class="btn btn-outline-dark" onclick="window.print()" type="button">Imprimeix / Desa PDF</button><button class="btn btn-primary" type="submit">Valida el formulari</button></div></div>
+</form>
+</div>
+
+
+
+
+<?!= include('I18n'); ?><?!= include('Translations_ca'); ?><?!= include('Translations_es'); ?><?!= include('Translations_en'); ?><?!= include('Translations_ru'); ?><?!= include('Translations_uk'); ?><?!= include('Translations_ar'); ?><?!= include('App'); ?><script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script></body>
+</html>

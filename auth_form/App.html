@@ -1,0 +1,126 @@
+<script>
+// Inicialització de la interfície multilingüe.
+window.addEventListener('DOMContentLoaded', () => {
+  I18n.init({ defaultLanguage: 'ca', storageKey: 'autoritzacionsIdioma' });
+});
+
+const form = document.getElementById('authorizationForm');
+let personCounter = 0;
+const typeConfig = {
+  eso_menor14: {code:'A1746-V01-26', subtitle:"Escolarització de l'alumnat menor de catorze anys", responsible:true, studentSignature:false, esoExit:true, recess:false, academic:false, municipal:true, healthConsent:false, paracetamol:true, tis:true},
+  eso_14_17: {code:'A1747-V01-26', subtitle:"Escolarització de l'alumnat de catorze a disset anys", responsible:true, studentSignature:true, esoExit:true, recess:false, academic:false, municipal:true, healthConsent:false, paracetamol:true, tis:false},
+  batx_menor18: {code:'A1749-V01-26', subtitle:"Escolarització de l'alumnat de batxillerat menor de divuit anys", responsible:true, studentSignature:true, esoExit:false, recess:true, academic:false, municipal:true, healthConsent:true, paracetamol:false, tis:false},
+  post_menor18: {code:'A1748-V01-26', subtitle:"Escolarització de l'alumnat d'ensenyaments postobligatoris menor de divuit anys", responsible:true, studentSignature:true, esoExit:false, recess:true, academic:false, municipal:true, healthConsent:true, paracetamol:false, tis:false},
+  major18: {code:'A1750-V01-26', subtitle:"Escolarització de l'alumnat major de divuit anys", responsible:false, studentSignature:true, esoExit:false, recess:false, academic:true, municipal:false, healthConsent:true, paracetamol:false, tis:false}
+};
+
+const modelLabels = {
+  eso_menor14: 'ESO — menor de 14 anys',
+  eso_14_17: 'ESO — de 14 a 17 anys',
+  batx_menor18: 'Batxillerat — menor de 18 anys',
+  post_menor18: 'FP / altres postobligatoris — menor de 18 anys',
+  major18: 'Alumnat major de 18 anys'
+};
+
+function selectModelFromSetup() {
+  const studies = document.getElementById('studyType').value;
+  const adult = document.getElementById('isAdult').value;
+  const age14 = document.getElementById('is14Plus').value;
+  const ageWrap = document.getElementById('age14Wrapper');
+  const message = document.getElementById('modelSelectionMessage');
+  ageWrap.classList.toggle('is-hidden', studies !== 'eso' || adult === 'si');
+
+  let model = '';
+  if (adult === 'si') model = 'major18';
+  else if (adult === 'no' && studies === 'batx') model = 'batx_menor18';
+  else if (adult === 'no' && studies === 'fp') model = 'post_menor18';
+  else if (adult === 'no' && studies === 'eso' && age14 === 'si') model = 'eso_14_17';
+  else if (adult === 'no' && studies === 'eso' && age14 === 'no') model = 'eso_menor14';
+
+  document.querySelectorAll('[name="tipus_alumne"]').forEach(r => r.checked = r.value === model);
+  if (model) {
+    message.textContent = 'Model seleccionat: ' + modelLabels[model];
+    message.classList.remove('is-hidden');
+    applyType();
+  } else {
+    message.classList.add('is-hidden');
+  }
+}
+['studyType','isAdult','is14Plus'].forEach(id => document.getElementById(id).addEventListener('change', selectModelFromSetup));
+
+function setSetupFromModel(model) {
+  if (!model) return;
+  const studies = model.startsWith('eso_') ? 'eso' : model.startsWith('batx_') ? 'batx' : model.startsWith('post_') ? 'fp' : '';
+  document.getElementById('studyType').value = studies;
+  document.getElementById('isAdult').value = model === 'major18' ? 'si' : 'no';
+  document.getElementById('is14Plus').value = model === 'eso_14_17' ? 'si' : model === 'eso_menor14' ? 'no' : '';
+  selectModelFromSetup();
+}
+
+
+
+function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+function setBlock(id, show) { const el=document.getElementById(id); el.classList.toggle('is-hidden', !show); el.querySelectorAll('input,select,textarea').forEach(x=>x.disabled=!show); }
+
+function addAuthorizedPerson(data={}) {
+  if (personCounter >= 8) return;
+  personCounter++;
+  const row=document.createElement('div'); row.className='row g-2 align-items-end authorized-person';
+  row.innerHTML=`<div class="col-md-6"><label class="form-label small">Nom i cognoms</label><input class="form-control" name="persona_autoritzada_nom_${personCounter}" value="${escapeHtml(data.nom||'')}"></div><div class="col-md-5"><label class="form-label small">En qualitat de</label><input class="form-control" name="persona_autoritzada_qualitat_${personCounter}" value="${escapeHtml(data.qualitat||'')}"></div><div class="col-md-1 no-print"><button class="btn btn-outline-danger w-100" type="button" aria-label="Elimina persona">×</button></div>`;
+  row.querySelector('button').addEventListener('click',()=>row.remove()); document.getElementById('authorizedPeople').appendChild(row);
+}
+document.getElementById('addPerson').addEventListener('click',()=>addAuthorizedPerson());
+for(let i=0;i<4;i++) addAuthorizedPerson();
+
+function applyType() {
+  const type=form.querySelector('[name="tipus_alumne"]:checked')?.value;
+  const cfg=typeConfig[type];
+  if(!cfg) return;
+  document.getElementById('documentSubtitle').textContent=cfg.subtitle;
+  document.getElementById('documentCode').value=cfg.code;
+  document.getElementById('documentCodeText').textContent=cfg.code;
+  document.getElementById('alumneDocLabel').textContent=cfg.tis?'DNI/NIE/Passaport/TIS':'DNI/NIE/Passaport';
+  setBlock('responsableFields',cfg.responsible);
+  document.getElementById('responsableNom').required=cfg.responsible;
+  setBlock('esoExitBlock',cfg.esoExit);
+  setBlock('recessExitBlock',cfg.recess);
+  setBlock('academicCommunicationBlock',cfg.academic);
+  setBlock('municipalTripsBlock',cfg.municipal);
+  setBlock('healthCommunicationBlock',cfg.healthConsent);
+  setBlock('paracetamolBlock',cfg.paracetamol);
+  setBlock('responsibleSignatureBlock',cfg.responsible);
+  setBlock('studentSignatureBlock',cfg.studentSignature);
+  document.getElementById('studentSignatureLabel').textContent=type==='major18'?'Signatura del/de la declarant':'Signatura de l\'alumne/a';
+  if(cfg.studentSignature) setTimeout(()=>resizeSignature('signatureStudent'),50); else clearSignature('signatureStudent');
+  if(cfg.responsible) setTimeout(()=>resizeSignature('signatureResponsible'),50); else clearSignature('signatureResponsible');
+}
+document.querySelectorAll('[name="tipus_alumne"]').forEach(x=>x.addEventListener('change',()=>{applyType();setSetupFromModel(x.value);}));
+
+function formToObject(){ updateSignatureFields(); const out={}; for(const [k,v] of new FormData(form).entries()) out[k]=v; out.curs_inici=document.getElementById('cursInici').value; out.curs_fi=document.getElementById('cursFi').value; return out; }
+function fillForm(data){
+  Object.entries(data||{}).forEach(([key,value])=>{
+    if(key==='curs_inici'||key==='curs_fi'){document.getElementById(key==='curs_inici'?'cursInici':'cursFi').value=value;return;}
+    form.querySelectorAll(`[name="${CSS.escape(key)}"]`).forEach(field=>{if(field.type==='radio'||field.type==='checkbox') field.checked=field.value===value||value===true; else if(!key.startsWith('signatura_')) field.value=value;});
+  });
+  applyType();
+  setSetupFromModel(data.tipus_alumne);
+  if(data.signatura_responsable) drawImageOnCanvas('signatureResponsible',data.signatura_responsable);
+  if(data.signatura_alumne) drawImageOnCanvas('signatureStudent',data.signatura_alumne);
+}
+
+document.getElementById('saveLocal').addEventListener('click',()=>{localStorage.setItem('autoritzacionsForm5Models',JSON.stringify(formToObject()));alert('Formulari desat en aquest navegador.');});
+document.getElementById('loadLocal').addEventListener('click',()=>{const raw=localStorage.getItem('autoritzacionsForm5Models');if(!raw)return alert('No hi ha cap còpia desada.');fillForm(JSON.parse(raw));});
+document.getElementById('downloadJson').addEventListener('click',()=>{const blob=new Blob([JSON.stringify(formToObject(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`autoritzacions_${document.getElementById('alumneNom').value.trim().replace(/\s+/g,'_')||'formulari'}.json`;a.click();URL.revokeObjectURL(a.href);});
+form.addEventListener('submit',e=>{e.preventDefault();e.stopPropagation();form.classList.add('was-validated');if(!form.querySelector('[name="tipus_alumne"]:checked')){alert('Completa la configuració inicial per seleccionar el model aplicable.');return;}if(form.checkValidity())alert('El formulari conté les dades obligatòries.');else document.querySelector(':invalid')?.focus();});
+
+const signatureState={};
+function setupSignature(id){const canvas=document.getElementById(id),ctx=canvas.getContext('2d');signatureState[id]={drawing:false};const point=e=>{const r=canvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};};canvas.addEventListener('pointerdown',e=>{signatureState[id].drawing=true;const p=point(e);ctx.beginPath();ctx.moveTo(p.x,p.y);canvas.setPointerCapture(e.pointerId);});canvas.addEventListener('pointermove',e=>{if(!signatureState[id].drawing)return;const p=point(e);ctx.lineTo(p.x,p.y);ctx.stroke();});canvas.addEventListener('pointerup',()=>signatureState[id].drawing=false);canvas.addEventListener('pointercancel',()=>signatureState[id].drawing=false);resizeSignature(id);}
+function resizeSignature(id){const canvas=document.getElementById(id);if(!canvas||canvas.offsetParent===null)return;const saved=canvas.width&&canvas.height?canvas.toDataURL('image/png'):'';const ratio=Math.max(window.devicePixelRatio||1,1),rect=canvas.getBoundingClientRect();canvas.width=Math.max(1,Math.floor(rect.width*ratio));canvas.height=Math.max(1,Math.floor(rect.height*ratio));const ctx=canvas.getContext('2d');ctx.setTransform(ratio,0,0,ratio,0,0);ctx.lineWidth=2;ctx.lineCap='round';ctx.strokeStyle='#111';if(saved&&saved!=='data:,')drawImageOnCanvas(id,saved);}
+function clearSignature(id){const c=document.getElementById(id);c.getContext('2d').clearRect(0,0,c.width,c.height);}
+function drawImageOnCanvas(id,src){const canvas=document.getElementById(id),ctx=canvas.getContext('2d'),img=new Image();img.onload=()=>ctx.drawImage(img,0,0,canvas.clientWidth,canvas.clientHeight);img.src=src;}
+function updateSignatureFields(){const cfg=typeConfig[form.querySelector('[name="tipus_alumne"]:checked')?.value];document.getElementById('signatureResponsibleData').value=cfg?.responsible?document.getElementById('signatureResponsible').toDataURL('image/png'):'';document.getElementById('signatureStudentData').value=cfg?.studentSignature?document.getElementById('signatureStudent').toDataURL('image/png'):'';}
+setupSignature('signatureResponsible'); setupSignature('signatureStudent');
+window.addEventListener('resize',()=>{resizeSignature('signatureResponsible');resizeSignature('signatureStudent');});
+document.querySelectorAll('[data-clear-signature]').forEach(b=>b.addEventListener('click',()=>clearSignature(b.dataset.clearSignature)));
+document.getElementById('dataSignatura').valueAsDate=new Date();
+</script>

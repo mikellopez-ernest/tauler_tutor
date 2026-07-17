@@ -1,0 +1,139 @@
+<script>
+/**
+ * Motor i18n sense dependències externes.
+ * Les claus del catàleg són els textos canònics en català.
+ * Això permet afegir idiomes sense tocar el marcatge HTML.
+ */
+const I18n = (() => {
+  const languages = new Map();
+  const originalText = new WeakMap();
+  const originalAttrs = new WeakMap();
+  let currentLanguage = 'ca';
+  let observer = null;
+  let settings = { defaultLanguage: 'ca', storageKey: 'appLanguage' };
+
+  function normalize(value) {
+    return String(value ?? '').replace(/\s+/g, ' ').trim();
+  }
+
+  function register(language) {
+    if (!language?.code || !language?.label || !language?.messages) {
+      throw new Error('Definició d’idioma no vàlida.');
+    }
+    languages.set(language.code, {
+      direction: 'ltr',
+      ...language
+    });
+  }
+
+  function translateString(source, languageCode = currentLanguage) {
+    const normalized = normalize(source);
+    if (!normalized) return source;
+    const language = languages.get(languageCode);
+    const translated = language?.messages?.[normalized];
+    return translated || source;
+  }
+
+  function translateTextNode(node) {
+    if (!originalText.has(node)) originalText.set(node, node.nodeValue);
+    const source = originalText.get(node);
+    const leading = source.match(/^\s*/)?.[0] || '';
+    const trailing = source.match(/\s*$/)?.[0] || '';
+    const core = normalize(source);
+    if (!core) return;
+    node.nodeValue = leading + translateString(core) + trailing;
+  }
+
+  function translateAttributes(element) {
+    const attrs = ['placeholder', 'title', 'aria-label'];
+    if (!originalAttrs.has(element)) originalAttrs.set(element, {});
+    const originals = originalAttrs.get(element);
+    attrs.forEach(attr => {
+      if (!element.hasAttribute(attr)) return;
+      if (!(attr in originals)) originals[attr] = element.getAttribute(attr);
+      element.setAttribute(attr, translateString(originals[attr]));
+    });
+  }
+
+  function translateTree(root = document.body) {
+    if (!root) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const parent = node.parentElement;
+        if (!parent || ['SCRIPT', 'STYLE', 'NOSCRIPT'].includes(parent.tagName)) return NodeFilter.FILTER_REJECT;
+        return normalize(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      }
+    });
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(translateTextNode);
+    if (root.nodeType === Node.ELEMENT_NODE) translateAttributes(root);
+    root.querySelectorAll?.('*').forEach(translateAttributes);
+  }
+
+  function populateSelector() {
+    const selector = document.getElementById('languageSelector');
+    if (!selector) return;
+    selector.innerHTML = '';
+    [...languages.values()].forEach(language => {
+      const option = document.createElement('option');
+      option.value = language.code;
+      option.textContent = language.label;
+      selector.appendChild(option);
+    });
+    selector.value = currentLanguage;
+    selector.addEventListener('change', event => setLanguage(event.target.value));
+  }
+
+  function setLanguage(languageCode, { persist = true } = {}) {
+    if (!languages.has(languageCode)) languageCode = settings.defaultLanguage;
+    currentLanguage = languageCode;
+    const language = languages.get(languageCode);
+    document.documentElement.lang = languageCode;
+    document.documentElement.dir = language?.direction || 'ltr';
+    if (persist) localStorage.setItem(settings.storageKey, languageCode);
+    translateTree(document.body);
+    const selector = document.getElementById('languageSelector');
+    if (selector) selector.value = languageCode;
+    document.dispatchEvent(new CustomEvent('i18n:changed', { detail: { language: languageCode } }));
+  }
+
+  function startObserver() {
+    observer?.disconnect();
+    observer = new MutationObserver(mutations => {
+      observer.disconnect();
+      for (const mutation of mutations) {
+        mutation.addedNodes.forEach(node => {
+          if (node.nodeType === Node.TEXT_NODE) translateTextNode(node);
+          else if (node.nodeType === Node.ELEMENT_NODE) translateTree(node);
+        });
+        if (mutation.type === 'characterData') translateTextNode(mutation.target);
+      }
+      observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  }
+
+  function validateCatalogues() {
+    const base = languages.get(settings.defaultLanguage);
+    if (!base) return;
+    const required = Object.keys(base.messages);
+    for (const language of languages.values()) {
+      const missing = required.filter(key => !Object.prototype.hasOwnProperty.call(language.messages, key));
+      if (missing.length) console.warn(`[i18n] ${language.code}: ${missing.length} missing translations`, missing);
+    }
+  }
+
+  function init(options = {}) {
+    settings = { ...settings, ...options };
+    validateCatalogues();
+    const stored = localStorage.getItem(settings.storageKey);
+    currentLanguage = languages.has(stored) ? stored : settings.defaultLanguage;
+    populateSelector();
+    setLanguage(currentLanguage, { persist: false });
+    startObserver();
+  }
+
+  return { register, init, setLanguage, t: translateString, translateTree, get currentLanguage() { return currentLanguage; }, get languages() { return [...languages.keys()]; } };
+})();
+</script>

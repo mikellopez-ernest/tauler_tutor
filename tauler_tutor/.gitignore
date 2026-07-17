@@ -19,11 +19,9 @@ pnpm-debug.log*
 
 # Apps Script local project config
 .clasp.json
-**/.clasp.json
 
 # Local Codex planning notes
 PENDING_DEVELOPMENTS.local.md
-**/PENDING_DEVELOPMENTS.local.md
 
 # Build/test output
 dist/
@@ -32,4 +30,3 @@ coverage/
 
 # Apps Script generated/local files
 .claspignore.tmp
-**/.claspignore.tmp
