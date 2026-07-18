@@ -287,16 +287,6 @@
 
     function appendStudentAuthorizationCell(row, student, auth) {
       var cell = document.createElement('td');
-      if (!auth) {
-        var button = document.createElement('button');
-        button.className = 'rocket-button';
-        button.type = 'button';
-        button.title = 'Llança el formulari';
-        button.setAttribute('aria-label', 'Llança el formulari per a ' + (student.name || 'alumne'));
-        button.textContent = '🚀';
-        button.addEventListener('click', function() { launchAuthorizationForm(student, button); });
-        cell.appendChild(button);
-      }
       var name = document.createElement('span');
       name.textContent = student.name || '';
       cell.appendChild(name);
