@@ -2,6 +2,7 @@ var APP_CONFIG = {
   domain: 'iernestlluch.cat',
   timezone: 'Europe/Madrid',
   dinantiaBaseUrl: 'https://app.dinantia.com/api/web',
+  formLauncherUrl: 'https://script.google.com/macros/s/AKfycbwOgYsVCf-MdEEbpGFFmWyjMB__MrgDowQuo7W6Ky8ymZwkY_-c7gUPm9QGTGUxiYGrYg/exec',
   userTutorErrorMessage: "Sembla que el teu correu no correspon a cap tutoria. En cas que hi hagi un error, contacta amb el cap d'estudis",
   genericErrorTitle: "S'ha produït un error"
 };
@@ -16,7 +17,8 @@ var TABLES = {
   teachers: 'Dades de professors',
   teachingLoad: 'Càrrega lectiva',
   dinantia: 'Dinantia',
-  students: 'Dades alumnes'
+  students: 'Dades alumnes',
+  authorizations: 'Autoritzacions'
 };
 
 var SHEETS = {
@@ -25,7 +27,8 @@ var SHEETS = {
   responsibilities: 'carrecs',
   classGroups: 'class_groups',
   changelog: 'changelog',
-  registry: 'tables'
+  registry: 'tables',
+  authorizations: 'autoritzacions'
 };
 
 var HEADERS = {
@@ -52,7 +55,8 @@ var HEADERS = {
   changelogFieldChanged: 'field_changed',
   changelogOldValue: 'old_value',
   changelogNewValue: 'new_value',
-  changelogStudentId: 'student_id'
+  changelogStudentId: 'student_id',
+  authorizationStudentId: 'id_student'
 };
 
 var CHANGELOG_FIELDS = {

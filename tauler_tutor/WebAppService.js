@@ -19,7 +19,8 @@ function loadInitialData_() {
       tutorGroup: tutorGroup,
       students: students,
       contacts: contacts,
-      showBirthdate: true
+      showBirthdate: true,
+      formLauncherUrl: APP_CONFIG.formLauncherUrl
     };
   } catch (error) {
     console.error(error && error.stack ? error.stack : error);

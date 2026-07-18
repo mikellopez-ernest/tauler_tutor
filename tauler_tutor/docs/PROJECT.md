@@ -21,6 +21,7 @@ Current feature specs:
 | Path | Purpose |
 | --- | --- |
 | `docs/features/TUTOR_GROUP_ENDPOINT.md` | GAS tutor endpoint that resolves the current user to a Dinantia group and lists students. |
+| `docs/features/AUTHORIZATIONS_PANEL.md` | Read-only authorization permission matrix for the tutor dashboard. |
 
 ## Architecture Principles
 

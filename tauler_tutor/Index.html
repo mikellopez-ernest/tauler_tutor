@@ -87,13 +87,60 @@
         <section class="view" id="view-autoritzacions">
           <header class="page-header">
             <h1>Autoritzacions</h1>
+            <p class="subtle">Permisos i declaracions rebudes de les famílies.</p>
           </header>
+
+          <section class="table-section" aria-labelledby="authorizations-title">
+            <div class="section-header">
+              <h2 id="authorizations-title">Autoritzacions</h2>
+              <span class="count" id="authorizations-count">0 alumnes</span>
+            </div>
+            <div class="auth-error is-hidden" id="authorizations-error"></div>
+            <div class="table-wrap">
+              <table class="authorizations-table">
+                <thead>
+                  <tr>
+                    <th rowspan="2"><button class="sort-button" type="button" data-sort-table="authorizations-table" data-sort-key="name">Alumne</button></th>
+                    <th rowspan="2"><button class="sort-button" type="button" data-sort-table="authorizations-table" data-sort-key="status">Estat</button></th>
+                    <th rowspan="2"><button class="sort-button" type="button" data-sort-table="authorizations-table" data-sort-key="date">Data</button></th>
+                    <th rowspan="2">Detall</th>
+                    <th colspan="3">Sortides</th>
+                    <th colspan="3">Comunicacions</th>
+                    <th colspan="3">Imatge i publicació</th>
+                    <th colspan="4">Obres</th>
+                    <th colspan="3">Salut</th>
+                    <th colspan="2">Signatura</th>
+                  </tr>
+                  <tr>
+                    <th>Surt sol/a</th><th>Esbarjo</th><th>Municipi</th>
+                    <th>Acadèmica</th><th>Salut</th><th>Plataformes</th>
+                    <th>Intranet</th><th>Web</th><th>Externes</th>
+                    <th>Oberta</th><th>Centre</th><th>Biblioteca</th><th>Repositori</th>
+                    <th>Medicació</th><th>Paracetamol</th><th>Info salut</th>
+                    <th>Responsable</th><th>Alumne/a</th>
+                  </tr>
+                </thead>
+                <tbody id="authorizations-table"></tbody>
+              </table>
+            </div>
+            <p class="empty is-hidden" id="authorizations-empty">No s'ha pogut carregar cap autorització.</p>
+          </section>
         </section>
       </main>
 
       <button class="save-button" type="button" aria-label="Desa els canvis" title="Desa els canvis" disabled>💾</button>
       <div class="loading-overlay save-loading" hidden>
         <div class="loader" aria-label="Carregant"></div>
+      </div>
+
+      <div class="modal-backdrop is-hidden" id="authorization-detail-modal" role="dialog" aria-modal="true" aria-labelledby="authorization-detail-title">
+        <section class="modal-panel">
+          <div class="modal-header">
+            <h2 id="authorization-detail-title">Detall de l'autorització</h2>
+            <button class="modal-close" type="button" aria-label="Tanca">×</button>
+          </div>
+          <div class="modal-body" id="authorization-detail-body"></div>
+        </section>
       </div>
     </div>
 

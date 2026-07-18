@@ -3,7 +3,10 @@
     var state = {
       saving: false,
       students: [],
-      contacts: []
+      contacts: [],
+      authorizations: [],
+      authorizationsLoaded: false,
+      formLauncherUrl: ''
     };
 
     var appShell = document.querySelector('.app-shell');
@@ -15,6 +18,7 @@
     bindNavigation();
     bindSorting();
     bindSaveButton();
+    bindAuthorizationDetailModal();
     loadInitialData();
 
     function loadInitialData() {
@@ -70,12 +74,14 @@
     function renderApp(data) {
       state.students = data.students || [];
       state.contacts = data.contacts || [];
+      state.formLauncherUrl = data.formLauncherUrl || '';
 
       document.getElementById('group-title').textContent = data.tutorGroup.dinantiaGroupId || '';
       document.getElementById('teacher-label').textContent = (data.tutorGroup.teacherLabel || '') + ' · ' + (data.tutorGroup.responsibility.name || '');
 
       renderStudents(state.students);
       renderContacts(state.contacts);
+      renderAuthorizations();
 
       appShell.classList.remove('is-hidden');
       errorPage.classList.add('is-hidden');
@@ -144,6 +150,237 @@
       bindContactInputs();
     }
 
+
+
+    function loadAuthorizations() {
+      setInitialLoading(true);
+      google.script.run
+        .withSuccessHandler(function(result) {
+          setInitialLoading(false);
+          var parsed = parseInitialData(result);
+          state.authorizationsLoaded = true;
+          if (!parsed || !parsed.ok) {
+            showAuthorizationsError(parsed && parsed.error ? parsed.error.message || parsed.error.details : 'No s han pogut carregar les autoritzacions.');
+            renderAuthorizations();
+            return;
+          }
+          state.authorizations = parsed.authorizations || [];
+          renderAuthorizations();
+        })
+        .withFailureHandler(function(error) {
+          setInitialLoading(false);
+          state.authorizationsLoaded = true;
+          showAuthorizationsError(error && error.message ? error.message : String(error));
+          renderAuthorizations();
+        })
+        .loadAuthorizationDataJson();
+    }
+
+    function renderAuthorizations() {
+      var tbody = document.getElementById('authorizations-table');
+      if (!tbody) return;
+      tbody.textContent = '';
+      document.getElementById('authorizations-count').textContent = state.students.length + ' alumnes';
+      var latestByStudent = latestAuthorizationsByStudent_();
+      state.students.forEach(function(student) {
+        var auth = latestByStudent[String(student.id || '').trim()] || null;
+        var row = document.createElement('tr');
+        row.setAttribute('data-name', student.name || '');
+        row.setAttribute('data-status', auth ? '1' : '0');
+        row.setAttribute('data-date', auth ? String(auth.data_hora_enviament || auth.data_signatura || '') : '');
+        if (!auth) row.classList.add('missing-authorization');
+        appendStudentAuthorizationCell(row, student, auth);
+        appendCell(row, auth ? 'Rebut' : 'Pendent');
+        appendCell(row, auth ? formatAuthorizationDate(auth.data_hora_enviament || auth.data_signatura) : '');
+        appendAuthorizationDetailCell(row, student, auth);
+        ['sortida_sola','sortida_esbarjo','sortides_municipi','comunicacio_academica','comunicacio_salut','declaracio_plataformes','imatge_intranet','imatge_web','imatge_externa','obra_oberta','obra_centre','obra_biblioteca','obra_repositori','administracio_medicacio','paracetamol'].forEach(function(field) {
+          appendIconCell(row, auth ? auth[field] : '');
+        });
+        appendIconCell(row, auth && (textValue(auth.problemes_salut) || textValue(auth.altres_salut)) ? true : '');
+        appendIconCell(row, auth ? auth.signatura_responsable : '');
+        appendIconCell(row, auth ? auth.signatura_alumne : '');
+        tbody.appendChild(row);
+      });
+    }
+
+    function latestAuthorizationsByStudent_() {
+      var map = {};
+      (state.authorizations || []).forEach(function(auth) {
+        var id = String(auth.id_student || '').trim();
+        if (!id) return;
+        if (!map[id] || String(auth.data_hora_enviament || '') >= String(map[id].data_hora_enviament || '')) {
+          map[id] = auth;
+        }
+      });
+      return map;
+    }
+
+
+    function appendAuthorizationDetailCell(row, student, auth) {
+      var cell = document.createElement('td');
+      if (!auth) {
+        cell.innerHTML = '<span class="icon-empty">-</span>';
+        row.appendChild(cell);
+        return;
+      }
+      var button = document.createElement('button');
+      button.className = 'detail-button';
+      button.type = 'button';
+      button.textContent = 'Veure';
+      button.setAttribute('aria-label', 'Mostra detalls de ' + (student.name || 'alumne'));
+      button.addEventListener('click', function() {
+        showAuthorizationDetail(student, auth);
+      });
+      cell.appendChild(button);
+      row.appendChild(cell);
+    }
+
+    function showAuthorizationDetail(student, auth) {
+      var modal = document.getElementById('authorization-detail-modal');
+      var body = document.getElementById('authorization-detail-body');
+      if (!modal || !body) return;
+      document.getElementById('authorization-detail-title').textContent = 'Detall de ' + (student.name || 'l alumne');
+      body.textContent = '';
+      var groups = [
+        { title: 'Enviament', fields: [['resposta_id','Resposta'], ['data_hora_enviament','Enviament'], ['idioma_formulari','Idioma'], ['codi_document','Codi document'], ['tipus_alumne','Tipus alumne']] },
+        { title: 'Contacte academic', fields: [['acad_contacte_nom','Nom'], ['acad_contacte_email','Email'], ['acad_contacte_relacio','Relacio']] },
+        { title: 'Emergencia', fields: [['emergencia_nom','Nom'], ['emergencia_telefon','Telefon'], ['emergencia_relacio','Relacio']] },
+        { title: 'Salut', fields: [['problemes_salut','Problemes de salut'], ['altres_salut','Altres salut'], ['medicacio','Medicacio'], ['posologia','Posologia'], ['dosi','Dosi']] },
+        { title: 'Publicacio', fields: [['plataformes_externes','Plataformes o acces']] },
+        { title: 'Intern', fields: [['estat_validacio','Estat validacio'], ['observacions_internes','Observacions internes']] }
+      ];
+      groups.forEach(function(group) {
+        var values = group.fields.map(function(pair) {
+          return { label: pair[1], value: textValue(auth[pair[0]]) };
+        }).filter(function(item) { return item.value; });
+        if (!values.length) return;
+        var section = document.createElement('section');
+        section.className = 'detail-section';
+        var heading = document.createElement('h3');
+        heading.textContent = group.title;
+        section.appendChild(heading);
+        var dl = document.createElement('dl');
+        values.forEach(function(item) {
+          var dt = document.createElement('dt');
+          dt.textContent = item.label;
+          var dd = document.createElement('dd');
+          dd.textContent = item.value;
+          dl.appendChild(dt);
+          dl.appendChild(dd);
+        });
+        section.appendChild(dl);
+        body.appendChild(section);
+      });
+      if (!body.children.length) {
+        var empty = document.createElement('p');
+        empty.className = 'subtle';
+        empty.textContent = 'No hi ha camps de detall informats.';
+        body.appendChild(empty);
+      }
+      modal.classList.remove('is-hidden');
+    }
+
+    function closeAuthorizationDetail() {
+      var modal = document.getElementById('authorization-detail-modal');
+      if (modal) modal.classList.add('is-hidden');
+    }
+
+    function appendStudentAuthorizationCell(row, student, auth) {
+      var cell = document.createElement('td');
+      if (!auth) {
+        var button = document.createElement('button');
+        button.className = 'rocket-button';
+        button.type = 'button';
+        button.title = 'Llança el formulari';
+        button.setAttribute('aria-label', 'Llança el formulari per a ' + (student.name || 'alumne'));
+        button.textContent = '🚀';
+        button.addEventListener('click', function() { launchAuthorizationForm(student, button); });
+        cell.appendChild(button);
+      }
+      var name = document.createElement('span');
+      name.textContent = student.name || '';
+      cell.appendChild(name);
+      row.appendChild(cell);
+    }
+
+    function appendIconCell(row, value) {
+      var cell = document.createElement('td');
+      var parsed = parseBooleanValue(value);
+      if (parsed === true) {
+        cell.innerHTML = '<span class="icon-ok" aria-label="Sí">✓</span>';
+      } else if (parsed === false) {
+        cell.innerHTML = '<span class="icon-no" aria-label="No">✕</span>';
+      } else {
+        cell.innerHTML = '<span class="icon-empty">-</span>';
+      }
+      row.appendChild(cell);
+    }
+
+    function parseBooleanValue(value) {
+      if (value === true) return true;
+      if (value === false) return false;
+      var text = String(value === null || value === undefined ? '' : value).trim().toLowerCase();
+      if (!text) return null;
+      if (['true','si','sí','1','acceptada'].indexOf(text) !== -1) return true;
+      if (['false','no','0'].indexOf(text) !== -1) return false;
+      return null;
+    }
+
+    function launchAuthorizationForm(student, button) {
+      var firstContact = firstContactForStudent(student.id);
+      if (!state.formLauncherUrl) {
+        alert('No hi ha cap URL de llançament configurada.');
+        return;
+      }
+      button.disabled = true;
+      var form = document.createElement('form');
+      form.method = 'post';
+      form.action = state.formLauncherUrl;
+      form.target = '_blank';
+      var payload = {
+        student_id: student.id || '',
+        alumne_nom: student.name || '',
+        alumne_document: student.document || '',
+        studyType: student.studyType || '',
+        isAdult: student.isAdult || '',
+        is14Plus: student.is14Plus || '',
+        contact_name: firstContact.name || '',
+        contact_phone: firstContact.phone || '',
+        contact_email: firstContact.email || ''
+      };
+      Object.keys(payload).forEach(function(key) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = key;
+        input.value = payload[key];
+        form.appendChild(input);
+      });
+      document.body.appendChild(form);
+      form.submit();
+      form.remove();
+      window.setTimeout(function() { button.disabled = false; }, 1200);
+    }
+
+    function firstContactForStudent(studentId) {
+      var record = (state.contacts || []).filter(function(item) { return String(item.id) === String(studentId); })[0];
+      return record && record.contacts && record.contacts[0] ? record.contacts[0] : { name: '', phone: '', email: '' };
+    }
+
+    function showAuthorizationsError(message) {
+      var box = document.getElementById('authorizations-error');
+      if (!box) return;
+      box.textContent = message || 'No s han pogut carregar les autoritzacions.';
+      box.classList.remove('is-hidden');
+    }
+
+    function formatAuthorizationDate(value) {
+      return String(value || '').slice(0, 10);
+    }
+
+    function textValue(value) {
+      return String(value === null || value === undefined ? '' : value).trim();
+    }
+
     function appendContactCell(row, contact, suffix, type) {
       var cell = document.createElement('td');
       if (!contact.id) {
@@ -174,11 +411,28 @@
       return cell;
     }
 
+
+    function bindAuthorizationDetailModal() {
+      var modal = document.getElementById('authorization-detail-modal');
+      if (!modal) return;
+      var close = modal.querySelector('.modal-close');
+      if (close) close.addEventListener('click', closeAuthorizationDetail);
+      modal.addEventListener('click', function(event) {
+        if (event.target === modal) closeAuthorizationDetail();
+      });
+      document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') closeAuthorizationDetail();
+      });
+    }
+
     function bindNavigation() {
       document.querySelectorAll('[data-view]').forEach(function(link) {
         link.addEventListener('click', function(event) {
           event.preventDefault();
           var viewName = link.getAttribute('data-view');
+          if (viewName === 'autoritzacions' && !state.authorizationsLoaded) {
+            loadAuthorizations();
+          }
 
           document.querySelectorAll('[data-view]').forEach(function(item) {
             item.classList.toggle('active', item === link);
@@ -187,6 +441,8 @@
           document.querySelectorAll('.view').forEach(function(view) {
             view.classList.toggle('active', view.id === 'view-' + viewName);
           });
+
+          updateSaveButton();
         });
       });
     }
@@ -266,7 +522,9 @@
 
     function updateSaveButton() {
       if (!saveButton) return;
-      saveButton.disabled = state.saving || getDirtyRows().length === 0;
+      var contactesActive = document.getElementById('view-contactes') && document.getElementById('view-contactes').classList.contains('active');
+      saveButton.classList.toggle('is-hidden', !contactesActive);
+      saveButton.disabled = !contactesActive || state.saving || getDirtyRows().length === 0;
     }
 
     function collectChanges() {

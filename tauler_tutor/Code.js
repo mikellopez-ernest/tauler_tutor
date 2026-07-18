@@ -25,3 +25,11 @@ function loadInitialDataJson() {
 function saveContactChanges(changes) {
   return saveContactChanges_(changes);
 }
+
+
+/**
+ * Client-callable authorization data endpoint.
+ */
+function loadAuthorizationDataJson() {
+  return JSON.stringify(loadAuthorizationData_());
+}

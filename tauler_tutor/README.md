@@ -38,6 +38,7 @@ Local Apps Script files such as `.clasp.json` are intentionally ignored and must
 - Dynamic age calculation.
 - Sortable student table.
 - Contactes page for student contact accounts.
+- Autoritzacions page for read-only permission overview and missing-form launch action.
 - Contact edit validation before sending updates to Dinantia.
 - Changelog entries for saved teacher-made changes.
 
@@ -102,7 +103,7 @@ Current left menu:
 | --- | --- |
 | `Inici` | Default page with group title and student table. |
 | `Contactes` | Contact editing table. |
-| `Autoritzacions` | Placeholder link for future work. |
+| `Autoritzacions` | Read-only permission matrix from submitted authorization forms. |
 
 ## Development
 
@@ -146,6 +147,8 @@ Key files:
 | `docs/PROJECT.md` | Architecture and documentation conventions. |
 | `docs/DB_STRUCTURE.md` | Registry, tables, headers, and relationships. |
 | `docs/features/TUTOR_GROUP_ENDPOINT.md` | Tutor endpoint behavior. |
+| `docs/features/AUTHORIZATIONS_PANEL.md` | Authorization permission matrix behavior. |
+| `../form_launcher_example/docs/FORM_LAUNCHER_ENDPOINT.md` | Temporary form-launch tunnel behavior. |
 | `docs/DINANTIA_API_NOTES.md` | Dinantia API notes. |
 | `docs/Dinantia-API-Documentation/` | Local Dinantia API documentation snapshot. |
 

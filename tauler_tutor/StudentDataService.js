@@ -1,28 +1,34 @@
 function enrichStudentsWithLocalBirthdates_(students, studentDataSheetName) {
   var registry = loadTableRegistry_();
   var sheet = openTableSheet_(registry, TABLES.students, studentDataSheetName);
-  var birthdateById = loadBirthdateByDinantiaId_(sheet);
+  var localDataById = loadLocalStudentDataByDinantiaId_(sheet, studentDataSheetName);
 
   return students.map(function(student) {
-    var birthdateInfo = birthdateById[codeKey_(student.id)] || { display: '', iso: '' };
+    var localInfo = localDataById[codeKey_(student.id)] || { birthdate: { display: '', iso: '' }, document: '', studyType: inferStudyType_(studentDataSheetName), isAdult: '', is14Plus: '' };
+    var age = calculateAge_(localInfo.birthdate.iso);
     return {
       id: student.id,
       name: student.name,
       parents: student.parents || [],
-      birthdate: birthdateInfo.display,
-      birthdateSortKey: birthdateInfo.iso,
-      age: calculateAge_(birthdateInfo.iso)
+      birthdate: localInfo.birthdate.display,
+      birthdateSortKey: localInfo.birthdate.iso,
+      age: age,
+      document: localInfo.document || '',
+      studyType: localInfo.studyType || inferStudyType_(studentDataSheetName),
+      isAdult: age !== '' ? (Number(age) >= 18 ? 'si' : 'no') : '',
+      is14Plus: age !== '' ? (Number(age) >= 14 ? 'si' : 'no') : ''
     };
   });
 }
 
-function loadBirthdateByDinantiaId_(sheet) {
+function loadLocalStudentDataByDinantiaId_(sheet, contextName) {
   var headerMap = requireHeaders_(sheet, [
     HEADERS.studentId,
     HEADERS.studentBirthdate
   ], TABLES.students + ' -> ' + sheet.getName());
   var values = sheet.getDataRange().getValues();
-  var birthdateById = {};
+  var dataById = {};
+  var optionalDocumentHeaders = ['DNI/NIE/Passaport', 'DNI', 'Document', 'document', 'alumne_document'];
 
   for (var i = 1; i < values.length; i++) {
     var row = values[i];
@@ -32,10 +38,22 @@ function loadBirthdateByDinantiaId_(sheet) {
       continue;
     }
 
-    birthdateById[id] = normalizeBirthdate_(row[headerMap[HEADERS.studentBirthdate]]);
+    var documentValue = '';
+    optionalDocumentHeaders.some(function(header) {
+      if (headerMap[header] !== undefined) {
+        documentValue = String(row[headerMap[header]] || '').trim();
+        return true;
+      }
+      return false;
+    });
+    dataById[id] = {
+      birthdate: normalizeBirthdate_(row[headerMap[HEADERS.studentBirthdate]]),
+      document: documentValue,
+      studyType: inferStudyType_(contextName)
+    };
   }
 
-  return birthdateById;
+  return dataById;
 }
 
 function normalizeBirthdate_(value) {
@@ -110,4 +128,12 @@ function calculateAge_(isoBirthdate) {
   }
 
   return age >= 0 ? String(age) : '';
+}
+
+
+function inferStudyType_(value) {
+  var text = codeKey_(value);
+  if (text.indexOf('BAT') !== -1) return 'batx';
+  if (text.indexOf('FP') !== -1 || text.indexOf('CF') !== -1 || text.indexOf('CICLE') !== -1 || text.indexOf('PFI') !== -1) return 'fp';
+  return 'eso';
 }

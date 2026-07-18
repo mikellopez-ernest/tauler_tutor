@@ -2,6 +2,10 @@
 // Inicialització de la interfície multilingüe.
 window.addEventListener('DOMContentLoaded', () => {
   I18n.init({ defaultLanguage: 'ca', storageKey: 'autoritzacionsIdioma' });
+  fillForm(window.INITIAL_FORM_DATA || {});
+  setupRespondentStep();
+  setupAuthorizedPeopleVisibility();
+  setupExternalPlatformsDependency();
 });
 
 const form = document.getElementById('authorizationForm');
@@ -70,7 +74,42 @@ function addAuthorizedPerson(data={}) {
   row.querySelector('button').addEventListener('click',()=>row.remove()); document.getElementById('authorizedPeople').appendChild(row);
 }
 document.getElementById('addPerson').addEventListener('click',()=>addAuthorizedPerson());
-for(let i=0;i<4;i++) addAuthorizedPerson();
+
+
+function clearAuthorizedPeople() {
+  document.getElementById('authorizedPeople').textContent = '';
+  personCounter = 0;
+}
+
+function setAuthorizedPeopleVisible(show) {
+  const block = document.getElementById('authorizedPeopleBlock');
+  block.classList.toggle('is-hidden', !show);
+  block.querySelectorAll('input,select,textarea,button').forEach(field => field.disabled = !show);
+  if (show && !document.querySelector('.authorized-person')) addAuthorizedPerson();
+  if (!show) clearAuthorizedPeople();
+}
+
+function setupAuthorizedPeopleVisibility() {
+  document.querySelectorAll('[name="sortida_sola"]').forEach(input => {
+    input.addEventListener('change', () => setAuthorizedPeopleVisible(document.getElementById('sortidaSolaNo').checked));
+  });
+  setAuthorizedPeopleVisible(document.getElementById('sortidaSolaNo').checked);
+}
+
+function setExternalPlatformsVisible(show) {
+  const block = document.getElementById('externalPlatformsDetail');
+  const input = document.getElementById('plataformesExternes');
+  block.classList.toggle('is-hidden', !show);
+  input.disabled = !show;
+  if (!show) input.value = '';
+}
+
+function setupExternalPlatformsDependency() {
+  document.querySelectorAll('[name="imatge_externa"]').forEach(input => {
+    input.addEventListener('change', () => setExternalPlatformsVisible(document.getElementById('imatgeExternaSi').checked));
+  });
+  setExternalPlatformsVisible(document.getElementById('imatgeExternaSi').checked);
+}
 
 function applyType() {
   const type=form.querySelector('[name="tipus_alumne"]:checked')?.value;
@@ -88,39 +127,66 @@ function applyType() {
   setBlock('municipalTripsBlock',cfg.municipal);
   setBlock('healthCommunicationBlock',cfg.healthConsent);
   setBlock('paracetamolBlock',cfg.paracetamol);
-  setBlock('responsibleSignatureBlock',cfg.responsible);
-  setBlock('studentSignatureBlock',cfg.studentSignature);
-  document.getElementById('studentSignatureLabel').textContent=type==='major18'?'Signatura del/de la declarant':'Signatura de l\'alumne/a';
-  if(cfg.studentSignature) setTimeout(()=>resizeSignature('signatureStudent'),50); else clearSignature('signatureStudent');
-  if(cfg.responsible) setTimeout(()=>resizeSignature('signatureResponsible'),50); else clearSignature('signatureResponsible');
+  document.getElementById('signatureResponsibleData').value=cfg.responsible?'true':'false';
+  document.getElementById('signatureStudentData').value='false';
 }
 document.querySelectorAll('[name="tipus_alumne"]').forEach(x=>x.addEventListener('change',()=>{applyType();setSetupFromModel(x.value);}));
 
-function formToObject(){ updateSignatureFields(); const out={}; for(const [k,v] of new FormData(form).entries()) out[k]=v; out.curs_inici=document.getElementById('cursInici').value; out.curs_fi=document.getElementById('cursFi').value; return out; }
+function formToObject(){ updateSignatureFields(); const out={}; for(const [k,v] of new FormData(form).entries()) out[k]=v; out.curs_inici=document.getElementById('cursInici').value; out.curs_fi=document.getElementById('cursFi').value; out.idioma_formulari=I18n.currentLanguage||'ca'; return out; }
 function fillForm(data){
   Object.entries(data||{}).forEach(([key,value])=>{
     if(key==='curs_inici'||key==='curs_fi'){document.getElementById(key==='curs_inici'?'cursInici':'cursFi').value=value;return;}
+    if(key==='studyType'||key==='isAdult'||key==='is14Plus'){document.getElementById(key).value=value;return;}
+    if(key==='id_student'){document.getElementById('idStudent').value=value;return;}
     form.querySelectorAll(`[name="${CSS.escape(key)}"]`).forEach(field=>{if(field.type==='radio'||field.type==='checkbox') field.checked=field.value===value||value===true; else if(!key.startsWith('signatura_')) field.value=value;});
   });
-  applyType();
-  setSetupFromModel(data.tipus_alumne);
-  if(data.signatura_responsable) drawImageOnCanvas('signatureResponsible',data.signatura_responsable);
-  if(data.signatura_alumne) drawImageOnCanvas('signatureStudent',data.signatura_alumne);
+  selectModelFromSetup();
+  if(data.tipus_alumne) setSetupFromModel(data.tipus_alumne);
+  setAuthorizedPeopleVisible(document.getElementById('sortidaSolaNo').checked);
+  setExternalPlatformsVisible(document.getElementById('imatgeExternaSi').checked);
 }
 
-document.getElementById('saveLocal').addEventListener('click',()=>{localStorage.setItem('autoritzacionsForm5Models',JSON.stringify(formToObject()));alert('Formulari desat en aquest navegador.');});
-document.getElementById('loadLocal').addEventListener('click',()=>{const raw=localStorage.getItem('autoritzacionsForm5Models');if(!raw)return alert('No hi ha cap còpia desada.');fillForm(JSON.parse(raw));});
-document.getElementById('downloadJson').addEventListener('click',()=>{const blob=new Blob([JSON.stringify(formToObject(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`autoritzacions_${document.getElementById('alumneNom').value.trim().replace(/\s+/g,'_')||'formulari'}.json`;a.click();URL.revokeObjectURL(a.href);});
-form.addEventListener('submit',e=>{e.preventDefault();e.stopPropagation();form.classList.add('was-validated');if(!form.querySelector('[name="tipus_alumne"]:checked')){alert('Completa la configuració inicial per seleccionar el model aplicable.');return;}if(form.checkValidity())alert('El formulari conté les dades obligatòries.');else document.querySelector(':invalid')?.focus();});
+document.getElementById('saveLocal')?.addEventListener('click',()=>{localStorage.setItem('autoritzacionsForm5Models',JSON.stringify(formToObject()));alert('Formulari desat en aquest navegador.');});
+document.getElementById('loadLocal')?.addEventListener('click',()=>{const raw=localStorage.getItem('autoritzacionsForm5Models');if(!raw)return alert('No hi ha cap còpia desada.');fillForm(JSON.parse(raw));});
+document.getElementById('downloadJson')?.addEventListener('click',()=>{const blob=new Blob([JSON.stringify(formToObject(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`autoritzacions_${document.getElementById('alumneNom').value.trim().replace(/\s+/g,'_')||'formulari'}.json`;a.click();URL.revokeObjectURL(a.href);});
+form.addEventListener('submit',e=>{e.preventDefault();e.stopPropagation();form.classList.add('was-validated');if(!form.querySelector('[name="tipus_alumne"]:checked')){alert('Completa la configuració inicial per seleccionar el model aplicable.');return;}if(!form.checkValidity()){document.querySelector(':invalid')?.focus();return;}submitForm();});
 
-const signatureState={};
-function setupSignature(id){const canvas=document.getElementById(id),ctx=canvas.getContext('2d');signatureState[id]={drawing:false};const point=e=>{const r=canvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};};canvas.addEventListener('pointerdown',e=>{signatureState[id].drawing=true;const p=point(e);ctx.beginPath();ctx.moveTo(p.x,p.y);canvas.setPointerCapture(e.pointerId);});canvas.addEventListener('pointermove',e=>{if(!signatureState[id].drawing)return;const p=point(e);ctx.lineTo(p.x,p.y);ctx.stroke();});canvas.addEventListener('pointerup',()=>signatureState[id].drawing=false);canvas.addEventListener('pointercancel',()=>signatureState[id].drawing=false);resizeSignature(id);}
-function resizeSignature(id){const canvas=document.getElementById(id);if(!canvas||canvas.offsetParent===null)return;const saved=canvas.width&&canvas.height?canvas.toDataURL('image/png'):'';const ratio=Math.max(window.devicePixelRatio||1,1),rect=canvas.getBoundingClientRect();canvas.width=Math.max(1,Math.floor(rect.width*ratio));canvas.height=Math.max(1,Math.floor(rect.height*ratio));const ctx=canvas.getContext('2d');ctx.setTransform(ratio,0,0,ratio,0,0);ctx.lineWidth=2;ctx.lineCap='round';ctx.strokeStyle='#111';if(saved&&saved!=='data:,')drawImageOnCanvas(id,saved);}
-function clearSignature(id){const c=document.getElementById(id);c.getContext('2d').clearRect(0,0,c.width,c.height);}
-function drawImageOnCanvas(id,src){const canvas=document.getElementById(id),ctx=canvas.getContext('2d'),img=new Image();img.onload=()=>ctx.drawImage(img,0,0,canvas.clientWidth,canvas.clientHeight);img.src=src;}
-function updateSignatureFields(){const cfg=typeConfig[form.querySelector('[name="tipus_alumne"]:checked')?.value];document.getElementById('signatureResponsibleData').value=cfg?.responsible?document.getElementById('signatureResponsible').toDataURL('image/png'):'';document.getElementById('signatureStudentData').value=cfg?.studentSignature?document.getElementById('signatureStudent').toDataURL('image/png'):'';}
-setupSignature('signatureResponsible'); setupSignature('signatureStudent');
-window.addEventListener('resize',()=>{resizeSignature('signatureResponsible');resizeSignature('signatureStudent');});
-document.querySelectorAll('[data-clear-signature]').forEach(b=>b.addEventListener('click',()=>clearSignature(b.dataset.clearSignature)));
+function setupRespondentStep(){
+  document.getElementById('respondentNext').addEventListener('click',()=>{
+    const name=document.getElementById('responentNomSencer').value.trim();
+    const phone=document.getElementById('responentTelefon').value.trim();
+    const error=document.getElementById('respondentError');
+    error.classList.add('is-hidden');
+    if(!name||!phone||!isValidPhone(phone)){
+      error.textContent='Indica el nom sencer i un telèfon vàlid per continuar.';
+      error.classList.remove('is-hidden');
+      return;
+    }
+    document.getElementById('hiddenRespondentName').value=name;
+    document.getElementById('hiddenRespondentPhone').value=phone;
+    document.getElementById('respondentStep').classList.add('is-hidden');
+    document.getElementById('initialSetup').classList.remove('is-hidden');
+    form.classList.remove('is-hidden');
+  });
+}
+
+function isValidPhone(value){const compact=String(value||'').trim().replace(/[\s().-]/g,'');return /^\+?\d{8,15}$/.test(compact)||/^00\d{8,15}$/.test(compact)||/^[6789]\d{8}$/.test(compact);}
+
+function submitForm(){
+  const button=document.getElementById('submitForm');
+  button.disabled=true;
+  button.textContent='Enviant...';
+  google.script.run.withSuccessHandler(result=>{
+    button.textContent='Enviat';
+    alert('Formulari enviat correctament. Codi: '+(result&&result.resposta_id?result.resposta_id:''));
+  }).withFailureHandler(error=>{
+    button.disabled=false;
+    button.textContent='Envia el formulari';
+    alert('No s ha pogut enviar el formulari: '+(error&&error.message?error.message:error));
+  }).submitAuthorizationResponse(formToObject());
+}
+
+
+function updateSignatureFields(){const cfg=typeConfig[form.querySelector('[name="tipus_alumne"]:checked')?.value];document.getElementById('signatureResponsibleData').value=cfg?.responsible?'true':'false';document.getElementById('signatureStudentData').value='false';}
 document.getElementById('dataSignatura').valueAsDate=new Date();
 </script>

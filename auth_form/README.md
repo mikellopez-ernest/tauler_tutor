@@ -2,13 +2,21 @@
 
 ## Fitxers del projecte
 
-- `Code.gs`: punt d'entrada de la Web App i funció `include`.
+- `Code.gs`: punts d'entrada de la Web App (`doGet`, `doPost`), funció `include` i futura persistència de respostes.
 - `Index.html`: estructura principal del formulari.
 - `Styles.html`: estils CSS.
 - `I18n.html`: motor de traducció natiu, sense serveis externs.
 - `Translations_ca.html`: catàleg canònic en català.
 - `Translations_TEMPLATE.html`: plantilla per crear idiomes nous.
-- `App.html`: lògica del formulari, signatures, validació, JSON i desat local.
+- `App.html`: lògica del formulari, preemplenat, signatures, validació, JSON, desat local i enviament al servidor.
+
+## Comportament previst
+
+- El formulari comença amb una pàgina d'identificació de la persona que respon, amb `Nom sencer` i `Telèfon` obligatoris.
+- El formulari pot obrir-se amb valors per defecte del centre i del curs definits en constants.
+- El formulari ha d'acceptar dades de preemplenament per POST per a dades de l'alumne/a i del model inicial.
+- En enviar-se, la resposta s'ha de persistir a les taules `Autoritzacions -> autoritzacions` i `Autoritzacions -> persones_autoritzades`.
+- El desat local al navegador i la descàrrega JSON continuen sent eines auxiliars.
 
 ## Instal·lació a GAS
 
