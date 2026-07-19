@@ -5,6 +5,7 @@ var LAUNCHER_CONFIG = {
   title: 'Formulari d’autoritzacions',
   supportEmail: 'e3009850@xtec.cat',
   databaseProperty: 'db',
+  internalSecretProperty: 'launcher_internal_secret',
   registrySheet: 'tables',
   timezone: 'Europe/Madrid',
   tokenMinutes: 30

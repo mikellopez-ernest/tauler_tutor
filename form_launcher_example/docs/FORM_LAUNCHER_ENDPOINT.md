@@ -15,7 +15,7 @@ Current deployment ID:
 
 `AKfycbwOgYsVCf-MdEEbpGFFmWyjMB__MrgDowQuo7W6Ky8ymZwkY_-c7gUPm9QGTGUxiYGrYg`
 
-For the current development/testing phase, this deployment is intentionally accessible to anyone, including users without a signed-in email. This is only acceptable because the launcher is a stateless tunnel: it renders the message and forwards the POST payload to `auth_form`, but it must not persist personal data or send real emails in this version.
+For the current development/testing phase, this deployment is intentionally accessible to anyone, including users without a signed-in email. This is acceptable only because direct public access never exposes student/form data before email-token verification.
 
 
 Current downstream `auth_form` endpoint URL:
@@ -121,13 +121,13 @@ The page must ask for:
 | Field | Requirement |
 | --- | --- |
 | Student email | Required email textbox. Must be an `@iernestlluch.cat` email address unless later specs allow exceptions. |
-| Course/group | Required select populated dynamically from `Dinantia` -> `class_groups`. |
+| Course/group | Required select populated dynamically from `Dinantia` -> `dinantia_2_dades_alumnes`. |
 
-The group list must be generated on the fly from the registry-backed `Dinantia` -> `class_groups` table. Do not hardcode the list in code.
+The group list must be generated on the fly from the registry-backed `Dinantia` -> `dinantia_2_dades_alumnes` table. Do not hardcode the list in code.
 
-Display value: use the group name from `class_groups.dinantia_group_name` unless later specs define a different display field.
+Display value: use the group name from `dinantia_2_dades_alumnes.dinantia_group_name` unless later specs define a different display field.
 
-Resolution value: use `class_groups.dades_alumnes_sheet` to locate the corresponding sheet inside the `Dades alumnes` spreadsheet.
+Resolution value: use `dinantia_2_dades_alumnes.dades_alumnes_sheet` to locate the corresponding sheet inside the `Dades alumnes` spreadsheet.
 
 ### Student Entry Page Text
 
@@ -169,9 +169,9 @@ L'adreça de correu electrònic i el curs o grup facilitats s'utilitzaran exclus
 
 ### Student Group List
 
-The student group dropdown must be populated from `Dinantia` -> `class_groups`, not from a hardcoded list.
+The student group dropdown must be populated from `Dinantia` -> `dinantia_2_dades_alumnes`, not from a hardcoded list.
 
-Current expected group names are the same values currently registered in `Dinantia` -> `class_groups`, including ESO, Batxillerat, ACO, PFI, SMX, PCC, and AC groups. The implementation must tolerate group additions/removals by reading the table at runtime.
+Current expected group names are the same values currently registered in `Dinantia` -> `dinantia_2_dades_alumnes`, including ESO, Batxillerat, ACO, PFI, SMX, PCC, and AC groups. The implementation must tolerate group additions/removals by reading the table at runtime.
 
 ### Student Lookup Path
 
@@ -179,8 +179,8 @@ When the student submits email and group:
 
 1. Normalize the email by trimming and lowercasing.
 2. Validate that it is an `@iernestlluch.cat` email address.
-3. Use the selected group to find the matching `Dinantia` -> `class_groups` row.
-4. Read `class_groups.dades_alumnes_sheet`.
+3. Use the selected group to find the matching `Dinantia` -> `dinantia_2_dades_alumnes` row.
+4. Read `dinantia_2_dades_alumnes.dades_alumnes_sheet`.
 5. Open the `Dades alumnes` spreadsheet through the registry.
 6. Open the sheet named by `dades_alumnes_sheet`.
 7. Find the student by header `Correu alumne`.
@@ -220,12 +220,11 @@ Rules:
 - The student must not edit parent/legal-guardian answers.
 - Hide all normal form submit buttons.
 - Show only one student confirmation button, for example `Confirmo`.
-- When confirmed, update only `Autoritzacions` -> `autoritzacions.signatura_alumne` to real boolean `TRUE` for that `id_student` / response row.
+- When confirmed, update `Autoritzacions` -> `autoritzacions.signatura_alumne` to real boolean `TRUE` for that `id_student` / response row.
+- If optional audit columns exist, write `student_confirmed_at` with the current timestamp and `student_confirmed_email` with the verified student email.
 - Do not change `signatura_responsable`.
 - Do not create a new authorization row.
-- For now, student confirmation updates only `signatura_alumne`; no audit columns are required until the schema is explicitly extended.
-
-Recommended audit fields may be added later, such as student confirmation datetime and confirming email. If no audit fields exist yet, ask before adding schema.
+- The audit columns are optional. The launcher must not fail if they do not exist.
 
 ## Adult Student Behavior
 
@@ -258,15 +257,157 @@ Read-only mode requirements:
 
 ## Tutor Panel Impact
 
-Because the real parent/student flow begins from the public launcher GET URL, the tutor dashboard no longer needs a rocket launch button in the `Autoritzacions` table.
+The real parent/student flow can begin from the public launcher GET URL or from a panel-initiated invitation.
 
 Updated tutor-panel behavior:
 
 - Students missing an authorization row remain highlighted with a pale red background.
-- `Estat` remains `Pendent`.
-- Do not show a rocket/link/envelope action beside the student name.
-- The teacher panel is for monitoring authorization status, not for initiating parent authentication.
-- Future reminder/email tooling may be specified later, but it is not part of the current teacher panel behavior.
+- `Estat` shows `Pendent` and an `Enviar a tutors` action.
+- If `signatura_responsable` is true but `signatura_alumne` is not true, `Estat` shows `Pendent alumne` and an `Enviar a alumne` action.
+- The tutor panel must not create verification tokens directly.
+- The tutor panel calls the launcher server-side. The launcher remains responsible for token generation, token storage, and email delivery.
+
+## Panel-Initiated Invitation Path
+
+The launcher must expose a POST action for trusted requests from `tauler_tutor`.
+
+This path lets a tutor send invitations from the `Autoritzacions` table without requiring the family/student to first open the launcher GET page manually.
+
+The path must not replace the public GET flows. It is an additional entry route into the same secure email-token process.
+
+### Security
+
+Because the launcher deployment is public, panel-initiated POST requests must include a shared internal secret.
+
+Required script property in both `tauler_tutor` and `form_launcher_example`:
+
+| Property | Meaning |
+| --- | --- |
+| `launcher_internal_secret` | Shared secret used only for trusted server-to-server panel invitation requests. |
+
+Rules:
+
+- The secret must never be hardcoded.
+- The secret must never be sent to the browser.
+- The secret must never be logged.
+- If the property is missing or mismatched, the launcher must reject the request.
+- This secret protects only the panel-initiated POST action; the public GET token-verification flows remain public by design.
+
+### Request
+
+The tutor panel sends JSON to the launcher:
+
+```json
+{
+  "action": "panel_invite",
+  "secret": "script-property-value",
+  "target": "parents",
+  "tutor_email": "teacher@iernestlluch.cat",
+  "student": {
+    "id": "DIN-A-000000",
+    "name": "Student name",
+    "email": "student@iernestlluch.cat",
+    "document": "",
+    "studyType": "eso",
+    "isAdult": "no",
+    "is14Plus": "si"
+  },
+  "contacts": [
+    {
+      "id": "DIN-A-000001",
+      "name": "Contact name",
+      "email": "contact@example.com",
+      "phone": ""
+    }
+  ],
+  "authorization": {
+    "resposta_id": ""
+  }
+}
+```
+
+Allowed `target` values:
+
+| Value | Meaning |
+| --- | --- |
+| `parents` | Create and send one parent token email for each valid contact email. |
+| `student` | Create and send one student token email to the loaded student email. |
+
+### Parent Target
+
+For `target = parents`:
+
+- Read recipients from `contacts`.
+- Skip contacts with blank or invalid email.
+- Create one verification token per valid recipient.
+- Store `sender = parent`.
+- Store `email` as the normalized contact email.
+- Store `dinantia_account_id` from contact `id` when available.
+- Store `student_id` from `student.id`.
+- Store `resposta_id` from `authorization.resposta_id` when available.
+- Store metadata containing the selected student context and tutor email.
+- Send the same verification email used by the parent flow.
+
+When the parent opens the token, the launcher must continue to the existing parent-token behavior for that one selected student:
+
+- If the student is adult, block parent access.
+- If an authorization row already exists, show the read-only version.
+- If no row exists and the student is under 18, show the family message and POST-forward button to `auth_form`.
+
+### Student Target
+
+For `target = student`:
+
+- Read recipient email from `student.email`.
+- Require a valid `@iernestlluch.cat` email.
+- Create one verification token.
+- Store `sender = student`.
+- Store `email` as the normalized student email.
+- Store `student_id` from `student.id`.
+- Store `resposta_id` from `authorization.resposta_id` when available.
+- Store metadata containing the student context, authorization context, and tutor email.
+- Send the same verification email used by the student flow.
+
+When the student opens the token, the launcher must continue to the existing student-token behavior:
+
+- If no authorization row exists and the student is a minor, block and ask for the family form first.
+- If an authorization row exists, show the read-only version and the confirmation button when `signatura_alumne` is not true.
+- If the student is adult and no row exists, allow the editable form flow for themselves.
+
+### Response
+
+The launcher must return JSON, not an HTML page, for `action = panel_invite`.
+
+Response shape:
+
+```json
+{
+  "ok": true,
+  "sent": 2,
+  "skipped": 0,
+  "errors": []
+}
+```
+
+Rules:
+
+- `sent` counts successfully sent emails.
+- `skipped` counts recipients intentionally skipped, for example blank or invalid email.
+- `errors` contains safe summaries only; it must not include secrets, token hashes, raw tokens, or full payload dumps.
+- If all recipients fail, `ok` should be false.
+
+### Token History
+
+Panel-created tokens are written to the same `Autoritzacions` -> `verification_tokens` sheet as public GET-flow tokens.
+
+The tutor panel may read the latest token row per student to display:
+
+- last invitation datetime,
+- recipient email,
+- sender type,
+- status.
+
+The tutor panel must never display `token_hash` or raw token values.
 
 ## Production Identity-Verification Flow
 
@@ -432,6 +573,7 @@ Required approach for this project: use the registry-backed sheet `Autoritzacion
 - Store metadata needed to render the final form-forwarding page.
 - Store creation datetime, expiry datetime, used/revoked state, and safe audit fields.
 - Mark token as used after successful verification if the selected policy is one-time use.
+- Mark expired pending tokens as `expired` opportunistically when the launcher handles requests, creates tokens, or validates tokens.
 
 A stateless signed token may be used only as an additional integrity layer, not as the primary persistence strategy. The authoritative token state is `Autoritzacions` -> `verification_tokens`.
 
@@ -468,7 +610,7 @@ The exact value can be adjusted later, but tokens must not be indefinite.
 
 Preferred behavior: one-time use.
 
-After the verified link has been used to render the final launcher page, the token should be marked as used. If this creates too much friction during testing, the implementation may allow multiple uses until expiry, but that must be an explicit temporary testing decision.
+After the verified link has been used to render the final launcher page, the token should be marked as used. Expired pending tokens should be marked as `expired`.
 
 ## Verification Email
 
@@ -513,7 +655,7 @@ Forwarded fields remain:
 - Script properties and API secrets must never be rendered or logged.
 - `.clasp.json` and local credentials must remain out of git.
 
-## Purpose
+## Legacy Testing Tunnel
 
 Historically, `form_launcher_example` started as a temporary tunnel between `tauler_tutor` and `auth_form`.
 
@@ -521,9 +663,9 @@ It receives a POST request from the tutor panel for one student, renders the mes
 
 When clicked, that button submits a POST request to the real authorization form endpoint with hidden inputs.
 
-The launcher does not store data.
+This legacy tunnel is superseded by the secure token flows above. It may remain as a reference for the final verified POST-forwarding page, but production invitation behavior must use verification tokens.
 
-## Current Testing Behavior
+## Legacy Testing Behavior
 
 In the current development/testing phase, the launcher must:
 
@@ -534,7 +676,7 @@ In the current development/testing phase, the launcher must:
 5. When clicked, submit a POST request to the `auth_form` endpoint.
 6. Forward the relevant student/form-prefill values to `auth_form` as hidden fields.
 
-The launcher must not send real emails in this version.
+This behavior is no longer the preferred production path.
 
 ## Previous Future Production Note
 
@@ -654,7 +796,7 @@ The button must be implemented as an HTML form submit action:
 
 `FORM_ENDPOINT_URL` must point to the deployed `auth_form` endpoint.
 
-Because the launcher is a tunnel, it should not save any submitted values to script properties, spreadsheets, Drive, or local storage.
+In the legacy tunnel, because the launcher is only a tunnel, it should not save any submitted values to script properties, spreadsheets, Drive, or local storage.
 
 ## Field Mapping To `auth_form`
 

@@ -8,7 +8,7 @@ This is a specification only. Do not implement, deploy, or sync from this docume
 
 The endpoint gives a logged-in school user access to the student group associated with their tutoring responsibility.
 
-On access, the app resolves the current user's email against the teacher database, finds the tutor responsibility, maps it to a Dinantia group ID, and displays the students in that group.
+On access, the app resolves the current user's email against the teacher database, finds every tutor/responsibility row assigned to that teacher, maps those responsibilities to one or more Dinantia group IDs, and displays the students in those groups.
 
 ## Deployment And Access
 
@@ -47,10 +47,15 @@ Required sheets:
 | --- | --- | --- |
 | `Dades de professors` | `Llista` | Find teacher by institutional email and resolve teacher full name. |
 | `Dades de professors` | `leave_absence` | Resolve substitute teachers to the main teacher they are covering. |
-| `Càrrega lectiva` | `carrecs` | Find tutor responsibility from teacher full name. |
-| `Dinantia` | `class_groups` | Map tutor responsibility to Dinantia group ID. |
+| `Càrrega lectiva` | `carrecs` | Find every responsibility assigned to the teacher full name. |
+| `Dinantia` | `teachers_2_dinantia` | Map each responsibility to one or more Dinantia groups. |
+| `Dinantia` | `dinantia_2_dades_alumnes` | Map each Dinantia group to its local `Dades alumnes` sheet. |
 | `Dinantia` | `changelog` | Append audit rows for teacher-made data changes. |
-| `Dades alumnes` | Dynamic sheet from `class_groups.dades_alumnes_sheet` | Read local student birthdate by Dinantia student ID. |
+| `Dinantia` | `students_cache` | Fast read model for panel student rows. |
+| `Dinantia` | `contacts_cache` | Fast read model for panel contact rows. |
+| `Dinantia` | `authorizations_cache` | Fast read model for authorization matrix and latest invitation summary. |
+| `Dinantia` | `cache_runs` | Historical cache rebuild runs. |
+| `Dades alumnes` | Dynamic sheet from `dinantia_2_dades_alumnes.dades_alumnes_sheet` | Read local student birthdate by Dinantia student ID. |
 
 Required Dinantia API endpoint:
 
@@ -68,18 +73,20 @@ The endpoint must resolve the tutor group with this process:
 4. If the teacher row has `SUBST?` not true, use that teacher row.
 5. If the teacher row has `SUBST?` true, resolve the main teacher through `leave_absence`.
 6. Build the effective teacher full name as `NOM COGNOM1 COGNOM2`, omitting blanks.
-7. Find a row in `Càrrega lectiva` -> `carrecs` where `asignado?` matches the effective teacher full name.
+7. Find every row in `Càrrega lectiva` -> `carrecs` where `asignado?` matches the effective teacher full name.
 8. If no `carrec` row is found, render the error page.
-9. Find a row in `Dinantia` -> `class_groups` where `tutor_carrec` matches `carrecs.carrec`.
-10. If no `class_groups` row is found, render the error page.
-11. Read `class_groups.dinantia_group_name` as the Dinantia group ID.
-12. Read `class_groups.dades_alumnes_sheet` as the sheet name inside the `Dades alumnes` spreadsheet.
-13. Fetch students from Dinantia.
-14. Open the `Dades alumnes` spreadsheet through the registry.
-15. Open the group-specific sheet named by `dades_alumnes_sheet`.
-16. Match Dinantia students to local `Dades alumnes` rows by Dinantia account `id` to local column `ID`.
-17. Read `Data Naixement` from the matched local row.
-18. Show the main page.
+9. For each matched responsibility, find a row in `Dinantia` -> `teachers_2_dinantia` where `carrec` matches `carrecs.carrec`, when such a row exists.
+10. Ignore responsibilities that have no `teachers_2_dinantia` row.
+11. If none of the teacher's responsibilities has a Dinantia mapping, render the error page.
+12. Parse each mapped `teachers_2_dinantia.dinantia_group_names` as a comma-separated list.
+13. Trim spaces around each group and ignore empty chunks.
+14. Merge all groups from all mapped responsibilities, removing duplicates while preserving first-seen order.
+15. For each group, find a row in `Dinantia` -> `dinantia_2_dades_alumnes` where `dinantia_group_name` matches the group.
+16. If any referenced group is missing, render a clear configuration error page.
+17. Read `dinantia_2_dades_alumnes.dades_alumnes_sheet` as the sheet name inside the `Dades alumnes` spreadsheet for that group.
+18. Read students for the resolved groups from `Dinantia` -> `students_cache`.
+19. If the cache is empty or unavailable during transition, the app may temporarily fall back to the live Dinantia and `Dades alumnes` flow.
+20. Show the main page.
 
 String comparisons should trim surrounding whitespace.
 
@@ -90,7 +97,7 @@ The app must keep both identities when the accessing teacher is a substitute:
 - Accessing teacher: the teacher found directly by `CORREU INSTIT`.
 - Main teacher: the teacher resolved through `leave_absence.teacher_code`.
 
-The main teacher is used to resolve `carrecs.asignado?` and the Dinantia group.
+The main teacher is used to resolve all matching `carrecs.asignado?` rows and the Dinantia groups.
 
 The accessing teacher is used for the visible teacher label on the main page.
 
@@ -115,7 +122,7 @@ The resolved view model must retain:
 
 - Substitute teacher full name.
 - Main teacher full name.
-- Main teacher row used for `carrecs` lookup.
+- Main teacher row used for all `carrecs` lookups.
 
 ## Error Page
 
@@ -133,9 +140,10 @@ This user-facing message applies when:
 - The matched teacher is a substitute but has no active `leave_absence` row.
 - The matched teacher is a substitute and the main teacher cannot be resolved.
 - The effective teacher has no matching `carrecs.asignado?`.
-- The `carrec` has no matching `class_groups.tutor_carrec`.
-- The matched class group has no Dinantia group ID.
-- The matched class group has no `dades_alumnes_sheet`.
+- None of the matched `carrec` rows has a matching `teachers_2_dinantia.carrec`.
+- None of the matched responsibilities has valid `dinantia_group_names`.
+- A referenced Dinantia group has no matching `dinantia_2_dades_alumnes.dinantia_group_name`.
+- A matched group has no `dades_alumnes_sheet`.
 - The referenced `Dades alumnes` sheet does not exist.
 
 Internal logs may include more specific diagnostic context, but the page shown to the user should use the message above.
@@ -161,14 +169,59 @@ Left menu options:
 
 The `Inici` page must show:
 
-1. The Dinantia group ID as the page title.
-2. A table with all students in the group.
+1. The selected Dinantia group ID as the page title, or `Tots els grups` when all groups are selected.
+2. A table with all students in the selected group scope.
 
-The title uses the group ID directly from `Dinantia` -> `class_groups`.`dinantia_group_name`.
+The title uses the group ID directly from the resolved group list. When more than one group is visible, the default title is `Tots els grups`.
 
 Do not call the Dinantia Groups API to convert the group ID to name or tag in this version.
 
 Do not show the label `GRUP DINANTIA` above the title.
+
+### Group Filter
+
+If the resolved responsibility maps to more than one Dinantia group, the panel must show a combo box labeled:
+
+```text
+Grups
+```
+
+Options:
+
+| Option | Meaning |
+| --- | --- |
+| `Tots els grups` | Show every group visible to the responsibility. Selected by default. |
+| Each resolved Dinantia group | Show only students for that group. |
+
+Rules:
+
+- Option values are the exact parsed group values from `teachers_2_dinantia.dinantia_group_names`.
+- The selector filters all three pages: `Inici`, `Contactes`, and `Autoritzacions`.
+- Filtering is client-side using already-loaded data.
+- Changing the selected group must not re-run teacher resolution or refetch Dinantia data.
+- When only one group is resolved, the combo box may be hidden.
+
+## Cache Read Model
+
+The panel must use cache tables for normal reads:
+
+| Panel area | Read source |
+| --- | --- |
+| `Inici` student list | `Dinantia` -> `students_cache` |
+| `Contactes` contact list | `Dinantia` -> `contacts_cache` |
+| `Autoritzacions` matrix | `Dinantia` -> `authorizations_cache` |
+
+The cache rebuild function is:
+
+```javascript
+rebuildTutorPanelCache()
+```
+
+This function fully overwrites `students_cache`, `contacts_cache`, and `authorizations_cache`, and appends one row to `cache_runs`.
+
+The panel may keep a live fallback during the transition period, but the intended production path is cache-first.
+
+Editable contact data must still write to Dinantia first. After Dinantia accepts the change, update the matching `contacts_cache` row and append the changelog row.
 
 ### Teacher Label
 
@@ -227,7 +280,7 @@ Student birthdate comes from the `Dades alumnes` spreadsheet, not from Dinantia.
 
 Resolution process:
 
-1. Use the resolved `class_groups.dades_alumnes_sheet` value.
+1. Use the resolved `dinantia_2_dades_alumnes.dades_alumnes_sheet` value for each group.
 2. Open the logical table `Dades alumnes` through the registry.
 3. Inside the `Dades alumnes` spreadsheet, open the sheet named by `dades_alumnes_sheet`.
 4. Validate required headers:
@@ -245,6 +298,7 @@ The student table must show:
 
 | Column | Source |
 | --- | --- |
+| Group | Resolved Dinantia group value. Shown only when more than one group is visible. |
 | Name | Dinantia account `name`. |
 | Birthdate | `Dades alumnes` group sheet `Data Naixement`, matched by local `ID` to Dinantia account `id`. |
 | Age | Calculated dynamically from birthdate and today. |
@@ -266,8 +320,10 @@ Age rules:
 
 Sorting rules:
 
-- The default order is by visible Dinantia `name`, ascending A-Z.
+- When `Tots els grups` is selected, default order is by group name, then visible Dinantia `name`, ascending.
+- When a single group is selected, default order is by visible Dinantia `name`, ascending A-Z.
 - Column headers must be clickable.
+- Clicking `Group` sorts by group when the group column is visible.
 - Clicking `Name` sorts by visible Dinantia `name`.
 - Clicking `Birthdate` sorts by birthdate.
 - Clicking `Age` sorts by calculated age.
@@ -282,6 +338,18 @@ The page title must also be `Contactes`.
 The `Contactes` page works with the same resolved student list used by `Inici`.
 
 It must not re-run the tutor resolution or group database lookup just to render contacts.
+
+Contact data must be lazy-loaded. The initial panel load must not fetch Dinantia parent/contact accounts.
+
+Rules:
+
+- Initial load fetches students only.
+- When the user opens `Contactes`, fetch contacts for the currently selected group scope.
+- If `Tots els grups` is selected, the app may fetch contacts for all visible students, but only after the user opens `Contactes`.
+- If a single group is selected, fetch contacts only for that group.
+- Changing the `Grups` filter while `Contactes` is active loads contacts for the new visible scope if they are not already loaded.
+- Loaded contacts may be cached in browser memory for the current session.
+- Authorization invitation actions that need parent contact emails may trigger this same lazy contact-loading path on demand.
 
 ### Contact Source
 
@@ -378,7 +446,7 @@ The loading indicator should be a typical animated loading GIF/icon centered in 
 Loading states apply to:
 
 - Initial endpoint data loading.
-- Contact account loading.
+- Lazy contact account loading when opening `Contactes` or sending parent invitations.
 - Save operations that fetch or refresh data.
 
 To show the loading indicator on first access, the endpoint must render the page shell first and load tutor/student/contact data asynchronously from the client.

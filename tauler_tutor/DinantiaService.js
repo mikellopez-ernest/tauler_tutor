@@ -25,6 +25,25 @@ function fetchDinantiaStudentsInGroup_(groupId) {
   return students;
 }
 
+function fetchAllDinantiaAccounts_() {
+  var credentials = getDinantiaCredentials_();
+  var accounts = [];
+  var page = 1;
+
+  while (true) {
+    var body = fetchDinantiaJson_('/v1.2/accounts/index?limit=100&page=' + page, credentials);
+    accounts = accounts.concat(body.data || []);
+
+    if (!body.pagination || !body.pagination.has_next_page) {
+      break;
+    }
+
+    page++;
+  }
+
+  return accounts;
+}
+
 function fetchDinantiaJson_(path, credentials) {
   var auth = Utilities.base64Encode(credentials.user + ':' + credentials.secret);
   var response = UrlFetchApp.fetch(APP_CONFIG.dinantiaBaseUrl + path, {
@@ -84,6 +103,7 @@ function fetchDinantiaContactsForStudents_(students) {
     return {
       id: student.id,
       name: student.name,
+      groupName: student.groupName || '',
       contacts: contacts
     };
   });

@@ -100,6 +100,29 @@
     margin-bottom: 26px;
   }
 
+  .group-filter {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 22px;
+  }
+
+  .group-filter label {
+    color: var(--muted);
+    font-weight: 800;
+  }
+
+  .group-filter select {
+    min-width: 220px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--text);
+    font: inherit;
+    font-weight: 700;
+    padding: 9px 10px;
+  }
+
   .eyebrow {
     margin: 0 0 6px;
     color: var(--accent-dark);
@@ -258,7 +281,9 @@
     color: var(--muted);
   }
 
-  .save-button {
+  .save-button,
+  .bulk-invite-button,
+  .refresh-auth-button {
     position: fixed;
     right: 28px;
     bottom: 28px;
@@ -275,7 +300,19 @@
     line-height: 1;
   }
 
-  .save-button:disabled {
+  .bulk-invite-button {
+    bottom: 98px;
+    font-size: 24px;
+  }
+
+  .refresh-auth-button {
+    bottom: 168px;
+    font-size: 28px;
+  }
+
+  .save-button:disabled,
+  .bulk-invite-button:disabled,
+  .refresh-auth-button:disabled {
     cursor: not-allowed;
     opacity: 0.45;
   }
@@ -345,6 +382,45 @@
     word-break: break-word;
   }
 
+  .debug-panel {
+    margin-top: 22px;
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+  }
+
+  .debug-panel h2 {
+    margin-bottom: 12px;
+    font-size: 18px;
+  }
+
+  .debug-meta {
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .debug-step {
+    margin: 14px 0;
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    border-radius: 6px;
+    background: #fff;
+    padding: 12px;
+  }
+
+  .debug-step h3 {
+    margin: 0 0 8px;
+    font-size: 14px;
+  }
+
+  .debug-step pre {
+    margin: 0;
+    max-height: 360px;
+  }
+
+  .debug-failed {
+    border-left-color: var(--danger);
+  }
+
 
 
   .authorizations-table {
@@ -378,6 +454,44 @@
     cursor: pointer;
   }
 
+  .status-action {
+    margin-left: 8px;
+    border: 0;
+    background: transparent;
+    color: var(--accent-dark);
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .status-action:disabled {
+    cursor: wait;
+    opacity: .55;
+  }
+
+  .floating-scrollbar {
+    position: fixed;
+    right: 104px;
+    bottom: 34px;
+    left: 272px;
+    z-index: 19;
+    height: 20px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: var(--shadow);
+  }
+
+  .floating-scrollbar > div {
+    height: 1px;
+  }
+
   .rocket-button:disabled {
     cursor: wait;
     opacity: .55;
@@ -409,6 +523,24 @@
     font-size: 13px;
     font-weight: 800;
     padding: 6px 10px;
+  }
+
+  .student-name-with-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .document-button {
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: #fff;
+    color: var(--accent-dark);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
   }
 
   .detail-button:hover {
@@ -542,6 +674,22 @@
     .save-button {
       right: 18px;
       bottom: 18px;
+    }
+
+    .bulk-invite-button {
+      right: 18px;
+      bottom: 88px;
+    }
+
+    .refresh-auth-button {
+      right: 18px;
+      bottom: 158px;
+    }
+
+    .floating-scrollbar {
+      left: 18px;
+      right: 92px;
+      bottom: 24px;
     }
   }
 </style>

@@ -9,6 +9,7 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 const form = document.getElementById('authorizationForm');
+const SUCCESS_REDIRECT_URL = 'https://agora.xtec.cat/sesernestlluch-cunit/';
 let personCounter = 0;
 const typeConfig = {
   eso_menor14: {code:'A1746-V01-26', subtitle:"Escolarització de l'alumnat menor de catorze anys", responsible:true, studentSignature:false, esoExit:true, recess:false, academic:false, municipal:true, healthConsent:false, paracetamol:true, tis:true},
@@ -179,6 +180,7 @@ function submitForm(){
   google.script.run.withSuccessHandler(result=>{
     button.textContent='Enviat';
     alert('Formulari enviat correctament. Codi: '+(result&&result.resposta_id?result.resposta_id:''));
+    window.top.location.href = SUCCESS_REDIRECT_URL;
   }).withFailureHandler(error=>{
     button.disabled=false;
     button.textContent='Envia el formulari';

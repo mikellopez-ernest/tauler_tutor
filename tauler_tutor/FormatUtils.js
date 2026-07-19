@@ -1,5 +1,10 @@
 function textKey_(value) {
-  return String(value === null || value === undefined ? '' : value).trim().replace(/\s+/g, ' ');
+  return String(value === null || value === undefined ? '' : value)
+    .trim()
+    .replace(/\s+/g, ' ')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
 }
 
 function codeKey_(value) {
@@ -43,4 +48,3 @@ function asDateOnly_(value) {
   date.setHours(0, 0, 0, 0);
   return date;
 }
-

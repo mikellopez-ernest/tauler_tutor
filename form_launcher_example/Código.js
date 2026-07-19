@@ -1,5 +1,6 @@
 function doGet(e) {
   try {
+    expireOldPendingTokens_();
     var params = (e && e.parameter) || {};
     if (params.token) return handleTokenGet_(params.token);
     var sender = normalizeSender_(params.sender);
@@ -14,8 +15,10 @@ function doGet(e) {
 
 function doPost(e) {
   try {
+    expireOldPendingTokens_();
     var payload = parseRequest_(e);
     var action = stringValue_(payload.action);
+    if (action === 'panel_invite') return handlePanelInvite_(payload);
     if (action === 'verify_parent') return handleParentVerification_(payload);
     if (action === 'verify_student') return handleStudentVerification_(payload);
     if (action === 'select_parent_student') return handleParentStudentSelection_(payload);
@@ -25,6 +28,126 @@ function doPost(e) {
   } catch (error) {
     console.error(error && error.stack ? error.stack : error);
     return renderMessagePage_('No s ha pogut continuar', 'S ha produit un error: ' + safeErrorMessage_(error), true);
+  }
+}
+
+function handlePanelInvite_(payload) {
+  try {
+    assertPanelSecret_(payload.secret);
+    var target = stringValue_(payload.target) === 'student' ? 'student' : 'parents';
+    var student = normalizePanelStudent_(payload.student);
+    var contacts = normalizePanelContacts_(payload.contacts);
+    var authorization = payload.authorization || {};
+    var tutorEmail = normalizeEmail_(payload.tutor_email);
+
+    if (!student.id) return jsonOutput_({ ok: false, sent: 0, skipped: 0, errors: ['Missing student id.'] });
+
+    if (target === 'student') {
+      return jsonOutput_(sendPanelStudentInvite_(student, authorization, tutorEmail));
+    }
+    return jsonOutput_(sendPanelParentInvites_(student, contacts, authorization, tutorEmail));
+  } catch (error) {
+    return jsonOutput_({ ok: false, sent: 0, skipped: 0, errors: [safeErrorMessage_(error)] });
+  }
+}
+
+function sendPanelParentInvites_(student, contacts, authorization, tutorEmail) {
+  var summary = { ok: true, sent: 0, skipped: 0, errors: [] };
+  var recipients = contacts || [];
+  if (!recipients.length) {
+    return { ok: false, sent: 0, skipped: 1, errors: ['No parent/contact recipients provided.'] };
+  }
+
+  recipients.forEach(function(contact) {
+    var email = normalizeEmail_(contact.email);
+    if (!isValidEmail_(email)) {
+      summary.skipped++;
+      return;
+    }
+
+    try {
+      var token = createVerificationToken_({
+        sender: 'parent',
+        email: email,
+        dinantia_account_id: contact.id || '',
+        student_id: student.id,
+        resposta_id: stringValue_(authorization && authorization.resposta_id),
+        metadata: {
+          source: 'tauler_tutor',
+          tutor_email: tutorEmail,
+          parent_name: contact.name || '',
+          student: student
+        }
+      });
+      sendVerificationEmail_(email, 'parent', token.rawToken);
+      summary.sent++;
+    } catch (error) {
+      summary.errors.push('Parent invitation failed for ' + email + ': ' + safeErrorMessage_(error));
+    }
+  });
+
+  summary.ok = summary.sent > 0 && summary.errors.length === 0;
+  if (summary.sent > 0 && summary.errors.length > 0) summary.ok = true;
+  return summary;
+}
+
+function sendPanelStudentInvite_(student, authorization, tutorEmail) {
+  var email = normalizeEmail_(student.email);
+  if (!isValidEmail_(email) || !/@iernestlluch\.cat$/i.test(email)) {
+    return { ok: false, sent: 0, skipped: 1, errors: ['Student email is missing or invalid.'] };
+  }
+
+  var auth = findLatestAuthorizationByStudentId_(student.id);
+  if (!auth && authorization && authorization.resposta_id) auth = { resposta_id: stringValue_(authorization.resposta_id) };
+  var token = createVerificationToken_({
+    sender: 'student',
+    email: email,
+    dinantia_account_id: student.id,
+    student_id: student.id,
+    resposta_id: auth ? stringValue_(auth.resposta_id) : '',
+    metadata: {
+      source: 'tauler_tutor',
+      tutor_email: tutorEmail,
+      student: student,
+      auth: auth || null,
+      isAdult: stringValue_(student.isAdult).toLowerCase() === 'si' || Number(student.age) >= 18
+    }
+  });
+  sendVerificationEmail_(email, 'student', token.rawToken);
+  return { ok: true, sent: 1, skipped: 0, errors: [] };
+}
+
+function normalizePanelStudent_(student) {
+  student = student || {};
+  return {
+    id: stringValue_(student.id || student.student_id),
+    name: stringValue_(student.name || student.alumne_nom),
+    email: normalizeEmail_(student.email || student.student_email),
+    document: stringValue_(student.document || student.alumne_document),
+    studyType: stringValue_(student.studyType),
+    isAdult: stringValue_(student.isAdult),
+    is14Plus: stringValue_(student.is14Plus),
+    age: stringValue_(student.age),
+    birthdateIso: stringValue_(student.birthdateIso)
+  };
+}
+
+function normalizePanelContacts_(contacts) {
+  if (!Array.isArray(contacts)) return [];
+  return contacts.map(function(contact) {
+    return {
+      id: stringValue_(contact && contact.id),
+      name: stringValue_(contact && contact.name),
+      email: normalizeEmail_(contact && contact.email),
+      phone: stringValue_(contact && contact.phone)
+    };
+  });
+}
+
+function assertPanelSecret_(providedSecret) {
+  var expected = getRequiredProperty_(LAUNCHER_CONFIG.internalSecretProperty);
+  if (!stringValue_(providedSecret) || stringValue_(providedSecret) !== expected) {
+    throw new Error('Invalid panel invitation credentials.');
   }
 }
 
@@ -145,7 +268,8 @@ function handleStudentConfirmation_(payload) {
   var respostaId = stringValue_(payload.resposta_id);
   var record = validateToken_(rawToken, { allowPendingOnly: true });
   if (record.sender !== 'student') return renderMessagePage_('No s ha pogut confirmar', 'Aquest enllac no correspon a una confirmacio d alumne.', true);
-  updateStudentSignature_(record.student_id, respostaId);
+  updateStudentSignature_(record.student_id, respostaId, record.email);
+  refreshAuthorizationsCache_();
   markTokenUsed_(rawToken);
   return renderMessagePage_('Confirmacio registrada', 'La teva conformitat ha quedat registrada correctament.', false);
 }
@@ -214,14 +338,77 @@ function renderFamilyMessage_(token, payload) {
 }
 
 function renderReadonlyAuthorization_(auth, title, message, studentAction, token) {
-  var rows = Object.keys(auth || {}).filter(function(key) { return auth[key] !== '' && auth[key] !== null && auth[key] !== undefined; }).map(function(key) {
-    return '<tr><th>' + escapeHtml_(key) + '</th><td>' + escapeHtml_(formatValue_(auth[key])) + '</td></tr>';
-  }).join('');
+  var sections = readonlyAuthorizationSections_().map(function(section) {
+    var rows = section.fields.map(function(field) {
+      var value = auth ? auth[field.key] : '';
+      if (value === '' || value === null || value === undefined) return '';
+      return '<tr><th>' + escapeHtml_(field.label) + '</th><td>' + escapeHtml_(formatReadonlyValue_(value)) + '</td></tr>';
+    }).filter(Boolean).join('');
+    return rows ? '<h2>' + escapeHtml_(section.title) + '</h2><div class="table-wrap"><table>' + rows + '</table></div>' : '';
+  }).filter(Boolean).join('');
   var action = '';
   if (studentAction) {
     action = '<form method="post" action="' + escapeHtml_(LAUNCHER_CONFIG.launcherUrl) + '"><input type="hidden" name="action" value="confirm_student"><input type="hidden" name="token" value="' + escapeHtml_(studentAction.token) + '"><input type="hidden" name="resposta_id" value="' + escapeHtml_(studentAction.resposta_id) + '"><button class="button" type="submit">Confirmo</button></form>';
   }
-  return htmlPage_(title, '<h1>' + escapeHtml_(title) + '</h1><p>' + escapeHtml_(message) + '</p><div class="table-wrap"><table>' + rows + '</table></div>' + action);
+  return htmlPage_(title, '<h1>' + escapeHtml_(title) + '</h1><p>' + escapeHtml_(message) + '</p>' + sections + action);
+}
+
+function readonlyAuthorizationSections_() {
+  return [
+    { title: 'Dades generals', fields: [
+      { key: 'resposta_id', label: 'Resposta' },
+      { key: 'data_hora_enviament', label: 'Data d enviament' },
+      { key: 'data_signatura', label: 'Data de signatura' },
+      { key: 'codi_document', label: 'Codi del document' },
+      { key: 'tipus_alumne', label: 'Tipus d alumne/a' },
+      { key: 'alumne_nom', label: 'Alumne/a' },
+      { key: 'alumne_document', label: 'Document' }
+    ] },
+    { title: 'Persona que respon', fields: [
+      { key: 'responent_nom_sencer', label: 'Nom sencer' },
+      { key: 'responent_telefon', label: 'Telefon' },
+      { key: 'responsable_nom', label: 'Nom del responsable' },
+      { key: 'responsable_document', label: 'Document del responsable' }
+    ] },
+    { title: 'Autoritzacions', fields: [
+      { key: 'sortida_sola', label: 'Sortida sola' },
+      { key: 'sortida_esbarjo', label: 'Sortida a l esbarjo' },
+      { key: 'sortides_municipi', label: 'Sortides pel municipi' },
+      { key: 'comunicacio_academica', label: 'Comunicacio academica' },
+      { key: 'comunicacio_salut', label: 'Comunicacio de salut' },
+      { key: 'declaracio_plataformes', label: 'Declaracio de plataformes' }
+    ] },
+    { title: 'Imatge i obres', fields: [
+      { key: 'plataformes_externes', label: 'Plataformes externes' },
+      { key: 'imatge_intranet', label: 'Imatge a intranet' },
+      { key: 'imatge_web', label: 'Imatge al web' },
+      { key: 'imatge_externa', label: 'Imatge externa' },
+      { key: 'obra_oberta', label: 'Obra oberta' },
+      { key: 'obra_centre', label: 'Obra del centre' },
+      { key: 'obra_biblioteca', label: 'Obra a biblioteca' },
+      { key: 'obra_repositori', label: 'Obra a repositori' }
+    ] },
+    { title: 'Salut i contactes', fields: [
+      { key: 'acad_contacte_nom', label: 'Contacte academic' },
+      { key: 'acad_contacte_email', label: 'Email academic' },
+      { key: 'acad_contacte_relacio', label: 'Relacio academica' },
+      { key: 'emergencia_nom', label: 'Contacte d emergencia' },
+      { key: 'emergencia_telefon', label: 'Telefon d emergencia' },
+      { key: 'emergencia_relacio', label: 'Relacio d emergencia' },
+      { key: 'problemes_salut', label: 'Problemes de salut' },
+      { key: 'altres_salut', label: 'Altres dades de salut' },
+      { key: 'medicacio', label: 'Medicacio' },
+      { key: 'posologia', label: 'Posologia' },
+      { key: 'dosi', label: 'Dosi' },
+      { key: 'administracio_medicacio', label: 'Administracio de medicacio' },
+      { key: 'paracetamol', label: 'Paracetamol' }
+    ] },
+    { title: 'Signatures', fields: [
+      { key: 'lloc', label: 'Lloc' },
+      { key: 'signatura_responsable', label: 'Signatura responsable' },
+      { key: 'signatura_alumne', label: 'Signatura alumne/a' }
+    ] }
+  ];
 }
 
 function renderAutoPostToForm_(payload) {
@@ -283,7 +470,7 @@ function headerMap_(sheet) {
 }
 
 function getClassGroups_() {
-  var sheet = openTableSheet_('Dinantia', 'class_groups');
+  var sheet = openTableSheet_('Dinantia', 'dinantia_2_dades_alumnes');
   var h = headerMap_(sheet);
   var values = sheet.getDataRange().getValues();
   var groups = [];
@@ -291,7 +478,7 @@ function getClassGroups_() {
     var row = values[i];
     var name = stringValue_(row[h.dinantia_group_name]);
     var localSheet = stringValue_(row[h.dades_alumnes_sheet]);
-    if (name && localSheet) groups.push({ dinantia_group_name: name, dades_alumnes_sheet: localSheet, tutor_carrec: stringValue_(row[h.tutor_carrec]) });
+    if (name && localSheet) groups.push({ dinantia_group_name: name, dades_alumnes_sheet: localSheet });
   }
   return groups.sort(function(a, b) { return a.dinantia_group_name.localeCompare(b.dinantia_group_name, 'ca'); });
 }
@@ -414,7 +601,7 @@ function findLatestAuthorizationByStudentId_(studentId) {
   return latest;
 }
 
-function updateStudentSignature_(studentId, respostaId) {
+function updateStudentSignature_(studentId, respostaId, confirmedEmail) {
   var sheet = openTableSheet_('Autoritzacions', 'autoritzacions');
   var h = headerMap_(sheet);
   var values = sheet.getDataRange().getValues();
@@ -422,6 +609,8 @@ function updateStudentSignature_(studentId, respostaId) {
     var row = values[i];
     if (codeKey_(row[h.id_student]) === codeKey_(studentId) && (!respostaId || stringValue_(row[h.resposta_id]) === respostaId)) {
       sheet.getRange(i + 1, h.signatura_alumne + 1).setValue(true);
+      if (h.student_confirmed_at !== undefined) sheet.getRange(i + 1, h.student_confirmed_at + 1).setValue(formatDateTime_(new Date()));
+      if (h.student_confirmed_email !== undefined) sheet.getRange(i + 1, h.student_confirmed_email + 1).setValue(normalizeEmail_(confirmedEmail));
       return;
     }
   }
@@ -435,6 +624,7 @@ function objectFromRow_(row, h) {
 }
 
 function createVerificationToken_(data) {
+  expireOldPendingTokens_();
   var raw = Utilities.getUuid() + '-' + Utilities.getUuid();
   var hash = hashToken_(raw);
   var now = new Date();
@@ -459,6 +649,7 @@ function createVerificationToken_(data) {
 }
 
 function validateToken_(rawToken, options) {
+  expireOldPendingTokens_();
   var hash = hashToken_(rawToken);
   var sheet = openTableSheet_('Autoritzacions', 'verification_tokens');
   var h = headerMap_(sheet);
@@ -470,10 +661,32 @@ function validateToken_(rawToken, options) {
     record._rowNumber = i + 1;
     if (record.status === 'revoked') throw new Error('Token revoked.');
     if (record.status === 'used' && options && options.allowPendingOnly) throw new Error('Token already used.');
-    if (new Date(record.expires_at).getTime() < new Date().getTime()) throw new Error('Token expired.');
+    if (new Date(record.expires_at).getTime() < new Date().getTime()) {
+      markTokenExpired_(sheet, h, record._rowNumber);
+      throw new Error('Token expired.');
+    }
     return record;
   }
   throw new Error('Token not found.');
+}
+
+function expireOldPendingTokens_() {
+  var sheet = openTableSheet_('Autoritzacions', 'verification_tokens');
+  var h = headerMap_(sheet);
+  if (h.status === undefined || h.expires_at === undefined) return;
+  var values = sheet.getDataRange().getValues();
+  var now = new Date().getTime();
+  for (var i = 1; i < values.length; i++) {
+    var status = stringValue_(values[i][h.status]);
+    var expiresAt = new Date(values[i][h.expires_at]).getTime();
+    if (status === 'pending' && expiresAt && expiresAt < now) {
+      markTokenExpired_(sheet, h, i + 1);
+    }
+  }
+}
+
+function markTokenExpired_(sheet, h, rowNumber) {
+  sheet.getRange(rowNumber, h.status + 1).setValue('expired');
 }
 
 function markTokenUsed_(rawToken) {
@@ -493,8 +706,10 @@ function appendByHeaders_(sheet, h, object) {
 function sendVerificationEmail_(email, sender, rawToken) {
   var url = LAUNCHER_CONFIG.launcherUrl + '?token=' + encodeURIComponent(rawToken);
   var subject = sender === 'student' ? 'Enllac de verificacio del formulari d autoritzacions' : 'Formulari d autoritzacions - verificacio';
-  var plain = 'Benvolgut/da,\n\nPer continuar el proces d autoritzacions, obre aquest enllac personal i segur:\n\n' + url + '\n\nAquest enllac caduca en ' + LAUNCHER_CONFIG.tokenMinutes + ' minuts.\n\nInstitut Ernest Lluch';
-  var html = '<div style="font-family:Arial,sans-serif;line-height:1.5;color:#17202a;max-width:720px">' +
+  var plain = sender === 'student'
+    ? 'Benvolgut/da,\n\nPer revisar el formulari d autoritzacions i confirmar la teva conformitat, obre aquest enllac personal i segur:\n\n' + url + '\n\nAquest enllac caduca en ' + LAUNCHER_CONFIG.tokenMinutes + ' minuts.\n\nInstitut Ernest Lluch'
+    : 'Benvolgut/da,\n\nPer continuar el proces d autoritzacions, obre aquest enllac personal i segur:\n\n' + url + '\n\nAquest enllac caduca en ' + LAUNCHER_CONFIG.tokenMinutes + ' minuts.\n\nInstitut Ernest Lluch';
+  var html = sender === 'student' ? studentVerificationEmailHtml_(url) : '<div style="font-family:Arial,sans-serif;line-height:1.5;color:#17202a;max-width:720px">' +
     '<p>Benvolguda familia,</p>' +
     '<p>Per tal d iniciar correctament el curs escolar i mantenir actualitzada la informacio de l alumnat, us demanem que empleneu el formulari d autoritzacions, declaracions i comunicacions corresponent al vostre fill o filla.</p>' +
     '<p>En aquest formulari podreu:</p>' +
@@ -511,6 +726,19 @@ function sendVerificationEmail_(email, sender, rawToken) {
     '<p>Cordialment,<br>Equip Directiu<br>Institut Ernest Lluch<br>Cunit</p>' +
     '</div>';
   MailApp.sendEmail({ to: email, subject: subject, body: plain, htmlBody: html });
+}
+
+function studentVerificationEmailHtml_(url) {
+  return '<div style="font-family:Arial,sans-serif;line-height:1.5;color:#17202a;max-width:720px">' +
+    '<p>Benvolgut/da,</p>' +
+    '<p>Algunes autoritzacions i declaracions del curs requereixen tambe la conformitat de l alumnat.</p>' +
+    '<p>Per revisar el formulari ja emplenat i confirmar la teva conformitat, fes clic al boto seguent:</p>' +
+    '<p><a href="' + escapeHtml_(url) + '" style="display:inline-block;background:#0f766e;color:#fff;text-decoration:none;border-radius:6px;padding:13px 18px;font-weight:800">REVISAR I CONFIRMAR</a></p>' +
+    '<p>Aquest enllac es personal i caduca en ' + LAUNCHER_CONFIG.tokenMinutes + ' minuts.</p>' +
+    '<p>Si tens qualsevol incidencia tecnica o dubte sobre el formulari, pots contactar amb el centre a traves del correu:</p>' +
+    '<p><strong>' + escapeHtml_(LAUNCHER_CONFIG.supportEmail) + '</strong></p>' +
+    '<p>Cordialment,<br>Equip Directiu<br>Institut Ernest Lluch<br>Cunit</p>' +
+    '</div>';
 }
 
 function formPayloadFromStudent_(student) {
@@ -570,6 +798,84 @@ function parseJson_(value) { try { return JSON.parse(value || '{}'); } catch (e)
 function codeKey_(value) { return String(value === null || value === undefined ? '' : value).trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase(); }
 function pad2_(value) { return String(value).padStart(2, '0'); }
 function formatValue_(value) { return value instanceof Date ? Utilities.formatDate(value, LAUNCHER_CONFIG.timezone, 'yyyy-MM-dd') : String(value); }
+function formatReadonlyValue_(value) {
+  var parsed = parseBooleanValue_(value);
+  if (parsed === true) return 'Si';
+  if (parsed === false) return 'No';
+  return formatValue_(value);
+}
+function jsonOutput_(object) { return ContentService.createTextOutput(JSON.stringify(object)).setMimeType(ContentService.MimeType.JSON); }
+
+function refreshAuthorizationsCache_() {
+  var cacheSheet = openTableSheet_('Dinantia', 'authorizations_cache');
+  var cacheHeaders = headerMap_(cacheSheet);
+  var rows = buildAuthorizationsCacheRows_();
+  overwriteByHeaders_(cacheSheet, cacheHeaders, rows);
+}
+
+function buildAuthorizationsCacheRows_() {
+  var authSheet = openTableSheet_('Autoritzacions', 'autoritzacions');
+  var tokensSheet = openTableSheet_('Autoritzacions', 'verification_tokens');
+  var authHeaders = headerMap_(authSheet);
+  var tokenHeaders = headerMap_(tokensSheet);
+  var authorizations = objectsFromSheet_(authSheet, authHeaders);
+  var tokens = objectsFromSheet_(tokensSheet, tokenHeaders);
+  var latestAuth = {};
+  var latestToken = {};
+
+  authorizations.forEach(function(auth) {
+    var id = stringValue_(auth.id_student);
+    if (!id) return;
+    if (!latestAuth[id] || stringValue_(auth.data_hora_enviament) >= stringValue_(latestAuth[id].data_hora_enviament)) latestAuth[id] = auth;
+  });
+  tokens.forEach(function(token) {
+    var id = stringValue_(token.student_id);
+    if (!id) return;
+    if (!latestToken[id] || stringValue_(token.created_at) >= stringValue_(latestToken[id].created_at)) latestToken[id] = token;
+  });
+
+  var ids = {};
+  Object.keys(latestAuth).forEach(function(id) { ids[id] = true; });
+  Object.keys(latestToken).forEach(function(id) { ids[id] = true; });
+  return Object.keys(ids).map(function(studentId) {
+    var out = {};
+    var auth = latestAuth[studentId] || {};
+    var token = latestToken[studentId] || {};
+    Object.keys(auth).forEach(function(key) { out[key] = auth[key]; });
+    out.id_student = studentId;
+    out.latest_invitation_created_at = token.created_at || '';
+    out.latest_invitation_expires_at = token.expires_at || '';
+    out.latest_invitation_used_at = token.used_at || '';
+    out.latest_invitation_sender = token.sender || '';
+    out.latest_invitation_email = token.email || '';
+    out.latest_invitation_resposta_id = token.resposta_id || '';
+    out.latest_invitation_status = token.status || '';
+    return out;
+  });
+}
+
+function objectsFromSheet_(sheet, h) {
+  var values = sheet.getDataRange().getValues();
+  var rows = [];
+  for (var i = 1; i < values.length; i++) rows.push(objectFromRow_(values[i], h));
+  return rows;
+}
+
+function overwriteByHeaders_(sheet, h, objects) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).clearContent();
+  if (!objects.length) return;
+  var headers = Object.keys(h);
+  var width = sheet.getLastColumn();
+  var rows = objects.map(function(object) {
+    var row = new Array(width).fill('');
+    headers.forEach(function(header) {
+      row[h[header]] = object[header] === undefined ? '' : object[header];
+    });
+    return row;
+  });
+  sheet.getRange(2, 1, rows.length, width).setValues(rows);
+}
 
 
 function authorizeServices() {

@@ -5,20 +5,37 @@
       students: [],
       contacts: [],
       authorizations: [],
+      invitations: [],
+      groups: [],
+      selectedGroup: '__all',
+      hasMultipleGroups: false,
+      contactsLoadedScopes: {},
+      contactsLoading: false,
       authorizationsLoaded: false,
+      inviting: false,
       formLauncherUrl: ''
     };
 
     var appShell = document.querySelector('.app-shell');
     var errorPage = document.querySelector('.error-page');
     var saveButton = document.querySelector('.save-button');
+    var bulkInviteButton = document.querySelector('.bulk-invite-button');
+    var refreshAuthButton = document.querySelector('.refresh-auth-button');
     var saveLoading = document.querySelector('.save-loading');
     var initialLoading = document.querySelector('.initial-loading');
+    var authorizationFloatingScroll = document.getElementById('authorization-floating-scroll');
+    var authorizationTableWrap = document.getElementById('authorizations-table-wrap');
+    var groupFilter = document.getElementById('group-filter');
+    var groupSelect = document.getElementById('group-select');
 
     bindNavigation();
     bindSorting();
+    bindGroupFilter();
     bindSaveButton();
+    bindBulkInviteButton();
+    bindRefreshAuthButton();
     bindAuthorizationDetailModal();
+    bindAuthorizationFloatingScroll();
     loadInitialData();
 
     function loadInitialData() {
@@ -47,7 +64,7 @@
             details: error && error.message ? error.message : String(error)
           });
         })
-        .loadInitialDataJson();
+        .loadInitialDataJson(window.TAULER_DEBUG === true);
     }
 
     function parseInitialData(result) {
@@ -74,13 +91,17 @@
     function renderApp(data) {
       state.students = data.students || [];
       state.contacts = data.contacts || [];
+      state.groups = data.groups || (data.tutorGroup && data.tutorGroup.groups) || [];
+      state.hasMultipleGroups = state.groups.length > 1;
+      state.selectedGroup = state.hasMultipleGroups ? '__all' : (state.groups[0] ? state.groups[0].dinantiaGroupId : '__all');
       state.formLauncherUrl = data.formLauncherUrl || '';
 
       document.getElementById('group-title').textContent = data.tutorGroup.dinantiaGroupId || '';
       document.getElementById('teacher-label').textContent = (data.tutorGroup.teacherLabel || '') + ' · ' + (data.tutorGroup.responsibility.name || '');
 
-      renderStudents(state.students);
-      renderContacts(state.contacts);
+      renderGroupFilter();
+      renderStudents(filteredStudents());
+      renderContacts([]);
       renderAuthorizations();
 
       appShell.classList.remove('is-hidden');
@@ -96,6 +117,91 @@
       var details = document.getElementById('error-details');
       details.textContent = error.details || '';
       details.hidden = !error.details;
+      renderDebugPanel(error.debug);
+    }
+
+    function renderDebugPanel(debug) {
+      var panel = document.getElementById('debug-panel');
+      var content = document.getElementById('debug-content');
+      if (!panel || !content) return;
+      content.textContent = '';
+      panel.classList.toggle('is-hidden', !debug || !debug.steps);
+      if (!debug || !debug.steps) return;
+
+      var meta = document.createElement('p');
+      meta.className = 'debug-meta';
+      meta.textContent = 'Generat: ' + (debug.generatedAt || '');
+      content.appendChild(meta);
+
+      debug.steps.forEach(function(step) {
+        var section = document.createElement('section');
+        section.className = 'debug-step debug-' + String(step.status || '').toLowerCase();
+        var title = document.createElement('h3');
+        title.textContent = (step.status || '') + ' · ' + (step.step || '');
+        var pre = document.createElement('pre');
+        pre.textContent = JSON.stringify(step.details || {}, null, 2);
+        section.appendChild(title);
+        section.appendChild(pre);
+        content.appendChild(section);
+      });
+    }
+
+    function renderGroupFilter() {
+      document.querySelectorAll('.group-column').forEach(function(column) {
+        column.classList.toggle('is-hidden', !state.hasMultipleGroups);
+      });
+      if (!groupFilter || !groupSelect) return;
+      groupFilter.classList.toggle('is-hidden', !state.hasMultipleGroups);
+      groupSelect.textContent = '';
+      if (!state.hasMultipleGroups) return;
+
+      var all = document.createElement('option');
+      all.value = '__all';
+      all.textContent = 'Tots els grups';
+      groupSelect.appendChild(all);
+
+      state.groups.forEach(function(group) {
+        var option = document.createElement('option');
+        option.value = group.dinantiaGroupId || '';
+        option.textContent = group.dinantiaGroupId || '';
+        groupSelect.appendChild(option);
+      });
+      groupSelect.value = state.selectedGroup;
+    }
+
+    function bindGroupFilter() {
+      if (!groupSelect) return;
+      groupSelect.addEventListener('change', function() {
+        state.selectedGroup = groupSelect.value || '__all';
+        rerenderCurrentData();
+      });
+    }
+
+    function filteredStudents() {
+      if (!state.hasMultipleGroups || state.selectedGroup === '__all') return state.students.slice();
+      return state.students.filter(function(student) {
+        return String(student.groupName || '') === state.selectedGroup;
+      });
+    }
+
+    function filteredContacts() {
+      if (!state.hasMultipleGroups || state.selectedGroup === '__all') return state.contacts.slice();
+      return state.contacts.filter(function(student) {
+        return String(student.groupName || '') === state.selectedGroup;
+      });
+    }
+
+    function rerenderCurrentData() {
+      var students = filteredStudents();
+      renderStudents(students);
+      if (isViewActive('contactes')) {
+        loadVisibleContactsIfNeeded();
+      } else {
+        renderContacts(filteredContacts());
+      }
+      renderAuthorizations();
+      document.getElementById('group-title').textContent = state.selectedGroup === '__all' ? 'Tots els grups' : state.selectedGroup;
+      updateSaveButton();
     }
 
     function renderStudents(students) {
@@ -107,10 +213,12 @@
 
       students.forEach(function(student) {
         var row = document.createElement('tr');
+        row.setAttribute('data-group', student.groupName || '');
         row.setAttribute('data-name', student.name || '');
         row.setAttribute('data-birthdate', student.birthdateSortKey || '');
         row.setAttribute('data-age', student.age || '');
 
+        if (state.hasMultipleGroups) appendCell(row, student.groupName || '');
         appendCell(row, student.name || '');
         appendCell(row, student.birthdate || '');
         appendCell(row, student.age || '');
@@ -136,6 +244,10 @@
           row.setAttribute('data-student-id', student.id || '');
 
           if (contactIndex === 0) {
+            if (state.hasMultipleGroups) {
+              var groupCell = appendCell(row, student.groupName || '');
+              groupCell.rowSpan = contacts.length;
+            }
             var studentCell = appendCell(row, student.name || '');
             studentCell.rowSpan = contacts.length;
           }
@@ -148,6 +260,59 @@
       });
 
       bindContactInputs();
+    }
+
+    function loadVisibleContactsIfNeeded(callback) {
+      var scope = contactScopeKey();
+      if (state.contactsLoadedScopes[scope]) {
+        renderContacts(filteredContacts());
+        if (callback) callback();
+        return;
+      }
+      if (state.contactsLoading) return;
+
+      var students = filteredStudents();
+      state.contactsLoading = true;
+      setInitialLoading(true);
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          state.contactsLoading = false;
+          setInitialLoading(false);
+          var parsed = parseInitialData(result);
+          if (!parsed || !parsed.ok) {
+            alert("No s'han pogut carregar els contactes: " + (parsed && parsed.error ? parsed.error.details || parsed.error.message : 'Resposta buida del servidor.'));
+            renderContacts(filteredContacts());
+            return;
+          }
+          mergeContacts(parsed.contacts || []);
+          state.contactsLoadedScopes[scope] = true;
+          renderContacts(filteredContacts());
+          if (callback) callback();
+        })
+        .withFailureHandler(function(error) {
+          state.contactsLoading = false;
+          setInitialLoading(false);
+          alert("No s'han pogut carregar els contactes: " + (error && error.message ? error.message : error));
+          renderContacts(filteredContacts());
+        })
+        .loadContactsForStudents(students);
+    }
+
+    function contactScopeKey() {
+      return state.selectedGroup || '__all';
+    }
+
+    function mergeContacts(contacts) {
+      var byId = {};
+      (state.contacts || []).forEach(function(item) {
+        byId[String(item.id || '')] = item;
+      });
+      (contacts || []).forEach(function(item) {
+        if (!item || !item.id) return;
+        byId[String(item.id)] = item;
+      });
+      state.contacts = Object.keys(byId).map(function(id) { return byId[id]; });
     }
 
 
@@ -165,6 +330,7 @@
             return;
           }
           state.authorizations = parsed.authorizations || [];
+          state.invitations = parsed.invitations || [];
           renderAuthorizations();
         })
         .withFailureHandler(function(error) {
@@ -176,23 +342,59 @@
         .loadAuthorizationDataJson();
     }
 
+    function refreshAuthorizations() {
+      if (state.inviting) return;
+      state.inviting = true;
+      setInitialLoading(true);
+      updateInvitationControls();
+      google.script.run
+        .withSuccessHandler(function(result) {
+          state.inviting = false;
+          setInitialLoading(false);
+          var parsed = parseInitialData(result);
+          state.authorizationsLoaded = true;
+          if (!parsed || !parsed.ok) {
+            showAuthorizationsError(parsed && parsed.error ? parsed.error.message || parsed.error.details : 'No s han pogut actualitzar les autoritzacions.');
+            updateInvitationControls();
+            return;
+          }
+          state.authorizations = parsed.authorizations || [];
+          state.invitations = parsed.invitations || [];
+          renderAuthorizations();
+        })
+        .withFailureHandler(function(error) {
+          state.inviting = false;
+          setInitialLoading(false);
+          showAuthorizationsError(error && error.message ? error.message : String(error));
+          updateInvitationControls();
+        })
+        .refreshAuthorizationDataJson();
+    }
+
     function renderAuthorizations() {
       var tbody = document.getElementById('authorizations-table');
       if (!tbody) return;
       tbody.textContent = '';
-      document.getElementById('authorizations-count').textContent = state.students.length + ' alumnes';
+      var visibleStudents = filteredStudents();
+      document.getElementById('authorizations-count').textContent = visibleStudents.length + ' alumnes';
       var latestByStudent = latestAuthorizationsByStudent_();
-      state.students.forEach(function(student) {
+      var latestInvitations = latestInvitationsByStudent_();
+      visibleStudents.forEach(function(student) {
         var auth = latestByStudent[String(student.id || '').trim()] || null;
+        var status = authorizationStatus(student, auth);
         var row = document.createElement('tr');
         row.setAttribute('data-name', student.name || '');
-        row.setAttribute('data-status', auth ? '1' : '0');
+        row.setAttribute('data-group', student.groupName || '');
+        row.setAttribute('data-status', status.sortKey);
         row.setAttribute('data-date', auth ? String(auth.data_hora_enviament || auth.data_signatura || '') : '');
+        row.setAttribute('data-invitation-target', status.target || '');
+        row.setAttribute('data-student-id', student.id || '');
         if (!auth) row.classList.add('missing-authorization');
         appendStudentAuthorizationCell(row, student, auth);
-        appendCell(row, auth ? 'Rebut' : 'Pendent');
+        if (state.hasMultipleGroups) appendCell(row, student.groupName || '');
+        appendAuthorizationStatusCell(row, student, auth, status);
         appendCell(row, auth ? formatAuthorizationDate(auth.data_hora_enviament || auth.data_signatura) : '');
-        appendAuthorizationDetailCell(row, student, auth);
+        appendAuthorizationDetailCell(row, student, auth, latestInvitations[String(student.id || '').trim()] || null);
         ['sortida_sola','sortida_esbarjo','sortides_municipi','comunicacio_academica','comunicacio_salut','declaracio_plataformes','imatge_intranet','imatge_web','imatge_externa','obra_oberta','obra_centre','obra_biblioteca','obra_repositori','administracio_medicacio','paracetamol'].forEach(function(field) {
           appendIconCell(row, auth ? auth[field] : '');
         });
@@ -201,6 +403,8 @@
         appendIconCell(row, auth ? auth.signatura_alumne : '');
         tbody.appendChild(row);
       });
+      updateInvitationControls();
+      syncAuthorizationFloatingScroll();
     }
 
     function latestAuthorizationsByStudent_() {
@@ -215,11 +419,55 @@
       return map;
     }
 
+    function latestInvitationsByStudent_() {
+      var map = {};
+      (state.invitations || []).forEach(function(invitation) {
+        var id = String(invitation.student_id || '').trim();
+        if (!id) return;
+        if (!map[id] || String(invitation.created_at || '') >= String(map[id].created_at || '')) {
+          map[id] = invitation;
+        }
+      });
+      return map;
+    }
 
-    function appendAuthorizationDetailCell(row, student, auth) {
+    function appendAuthorizationStatusCell(row, student, auth, status) {
+      var cell = document.createElement('td');
+      var label = document.createElement('span');
+      label.textContent = status.label;
+      cell.appendChild(label);
+      if (status.target) {
+        var button = document.createElement('button');
+        button.className = 'status-action';
+        button.type = 'button';
+        button.textContent = status.target === 'student' ? 'Enviar a alumne' : 'Enviar a tutors';
+        button.addEventListener('click', function() {
+          sendInvitationRequests([buildInvitationRequest(student, auth, status.target)]);
+        });
+        cell.appendChild(button);
+      }
+      row.appendChild(cell);
+    }
+
+    function authorizationStatus(student, auth) {
+      if (!auth) return { label: 'Pendent', target: 'parents', sortKey: '0' };
+      if (parseBooleanValue(auth.signatura_responsable) !== true) return { label: 'Pendent tutors', target: 'parents', sortKey: '1' };
+      if (parseBooleanValue(auth.signatura_alumne) !== true) return { label: 'Pendent alumne', target: 'student', sortKey: '2' };
+      return { label: 'Complet', target: '', sortKey: '3' };
+    }
+
+    function appendAuthorizationDetailCell(row, student, auth, latestInvitation) {
       var cell = document.createElement('td');
       if (!auth) {
-        cell.innerHTML = '<span class="icon-empty">-</span>';
+        var missingButton = document.createElement('button');
+        missingButton.className = 'detail-button';
+        missingButton.type = 'button';
+        missingButton.textContent = 'Veure';
+        missingButton.setAttribute('aria-label', 'Mostra detalls de ' + (student.name || 'alumne'));
+        missingButton.addEventListener('click', function() {
+          showAuthorizationDetail(student, null, latestInvitation);
+        });
+        cell.appendChild(missingButton);
         row.appendChild(cell);
         return;
       }
@@ -229,13 +477,13 @@
       button.textContent = 'Veure';
       button.setAttribute('aria-label', 'Mostra detalls de ' + (student.name || 'alumne'));
       button.addEventListener('click', function() {
-        showAuthorizationDetail(student, auth);
+        showAuthorizationDetail(student, auth, latestInvitation);
       });
       cell.appendChild(button);
       row.appendChild(cell);
     }
 
-    function showAuthorizationDetail(student, auth) {
+    function showAuthorizationDetail(student, auth, latestInvitation) {
       var modal = document.getElementById('authorization-detail-modal');
       var body = document.getElementById('authorization-detail-body');
       if (!modal || !body) return;
@@ -249,7 +497,7 @@
         { title: 'Publicacio', fields: [['plataformes_externes','Plataformes o acces']] },
         { title: 'Intern', fields: [['estat_validacio','Estat validacio'], ['observacions_internes','Observacions internes']] }
       ];
-      groups.forEach(function(group) {
+      if (auth) groups.forEach(function(group) {
         var values = group.fields.map(function(pair) {
           return { label: pair[1], value: textValue(auth[pair[0]]) };
         }).filter(function(item) { return item.value; });
@@ -271,6 +519,7 @@
         section.appendChild(dl);
         body.appendChild(section);
       });
+      appendLatestInvitationDetail(body, latestInvitation);
       if (!body.children.length) {
         var empty = document.createElement('p');
         empty.className = 'subtle';
@@ -280,6 +529,56 @@
       modal.classList.remove('is-hidden');
     }
 
+    function appendLatestInvitationDetail(body, latestInvitation) {
+      var section = document.createElement('section');
+      section.className = 'detail-section';
+      var heading = document.createElement('h3');
+      heading.textContent = 'Última invitació enviada';
+      section.appendChild(heading);
+
+      if (!latestInvitation) {
+        var empty = document.createElement('p');
+        empty.className = 'subtle';
+        empty.textContent = 'No consta cap invitació enviada.';
+        section.appendChild(empty);
+        body.appendChild(section);
+        return;
+      }
+
+      var dl = document.createElement('dl');
+      [
+        ['Data', latestInvitation.created_at],
+        ['Correu', latestInvitation.email],
+        ['Tipus', invitationSenderLabel(latestInvitation.sender)],
+        ['Estat', invitationStatusLabel(latestInvitation.status)]
+      ].forEach(function(item) {
+        var dt = document.createElement('dt');
+        var dd = document.createElement('dd');
+        dt.textContent = item[0];
+        dd.textContent = item[1] || '-';
+        dl.appendChild(dt);
+        dl.appendChild(dd);
+      });
+      section.appendChild(dl);
+      body.appendChild(section);
+    }
+
+    function invitationSenderLabel(value) {
+      var text = String(value || '').trim().toLowerCase();
+      if (text === 'parent') return 'Família';
+      if (text === 'student') return 'Alumne/a';
+      return value || '-';
+    }
+
+    function invitationStatusLabel(value) {
+      var text = String(value || '').trim().toLowerCase();
+      if (text === 'pending') return 'Pendent';
+      if (text === 'used') return 'Utilitzada';
+      if (text === 'expired') return 'Caducada';
+      if (text === 'revoked') return 'Revocada';
+      return value || '-';
+    }
+
     function closeAuthorizationDetail() {
       var modal = document.getElementById('authorization-detail-modal');
       if (modal) modal.classList.add('is-hidden');
@@ -287,10 +586,93 @@
 
     function appendStudentAuthorizationCell(row, student, auth) {
       var cell = document.createElement('td');
+      var wrapper = document.createElement('span');
+      wrapper.className = 'student-name-with-action';
+      if (auth) {
+        var docButton = document.createElement('button');
+        docButton.className = 'document-button';
+        docButton.type = 'button';
+        docButton.title = 'Mostra el formulari';
+        docButton.setAttribute('aria-label', 'Mostra el formulari de ' + (student.name || 'alumne'));
+        docButton.textContent = '📄';
+        docButton.addEventListener('click', function() {
+          showReadonlyAuthorizationDocument(student, auth);
+        });
+        wrapper.appendChild(docButton);
+      }
       var name = document.createElement('span');
       name.textContent = student.name || '';
-      cell.appendChild(name);
+      wrapper.appendChild(name);
+      cell.appendChild(wrapper);
       row.appendChild(cell);
+    }
+
+    function showReadonlyAuthorizationDocument(student, auth) {
+      var modal = document.getElementById('authorization-detail-modal');
+      var body = document.getElementById('authorization-detail-body');
+      if (!modal || !body) return;
+      document.getElementById('authorization-detail-title').textContent = 'Formulari de ' + (student.name || 'l alumne');
+      body.textContent = '';
+
+      [
+        {
+          title: 'Dades generals',
+          fields: [['resposta_id','Resposta'], ['data_hora_enviament','Enviament'], ['data_signatura','Data signatura'], ['idioma_formulari','Idioma'], ['codi_document','Codi document'], ['tipus_alumne','Tipus alumne'], ['alumne_nom','Alumne/a'], ['alumne_document','Document']]
+        },
+        {
+          title: 'Responsable',
+          fields: [['responent_nom_sencer','Nom sencer'], ['responent_telefon','Telefon'], ['responsable_nom','Nom responsable'], ['responsable_document','Document responsable']]
+        },
+        {
+          title: 'Sortides i comunicacions',
+          fields: [['sortida_sola','Sortida sola'], ['sortida_esbarjo','Sortida esbarjo'], ['sortides_municipi','Sortides municipi'], ['comunicacio_academica','Comunicacio academica'], ['comunicacio_salut','Comunicacio salut']]
+        },
+        {
+          title: 'Imatge, dades i obres',
+          fields: [['declaracio_plataformes','Declaracio plataformes'], ['plataformes_externes','Plataformes externes'], ['imatge_intranet','Imatge intranet'], ['imatge_web','Imatge web'], ['imatge_externa','Imatge externa'], ['obra_oberta','Obra oberta'], ['obra_centre','Obra centre'], ['obra_biblioteca','Obra biblioteca'], ['obra_repositori','Obra repositori']]
+        },
+        {
+          title: 'Contacte i salut',
+          fields: [['acad_contacte_nom','Contacte academic'], ['acad_contacte_email','Email academic'], ['acad_contacte_relacio','Relacio academica'], ['emergencia_nom','Emergencia'], ['emergencia_telefon','Telefon emergencia'], ['emergencia_relacio','Relacio emergencia'], ['problemes_salut','Problemes salut'], ['altres_salut','Altres salut'], ['medicacio','Medicacio'], ['posologia','Posologia'], ['dosi','Dosi'], ['administracio_medicacio','Administracio medicacio'], ['paracetamol','Paracetamol']]
+        },
+        {
+          title: 'Signatures i validacio',
+          fields: [['lloc','Lloc'], ['signatura_responsable','Signatura responsable'], ['signatura_alumne','Signatura alumne/a'], ['estat_validacio','Estat validacio'], ['observacions_internes','Observacions internes']]
+        }
+      ].forEach(function(group) {
+        appendDetailGroup(body, group.title, group.fields.map(function(pair) {
+          return { label: pair[1], value: formatReadonlyValue(auth[pair[0]]) };
+        }).filter(function(item) { return item.value; }));
+      });
+
+      modal.classList.remove('is-hidden');
+    }
+
+    function appendDetailGroup(body, titleText, values) {
+      if (!values.length) return;
+      var section = document.createElement('section');
+      section.className = 'detail-section';
+      var heading = document.createElement('h3');
+      heading.textContent = titleText;
+      section.appendChild(heading);
+      var dl = document.createElement('dl');
+      values.forEach(function(item) {
+        var dt = document.createElement('dt');
+        dt.textContent = item.label;
+        var dd = document.createElement('dd');
+        dd.textContent = item.value;
+        dl.appendChild(dt);
+        dl.appendChild(dd);
+      });
+      section.appendChild(dl);
+      body.appendChild(section);
+    }
+
+    function formatReadonlyValue(value) {
+      var parsed = parseBooleanValue(value);
+      if (parsed === true) return 'Si';
+      if (parsed === false) return 'No';
+      return textValue(value);
     }
 
     function appendIconCell(row, value) {
@@ -354,6 +736,141 @@
     function firstContactForStudent(studentId) {
       var record = (state.contacts || []).filter(function(item) { return String(item.id) === String(studentId); })[0];
       return record && record.contacts && record.contacts[0] ? record.contacts[0] : { name: '', phone: '', email: '' };
+    }
+
+    function contactsForStudent(studentId) {
+      var record = (state.contacts || []).filter(function(item) { return String(item.id) === String(studentId); })[0];
+      return record && record.contacts ? record.contacts : [];
+    }
+
+    function buildInvitationRequest(student, auth, target) {
+      return {
+        target: target,
+        student: {
+          id: student.id || '',
+          name: student.name || '',
+          email: student.email || '',
+          document: student.document || '',
+          studyType: student.studyType || '',
+          isAdult: student.isAdult || '',
+          is14Plus: student.is14Plus || '',
+          age: student.age || '',
+          birthdateIso: student.birthdateSortKey || ''
+        },
+        contacts: target === 'parents' ? contactsForStudent(student.id) : [],
+        authorization: {
+          resposta_id: auth ? auth.resposta_id || '' : ''
+        }
+      };
+    }
+
+    function pendingInvitationRequests() {
+      var latestByStudent = latestAuthorizationsByStudent_();
+      return filteredStudents().map(function(student) {
+        var auth = latestByStudent[String(student.id || '').trim()] || null;
+        var status = authorizationStatus(student, auth);
+        return status.target ? buildInvitationRequest(student, auth, status.target) : null;
+      }).filter(Boolean);
+    }
+
+    function sendInvitationRequests(requests) {
+      if (state.inviting) return;
+      if (!requests || !requests.length) {
+        alert('No hi ha cap invitació pendent per enviar.');
+        return;
+      }
+
+      if (needsParentContacts(requests) && !state.contactsLoadedScopes[contactScopeKey()]) {
+        loadVisibleContactsIfNeeded(function() {
+          sendInvitationRequests(hydrateParentInvitationContacts(requests));
+        });
+        return;
+      }
+
+      requests = hydrateParentInvitationContacts(requests);
+
+      state.inviting = true;
+      setInitialLoading(true);
+      updateInvitationControls();
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          state.inviting = false;
+          setInitialLoading(false);
+          updateInvitationControls();
+          showInvitationSummary(result || {});
+          loadAuthorizations();
+        })
+        .withFailureHandler(function(error) {
+          state.inviting = false;
+          setInitialLoading(false);
+          updateInvitationControls();
+          alert("No s'han pogut enviar les invitacions: " + (error && error.message ? error.message : error));
+        })
+        .sendAuthorizationInvitations(requests);
+    }
+
+    function needsParentContacts(requests) {
+      return (requests || []).some(function(request) {
+        return request.target === 'parents' && (!request.contacts || !request.contacts.length);
+      });
+    }
+
+    function hydrateParentInvitationContacts(requests) {
+      return (requests || []).map(function(request) {
+        if (request.target !== 'parents') return request;
+        request.contacts = contactsForStudent(request.student && request.student.id);
+        return request;
+      });
+    }
+
+    function showInvitationSummary(result) {
+      var lines = [
+        'Invitacions enviades: ' + Number(result.sent || 0),
+        'Omeses: ' + Number(result.skipped || 0)
+      ];
+      if (result.errors && result.errors.length) {
+        lines.push('Incidències:');
+        result.errors.slice(0, 5).forEach(function(error) { lines.push('- ' + error); });
+        if (result.errors.length > 5) lines.push('- ...');
+      }
+      alert(lines.join('\n'));
+    }
+
+    function bindBulkInviteButton() {
+      if (!bulkInviteButton) return;
+      bulkInviteButton.addEventListener('click', function() {
+        var requests = pendingInvitationRequests();
+        if (!requests.length) {
+          alert('No hi ha cap invitació pendent per enviar.');
+          return;
+        }
+        if (!confirm("S'enviaran invitacions a tots els formularis pendents visibles. Vols continuar?")) return;
+        sendInvitationRequests(requests);
+      });
+    }
+
+    function bindRefreshAuthButton() {
+      if (!refreshAuthButton) return;
+      refreshAuthButton.addEventListener('click', refreshAuthorizations);
+    }
+
+    function updateInvitationControls() {
+      if (bulkInviteButton) {
+        var active = document.getElementById('view-autoritzacions') && document.getElementById('view-autoritzacions').classList.contains('active');
+        var pending = pendingInvitationRequests().length;
+        bulkInviteButton.classList.toggle('is-hidden', !active);
+        bulkInviteButton.disabled = !active || state.inviting || pending === 0 || !state.authorizationsLoaded;
+      }
+      if (refreshAuthButton) {
+        var refreshActive = document.getElementById('view-autoritzacions') && document.getElementById('view-autoritzacions').classList.contains('active');
+        refreshAuthButton.classList.toggle('is-hidden', !refreshActive);
+        refreshAuthButton.disabled = !refreshActive || state.inviting;
+      }
+      document.querySelectorAll('.status-action').forEach(function(button) {
+        button.disabled = state.inviting;
+      });
+      updateAuthorizationFloatingScroll();
     }
 
     function showAuthorizationsError(message) {
@@ -423,6 +940,9 @@
           if (viewName === 'autoritzacions' && !state.authorizationsLoaded) {
             loadAuthorizations();
           }
+          if (viewName === 'contactes') {
+            loadVisibleContactsIfNeeded();
+          }
 
           document.querySelectorAll('[data-view]').forEach(function(item) {
             item.classList.toggle('active', item === link);
@@ -435,6 +955,11 @@
           updateSaveButton();
         });
       });
+    }
+
+    function isViewActive(viewName) {
+      var view = document.getElementById('view-' + viewName);
+      return !!(view && view.classList.contains('active'));
     }
 
     function bindSorting() {
@@ -450,6 +975,7 @@
           button.classList.add(direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
 
           sortRows(tableId, key, direction);
+          syncAuthorizationFloatingScroll();
         });
       });
     }
@@ -500,6 +1026,39 @@
       }
     }
 
+    function bindAuthorizationFloatingScroll() {
+      if (!authorizationFloatingScroll || !authorizationTableWrap) return;
+      var syncing = false;
+      authorizationFloatingScroll.addEventListener('scroll', function() {
+        if (syncing) return;
+        syncing = true;
+        authorizationTableWrap.scrollLeft = authorizationFloatingScroll.scrollLeft;
+        syncing = false;
+      });
+      authorizationTableWrap.addEventListener('scroll', function() {
+        if (syncing) return;
+        syncing = true;
+        authorizationFloatingScroll.scrollLeft = authorizationTableWrap.scrollLeft;
+        syncing = false;
+      });
+      window.addEventListener('resize', syncAuthorizationFloatingScroll);
+    }
+
+    function updateAuthorizationFloatingScroll() {
+      if (!authorizationFloatingScroll) return;
+      var active = document.getElementById('view-autoritzacions') && document.getElementById('view-autoritzacions').classList.contains('active');
+      authorizationFloatingScroll.classList.toggle('is-hidden', !active);
+      if (active) syncAuthorizationFloatingScroll();
+    }
+
+    function syncAuthorizationFloatingScroll() {
+      if (!authorizationFloatingScroll || !authorizationTableWrap) return;
+      var inner = authorizationFloatingScroll.firstElementChild;
+      if (!inner) return;
+      inner.style.width = authorizationTableWrap.scrollWidth + 'px';
+      authorizationFloatingScroll.scrollLeft = authorizationTableWrap.scrollLeft;
+    }
+
     function rowHasChanges(row) {
       return Array.prototype.some.call(row.querySelectorAll('.contact-input'), function(input) {
         return input.value !== input.getAttribute('data-original');
@@ -515,6 +1074,7 @@
       var contactesActive = document.getElementById('view-contactes') && document.getElementById('view-contactes').classList.contains('active');
       saveButton.classList.toggle('is-hidden', !contactesActive);
       saveButton.disabled = !contactesActive || state.saving || getDirtyRows().length === 0;
+      updateInvitationControls();
     }
 
     function collectChanges() {

@@ -4,6 +4,8 @@ This example shows the full lookup path between the registry-backed spreadsheet 
 
 It is a temporary/manual test function, not production architecture.
 
+> Historical note: this example was written for the former `Dinantia -> class_groups` table. The current production model uses `Dinantia -> teachers_2_dinantia` and `Dinantia -> dinantia_2_dades_alumnes`; see `docs/DB_STRUCTURE.md` for the authoritative structure.
+
 ## Purpose
 
 Given a teacher email:
@@ -372,4 +374,3 @@ function fetchDinantiaStudentsInGroup_(baseUrl, user, secret, groupId) {
 - Dinantia students are read from `GET /v1.2/accounts/index` and filtered locally by:
   - `roles` containing `Student`
   - `groups.member` containing the resolved Dinantia group ID
-

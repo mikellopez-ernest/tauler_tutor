@@ -29,6 +29,8 @@ function saveAuthorizationResponse_(payload) {
     });
   });
 
+  refreshAuthorizationsCache_();
+
   return { ok: true, resposta_id: respostaId, persones_autoritzades: people.length };
 }
 
@@ -133,4 +135,101 @@ function appendObjectRow_(sheet, headerMap, object) {
     if (headerMap[key] !== undefined) row[headerMap[key]] = object[key];
   });
   sheet.appendRow(row);
+}
+
+function refreshAuthorizationsCache_() {
+  var registry = loadRegistry_();
+  var dinantiaSpreadsheet = SpreadsheetApp.openById(requireRegistryEntry_(registry, FORM_CONFIG.tableDinantia));
+  var cacheSheet = openSheet_(dinantiaSpreadsheet, FORM_CONFIG.sheetAuthorizationsCache);
+  var cacheHeaders = getHeaderMap_(cacheSheet);
+  var rows = buildAuthorizationsCacheRows_(registry);
+  overwriteByHeaders_(cacheSheet, cacheHeaders, rows);
+}
+
+function buildAuthorizationsCacheRows_(registry) {
+  var authSpreadsheet = SpreadsheetApp.openById(requireRegistryEntry_(registry, FORM_CONFIG.tableAuthorizations));
+  var authSheet = openSheet_(authSpreadsheet, FORM_CONFIG.sheetAuthorizations);
+  var tokensSheet = openSheet_(authSpreadsheet, FORM_CONFIG.sheetVerificationTokens);
+  var authHeaders = getHeaderMap_(authSheet);
+  var tokenHeaders = getHeaderMap_(tokensSheet);
+  var authorizations = objectsFromSheet_(authSheet, authHeaders);
+  var tokens = objectsFromSheet_(tokensSheet, tokenHeaders);
+  var latestAuth = {};
+  var latestToken = {};
+
+  authorizations.forEach(function(auth) {
+    var id = stringValue_(auth.id_student);
+    if (!id) return;
+    if (!latestAuth[id] || stringValue_(auth.data_hora_enviament) >= stringValue_(latestAuth[id].data_hora_enviament)) {
+      latestAuth[id] = auth;
+    }
+  });
+
+  tokens.forEach(function(token) {
+    var id = stringValue_(token.student_id);
+    if (!id) return;
+    if (!latestToken[id] || stringValue_(token.created_at) >= stringValue_(latestToken[id].created_at)) {
+      latestToken[id] = token;
+    }
+  });
+
+  var ids = {};
+  Object.keys(latestAuth).forEach(function(id) { ids[id] = true; });
+  Object.keys(latestToken).forEach(function(id) { ids[id] = true; });
+
+  return Object.keys(ids).map(function(studentId) {
+    var out = {};
+    var auth = latestAuth[studentId] || {};
+    Object.keys(auth).forEach(function(key) { out[key] = auth[key]; });
+    var token = latestToken[studentId] || {};
+    out.id_student = studentId;
+    out.latest_invitation_created_at = token.created_at || '';
+    out.latest_invitation_expires_at = token.expires_at || '';
+    out.latest_invitation_used_at = token.used_at || '';
+    out.latest_invitation_sender = token.sender || '';
+    out.latest_invitation_email = token.email || '';
+    out.latest_invitation_resposta_id = token.resposta_id || '';
+    out.latest_invitation_status = token.status || '';
+    return out;
+  });
+}
+
+function objectsFromSheet_(sheet, headerMap) {
+  var values = sheet.getDataRange().getValues();
+  var rows = [];
+  for (var i = 1; i < values.length; i++) {
+    rows.push(objectFromRow_(values[i], headerMap));
+  }
+  return rows;
+}
+
+function objectFromRow_(row, headerMap) {
+  var out = {};
+  Object.keys(headerMap).forEach(function(header) {
+    var value = row[headerMap[header]];
+    out[header] = value instanceof Date ? Utilities.formatDate(value, FORM_CONFIG.timezone, "yyyy-MM-dd'T'HH:mm:ssXXX") : value;
+  });
+  return out;
+}
+
+function overwriteByHeaders_(sheet, headerMap, objects) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).clearContent();
+  }
+  if (!objects.length) return;
+  var width = sheet.getLastColumn();
+  var headers = Object.keys(headerMap);
+  var values = objects.map(function(object) {
+    var row = new Array(width).fill('');
+    headers.forEach(function(header) {
+      row[headerMap[header]] = object[header] === undefined ? '' : object[header];
+    });
+    return row;
+  });
+  sheet.getRange(2, 1, values.length, width).setValues(values);
+}
+
+function stringValue_(value) {
+  return String(value === null || value === undefined ? '' : value).trim();
 }

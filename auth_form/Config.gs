@@ -13,6 +13,9 @@ var FORM_CONFIG = {
   databaseProperty: 'db',
   registrySheet: 'tables',
   tableAuthorizations: 'Autoritzacions',
+  tableDinantia: 'Dinantia',
   sheetAuthorizations: 'autoritzacions',
-  sheetAuthorizedPeople: 'persones_autoritzades'
+  sheetAuthorizedPeople: 'persones_autoritzades',
+  sheetVerificationTokens: 'verification_tokens',
+  sheetAuthorizationsCache: 'authorizations_cache'
 };

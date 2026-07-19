@@ -8,6 +8,9 @@
     <?!= include_('Styles'); ?>
   </head>
   <body>
+    <script>
+      window.TAULER_DEBUG = <?!= debugEnabled ? 'true' : 'false' ?>;
+    </script>
     <div class="loading-overlay initial-loading">
       <div class="loader" aria-label="Carregant"></div>
     </div>
@@ -27,6 +30,11 @@
       </aside>
 
       <main class="main">
+        <div class="group-filter is-hidden" id="group-filter">
+          <label for="group-select">Grups</label>
+          <select id="group-select"></select>
+        </div>
+
         <section class="view active" id="view-inici">
           <header class="page-header">
             <h1 id="group-title"></h1>
@@ -43,6 +51,7 @@
               <table>
                 <thead>
                   <tr>
+                    <th class="group-column"><button class="sort-button" type="button" data-sort-table="students-table" data-sort-key="group">Grup</button></th>
                     <th><button class="sort-button" type="button" data-sort-table="students-table" data-sort-key="name">Nom</button></th>
                     <th><button class="sort-button" type="button" data-sort-table="students-table" data-sort-key="birthdate">Data de naixement</button></th>
                     <th><button class="sort-button" type="button" data-sort-table="students-table" data-sort-key="age">Edat</button></th>
@@ -71,6 +80,7 @@
               <table class="contacts-table">
                 <thead>
                   <tr>
+                    <th class="group-column">Grup</th>
                     <th>Alumne</th>
                     <th>Nom</th>
                     <th>Email</th>
@@ -96,11 +106,12 @@
               <span class="count" id="authorizations-count">0 alumnes</span>
             </div>
             <div class="auth-error is-hidden" id="authorizations-error"></div>
-            <div class="table-wrap">
+            <div class="table-wrap" id="authorizations-table-wrap">
               <table class="authorizations-table">
                 <thead>
                   <tr>
                     <th rowspan="2"><button class="sort-button" type="button" data-sort-table="authorizations-table" data-sort-key="name">Alumne</button></th>
+                    <th rowspan="2" class="group-column"><button class="sort-button" type="button" data-sort-table="authorizations-table" data-sort-key="group">Grup</button></th>
                     <th rowspan="2"><button class="sort-button" type="button" data-sort-table="authorizations-table" data-sort-key="status">Estat</button></th>
                     <th rowspan="2"><button class="sort-button" type="button" data-sort-table="authorizations-table" data-sort-key="date">Data</button></th>
                     <th rowspan="2">Detall</th>
@@ -129,6 +140,9 @@
       </main>
 
       <button class="save-button" type="button" aria-label="Desa els canvis" title="Desa els canvis" disabled>💾</button>
+      <button class="bulk-invite-button is-hidden" type="button" aria-label="Envia totes les invitacions pendents" title="Envia totes les invitacions pendents" disabled>✉</button>
+      <button class="refresh-auth-button is-hidden" type="button" aria-label="Actualitza autoritzacions" title="Actualitza autoritzacions">↻</button>
+      <div class="floating-scrollbar is-hidden" id="authorization-floating-scroll" aria-hidden="true"><div></div></div>
       <div class="loading-overlay save-loading" hidden>
         <div class="loader" aria-label="Carregant"></div>
       </div>
@@ -150,6 +164,10 @@
         <h1 id="error-title"></h1>
         <p id="error-message"></p>
         <pre id="error-details" hidden></pre>
+        <section class="debug-panel is-hidden" id="debug-panel">
+          <h2>Debug resolver</h2>
+          <div id="debug-content"></div>
+        </section>
       </section>
     </main>
 

@@ -2,7 +2,7 @@
 
 This document specifies the `Autoritzacions` section in the tutor dashboard.
 
-This is a specification only. Do not implement, deploy, or sync from this document without an explicit later instruction.
+This is a specification only. Implementation and deployment require an explicit instruction.
 
 ## Purpose
 
@@ -12,13 +12,15 @@ The section must answer three questions quickly:
 
 1. Has this student submitted the authorization form?
 2. Which relevant permissions are granted or denied?
-3. If the form is missing, can the tutor launch the form request for that student?
+3. If a required signature is pending, can the tutor send a secure invitation from the panel?
 
 ## Navigation
 
 The left menu entry `Autoritzacions` must open this section client-side.
 
 The page must reuse the students already loaded in memory by the tutor endpoint. It must not re-resolve the tutor, reload the Dinantia group, or fetch the student list again.
+
+If the tutor endpoint resolved more than one Dinantia group, the shared `Grups` selector filters this page too. The authorization matrix must show only students in the selected group, or all loaded students when `Tots els grups` is selected.
 
 ## Data Source
 
@@ -27,6 +29,7 @@ The section reads the registry-backed table:
 | Logical table | Sheet | Purpose |
 | --- | --- | --- |
 | `Autoritzacions` | `autoritzacions` | Submitted authorization responses. |
+| `Autoritzacions` | `verification_tokens` | Operational invitation/token history used to show the latest invitation summary. |
 
 Required headers from `Autoritzacions` -> `autoritzacions`:
 
@@ -52,7 +55,7 @@ Rules:
 - Compare IDs as trimmed strings.
 - Do not perform name-based matching.
 - Do not load students again for this section.
-- If a student has no matching authorization row, display the row with a pale red background, leave permission cells blank, and show the launch button beside the student name.
+- If a student has no matching authorization row, display the row with a pale red background, leave permission cells blank, and show the pending-family invitation action in the status column.
 - If a student has one matching authorization row, use that row.
 - If a student has multiple matching authorization rows, use the most recent row by `data_hora_enviament`. If that value is missing or invalid, use the last row encountered in sheet order.
 
@@ -66,8 +69,8 @@ Fixed first columns:
 
 | Column | Source | Behavior |
 | --- | --- | --- |
-| `Alumne` | Loaded Dinantia student name | Show exactly as already displayed in `Inici`; when missing authorization, show a rocket launch button to the left of the name. |
-| `Estat formulari` | Matched authorization row exists | Show submitted/missing status. |
+| `Alumne` | Loaded Dinantia student name | Show exactly as already displayed in `Inici`. |
+| `Estat formulari` | Matched authorization row and signature fields | Show current status and, when pending, an inline invitation action. |
 | `Data` | `data_hora_enviament` preferred, fallback `data_signatura` | Show compact date. |
 
 Permission columns must be grouped logically.
@@ -126,6 +129,8 @@ The authorization matrix can contain more columns than fit on screen. The page m
 
 The first student-identification columns should remain easy to track while scrolling horizontally. A sticky first column is preferred if it fits the implementation cleanly.
 
+In addition to the native horizontal scrollbar, the page must provide a floating horizontal scrollbar for the authorization matrix. This scrollbar must remain visible near the bottom of the viewport while the tutor is working in `Autoritzacions`, and it must stay synchronized with the actual table scroll position.
+
 ### Detail Action
 
 The final column must provide a compact detail action for every student with a submitted authorization row.
@@ -136,72 +141,119 @@ The final column must provide a compact detail action for every student with a s
 
 The detail action should be disabled or hidden when the student has no matching authorization row.
 
+### Filled Form Document Action
+
+When a student has a submitted authorization row, the student-name cell must show a compact document icon next to the student's name.
+
+Behavior:
+
+- The icon appears only when the student has a filled form.
+- The icon opens a window or modal with a read-only version of the submitted form data.
+- The read-only view must not allow edits or resubmission.
+- The view should organize fields in logical sections, not as an unstructured raw dump.
+
 This action is required. Non-boolean fields must not disappear from the tutor workflow just because the main matrix uses tick/X icons for boolean answers.
 
 
-## Missing Form Launch Action
+## Status And Invitation Actions
 
-When a student has no matching row in `Autoritzacions` -> `autoritzacions`, the `Alumne` cell must include a launch button to the left of the student's name.
+The `Estat formulari` column controls panel-initiated invitations.
 
-Button rules:
+Status rules:
 
-| Element | Requirement |
+| Condition | Status text | Inline action |
+| --- | --- | --- |
+| No matching `autoritzacions` row | `Pendent` | `Enviar a tutors` |
+| Parent/responsible signature is not true | `Pendent tutors` | `Enviar a tutors` |
+| Parent/responsible signature is true and student signature is not true | `Pendent alumne` | `Enviar a alumne` |
+| Parent/responsible signature is true and student signature is true | `Complet` | None |
+
+The inline action must appear behind or beside the status text, not in the `Alumne` column.
+
+Invitation targets:
+
+| Action | Recipients |
 | --- | --- |
-| Icon | Small rocket icon. |
-| Position | Left of the student name. |
-| Visibility | Only shown when the student has no authorization row. |
-| Tooltip / accessible label | Catalan text indicating that it launches or sends the authorization form. |
-| Enabled state | Enabled only when the app has enough student/contact data to launch the form. |
+| `Enviar a tutors` | All loaded Dinantia contacts/parents for that student with a valid email. |
+| `Enviar a alumne` | The student email loaded from `Dades alumnes`.`Correu alumne`. |
 
-Target production behavior:
+Panel-initiated invitations must call the deployed `form_launcher_example` endpoint server-side. The tutor panel must not create verification tokens directly; token creation and email delivery belong to the launcher.
 
-- Pressing the rocket button sends an email to all contacts for that student.
-- The email contains or launches the authorization form for the selected student.
-- The form launch must include the student context required by `auth_form`, including `id_student` and the POST prefill fields already specified there.
-
-Current development/testing behavior:
-
-- Pressing the rocket button must call the deployed GAS endpoint/project `form_launcher_example`: `https://script.google.com/macros/s/AKfycbwOgYsVCf-MdEEbpGFFmWyjMB__MrgDowQuo7W6Ky8ymZwkY_-c7gUPm9QGTGUxiYGrYg/exec`.
-- `form_launcher_example` is a temporary/testing launcher used to define and validate the launch flow before implementing the final email behavior.
-- The current testing launcher deployment is public and may be accessed without a signed-in email; the launcher must therefore remain stateless and must not persist personal data.
-- The tutor panel must treat the launcher call as an action for one specific student, not for the whole group.
-
-Minimum data to pass to the launcher:
+The panel must pass the student/form prefill context it already has:
 
 | Field | Source |
 | --- | --- |
-| `student_id` | Loaded student `id`; launcher forwards this to `auth_form` as `id_student`. |
+| `student_id` | Loaded student `id`; launcher forwards this to `auth_form` as `id_student` when applicable. |
 | `alumne_nom` | Loaded student visible name. |
 | `alumne_document` | Student document value from loaded/local student context when available. |
 | `studyType` | Student studies value prepared by `tauler_tutor` from loaded/local student context. |
 | `isAdult` | Adult-status value prepared by `tauler_tutor` from loaded/local student context. |
 | `is14Plus` | Optional ESO age value prepared by `tauler_tutor` when available. |
-| `contact_name` | First loaded contact name for the student. |
-| `contact_phone` | First loaded contact phone for the student. |
-| `contact_email` | First loaded contact email for the student. |
-| `tutor_email` | `Session.getActiveUser().getEmail()` or current loaded user context. |
+| `student_email` | Student email from `Dades alumnes`.`Correu alumne`, required for student invitations. |
+| `contacts` | Loaded Dinantia contacts for the student, required for tutor/family invitations. |
+| `tutor_email` | `Session.getActiveUser().getEmail()` for audit/context. |
 
-For performance, `tauler_tutor` should send the form prefill fields it already knows instead of making `auth_form` look them up later by `student_id`.
+The panel-to-launcher request must include a shared internal secret stored only in script properties. Required script property name: `launcher_internal_secret`. This property must exist in both `tauler_tutor` and `form_launcher_example` with the same value.
 
-During testing, only the first contact is sent to `form_launcher_example`. Production email behavior will later target all student contacts.
+The launcher response must be JSON with a summary:
 
-### Launch Feedback
+| Field | Meaning |
+| --- | --- |
+| `ok` | Whether the request was processed. |
+| `sent` | Number of emails sent. |
+| `skipped` | Number of recipients skipped, for example missing or invalid email. |
+| `errors` | Safe error summaries. |
 
-After pressing the rocket button, the UI must give clear feedback:
+### Bulk Invitation Button
+
+The `Autoritzacions` page must include a floating circular button styled consistently with the `Contactes` save button.
+
+Rules:
+
+- It is visible only in the `Autoritzacions` view.
+- It is disabled while sending invitations.
+- It has a tooltip/title: `Envia totes les invitacions pendents`.
+- Before sending, it must show a confirmation dialog:
+
+```text
+S'enviaran invitacions a tots els formularis pendents visibles. Vols continuar?
+```
+
+After confirmation, it sends invitations for every visible pending row:
+
+- Parent pending rows use `Enviar a tutors`.
+- Student pending rows use `Enviar a alumne`.
+- Complete rows are ignored.
+- If a group filter is active, only the currently visible group rows are included.
+
+The UI must show a concise Catalan summary of sent, skipped, and failed invitations.
+
+### Invitation Feedback
+
+After pressing an inline invitation action or the bulk button:
 
 | State | Behavior |
 | --- | --- |
-| Launching | Disable the clicked button and show a small loading indicator. |
-| Success | Show a Catalan success message for that student. |
-| Failure | Re-enable the button and show a Catalan error message with safe diagnostic detail. |
+| Sending | Disable the clicked action/button and show the existing loading overlay. |
+| Success | Show a Catalan success summary. |
+| Failure | Re-enable the action and show a Catalan error message with safe diagnostic detail. |
 
-The button must not allow duplicate clicks while the launch request is in progress.
+The action must not allow duplicate clicks while a request is in progress.
 
-### Launch Scope
+Sending an invitation does not create an authorization response row by itself. The student remains pending until a submitted response appears in `Autoritzacions` -> `autoritzacions` and the authorization data is refreshed.
 
-Launching a form request does not create an authorization response row by itself.
+### Manual Authorization Refresh
 
-The student should remain in the missing-form state until a submitted response appears in `Autoritzacions` -> `autoritzacions` and the authorization data is refreshed.
+The `Autoritzacions` page must include a second floating circular button next to the bulk-invitation button.
+
+Behavior:
+
+- Use a standard update/refresh icon.
+- Tooltip: `Actualitza autoritzacions`.
+- Visible only while the `Autoritzacions` page is active.
+- When clicked, refresh only the authorization read model and reload the authorization table.
+- The refresh must rebuild `Dinantia` -> `authorizations_cache` from canonical `Autoritzacions` data.
+- The button must be disabled while the refresh is running.
 
 ## Icon Rules
 
@@ -228,7 +280,7 @@ When no authorization row exists for a student:
 
 - The full row background must be pale red.
 - `Estat formulari` should clearly indicate that the form is missing.
-- The `Alumne` cell must show the rocket launch button to the left of the student name.
+- The `Estat formulari` cell must show `Pendent` with the `Enviar a tutors` action.
 - Permission cells should show nothing, not red X icons.
 
 Reason: a red X means a submitted response denied a permission; a missing form means no answer exists.
@@ -251,6 +303,30 @@ Suggested fields:
 | Internal | `estat_validacio`, `observacions_internes`. |
 
 The detail panel is read-only in this version.
+
+### Latest Invitation In Detail Panel
+
+The detail panel must also show a read-only summary of the latest invitation token record for the student, read from `Autoritzacions` -> `verification_tokens`.
+
+Use the latest row by `created_at` where `verification_tokens.student_id` matches the student `id`.
+
+Fields to show:
+
+| Label | Source |
+| --- | --- |
+| `Última invitació enviada` | Group heading. |
+| `Data` | `created_at`. |
+| `Correu` | `email`. |
+| `Tipus` | `sender`. |
+| `Estat` | `status`. |
+
+If no token row exists for the student, show:
+
+```text
+No consta cap invitació enviada.
+```
+
+The panel must never display `token_hash` or raw token values.
 
 ## Sorting
 
@@ -293,4 +369,4 @@ This section does not:
 - Write changelog entries.
 - Read `persones_autoritzades` directly.
 - Generate PDFs.
-- Contact Dinantia.
+- Create verification tokens directly in `tauler_tutor`.

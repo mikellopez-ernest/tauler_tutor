@@ -153,7 +153,9 @@ Group `types` may include `students`, `parents`, or both.
 
 `GET /v1/groups/index` can filter by `parent`. Group tags are built from the chain of group names from the root to the group.
 
-The current local table `Dinantia -> class_groups` stores `dinantia_group_name`, which maps to the Dinantia group `id`.
+The current local table `Dinantia -> dinantia_2_dades_alumnes` stores `dinantia_group_name`, which maps to the Dinantia group value used by the app.
+
+Teacher/responsibility visibility is stored separately in `Dinantia -> teachers_2_dinantia`.
 
 A worked temporary Apps Script example for resolving a teacher email to a Dinantia group and listing students is documented in `docs/examples/DINANTIA_GROUP_STUDENTS_LOOKUP_EXAMPLE.md`.
 

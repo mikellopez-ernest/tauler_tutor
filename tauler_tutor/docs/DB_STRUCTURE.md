@@ -11,6 +11,7 @@ The Apps Script project must define these script properties.
 | `db` | Spreadsheet ID of the database registry spreadsheet. |
 | `dinantia_api_user` | Dinantia API Basic Auth user. |
 | `dinantia_api_secret` | Dinantia API Basic Auth secret. |
+| `launcher_internal_secret` | Shared secret used for trusted server-to-server invitation requests from `tauler_tutor` to `form_launcher_example`. |
 
 The app reads these values from script properties. If a required property is missing, blank, or only whitespace, the app must stop with a clear configuration error.
 
@@ -46,8 +47,8 @@ Current examples:
 | `Horaris` | `GPU001` |
 | `Dades de professors` | `Llista`, `leave_absence` |
 | `Càrrega lectiva` | `assignatures`, `carrecs` |
-| `Dinantia` | `class_groups`, `changelog` |
-| `Dades alumnes` | Group-specific student sheets referenced by `Dinantia` -> `class_groups`.`dades_alumnes_sheet` |
+| `Dinantia` | `dinantia_2_dades_alumnes`, `teachers_2_dinantia`, `changelog`, `students_cache`, `contacts_cache`, `authorizations_cache`, `cache_runs` |
+| `Dades alumnes` | Group-specific student sheets referenced by `Dinantia` -> `dinantia_2_dades_alumnes`.`dades_alumnes_sheet` |
 | `Autoritzacions` | `autoritzacions`, `persones_autoritzades`, `verification_tokens` |
 | `Incidències` | `llistat_anual`, `config`, `meeting_records`, `study_group_students`, `study_group_teachers`, `3r_project`, `expulsions` |
 
@@ -217,9 +218,14 @@ The current app uses these registered sheets:
 - `Dades de professors` -> `Llista`
 - `Dades de professors` -> `leave_absence`
 - `Càrrega lectiva` -> `carrecs`
-- `Dinantia` -> `class_groups`
+- `Dinantia` -> `dinantia_2_dades_alumnes`
+- `Dinantia` -> `teachers_2_dinantia`
 - `Dinantia` -> `changelog`
-- `Dades alumnes` -> dynamic sheet name from `class_groups.dades_alumnes_sheet`
+- `Dinantia` -> `students_cache`
+- `Dinantia` -> `contacts_cache`
+- `Dinantia` -> `authorizations_cache`
+- `Dinantia` -> `cache_runs`
+- `Dades alumnes` -> dynamic sheet name from `dinantia_2_dades_alumnes.dades_alumnes_sheet`
 - `Autoritzacions` -> `autoritzacions`
 - `Autoritzacions` -> `persones_autoritzades`
 - `Autoritzacions` -> `verification_tokens`
@@ -230,9 +236,10 @@ Relationships:
 | --- | --- | --- |
 | `leave_absence.teacher_code` | `Llista.REDUÏT` | Original teacher on leave. |
 | `leave_absence.substitute_code` | `Llista.REDUÏT` | Substitute teacher covering the leave. |
-| `carrecs.asignado?` | `Llista` full name | Teacher responsible for the group. Full name is `NOM COGNOM1 COGNOM2`, omitting blanks. |
-| `class_groups.tutor_carrec` | `carrecs.carrec` | Dinantia group maps to a tutor responsibility/group entry. |
-| `class_groups.dades_alumnes_sheet` | `Dades alumnes` sheet name | Local student-data sheet for the resolved group. |
+| `carrecs.asignado?` | `Llista` full name | Teacher assigned to the responsibility. Full name is `NOM COGNOM1 COGNOM2`, omitting blanks. A teacher may appear in more than one row. |
+| `teachers_2_dinantia.carrec` | `carrecs.carrec` | Teacher responsibility maps to one or more visible Dinantia groups. |
+| `teachers_2_dinantia.dinantia_group_names` | `dinantia_2_dades_alumnes.dinantia_group_name` | Comma-separated list of Dinantia groups visible for that responsibility. |
+| `dinantia_2_dades_alumnes.dades_alumnes_sheet` | `Dades alumnes` sheet name | Local student-data sheet for the resolved group. |
 | `persones_autoritzades.resposta_id` | `autoritzacions.resposta_id` | Authorized pickup persons belong to one submitted authorization response. |
 
 Both teacher fields in `leave_absence` always refer to `Llista.REDUÏT`.
@@ -457,7 +464,8 @@ Row 1 contains headers. Data starts in row 2.
 - `email` must be normalized by trimming and lowercasing before storage.
 - `metadata_json` may include context such as `alumne_nom`, `alumne_document`, `studyType`, `isAdult`, `is14Plus`, selected group name, `dades_alumnes_sheet`, or read-only-mode flags.
 - The token record must contain enough context to render the verified next step without trusting editable browser-submitted student data.
-- This table is operational security data; it should not be displayed in the tutor panel.
+- This table is operational security data. The tutor panel may show only non-sensitive invitation summaries such as latest `created_at`, `email`, `sender`, and `status`.
+- The tutor panel must never display `token_hash`, raw token values, or full `metadata_json`.
 
 ## Shared Table: `Càrrega lectiva` -> `carrecs`
 
@@ -477,43 +485,205 @@ Row 1 contains headers. Data starts in row 2.
 - `carrec` identifies the responsibility/group entry.
 - `asignado?` stores the full name of the teacher responsible for the student's group.
 - `asignado?` relates to `Dades de professors` -> `Llista` by teacher full name.
+- A teacher may have multiple responsibilities. Resolver logic must collect every `carrecs` row whose `asignado?` matches the teacher full name, not only the first match.
+- Not every responsibility must have a row in `teachers_2_dinantia`. Responsibilities without a Dinantia mapping are ignored for panel visibility.
+- The resolver fails only when none of the teacher's matched responsibilities maps to any Dinantia group.
 - The teacher full name is built from `Llista` as `NOM COGNOM1 COGNOM2`, using a single space as the join string and omitting blank parts.
 - `hores lectives` is not used by this app.
 - `nom en horaris` is not used by this app.
 
-## Shared Table: `Dinantia` -> `class_groups`
+## Shared Table: `Dinantia` -> `dinantia_2_dades_alumnes`
 
-The logical table `Dinantia` contains a sheet named `class_groups`.
+The logical table `Dinantia` contains a sheet named `dinantia_2_dades_alumnes`.
+
+This sheet maps each Dinantia group to the local `Dades alumnes` sheet that contains data not available in Dinantia.
 
 Row 1 contains headers. Data starts in row 2.
 
 | Header | Meaning |
 | --- | --- |
 | `id` | Autonumeric field for every row. |
-| `dinantia_group_name` | Dinantia group ID used with the Dinantia app. |
-| `tutor_carrec` | Responsibility/group name that relates this row to `Càrrega lectiva` -> `carrecs`. |
+| `dinantia_group_name` | Dinantia group name/id used by the app. |
 | `dades_alumnes_sheet` | Sheet name inside `Dades alumnes` containing local student data for this group. |
 
-### `class_groups` Rules
+### `dinantia_2_dades_alumnes` Rules
 
 - `id` is an autonumeric row identifier.
-- `dinantia_group_name` stores the Dinantia group `id`.
-- `tutor_carrec` relates to `Càrrega lectiva` -> `carrecs`.`carrec`.
-- `dades_alumnes_sheet` stores the name of the sheet to open inside the logical table `Dades alumnes`.
-- `dades_alumnes_sheet` is group-specific and belongs to the same `class_groups` row as the Dinantia group ID in `dinantia_group_name`.
-- Dinantia is an ERP software for schools. Integration details are outside the current database structure spec and will be specified separately.
+- `dinantia_group_name` stores the Dinantia group value used for API membership matching.
+- `dades_alumnes_sheet` stores the sheet name to open inside the logical table `Dades alumnes`.
+- Every group referenced by `teachers_2_dinantia.dinantia_group_names` must have a matching row here.
+- Missing mappings must produce a clear configuration error.
+
+## Shared Table: `Dinantia` -> `teachers_2_dinantia`
+
+The logical table `Dinantia` contains a sheet named `teachers_2_dinantia`.
+
+This sheet maps a teaching responsibility to one or more visible Dinantia groups.
+
+Row 1 contains headers. Data starts in row 2.
+
+| Header | Meaning |
+| --- | --- |
+| `id` | Autonumeric field for every row. |
+| `carrec` | Responsibility name from `Càrrega lectiva` -> `carrecs`.`carrec`. |
+| `dinantia_group_names` | Comma-separated Dinantia group names/ids visible for this responsibility. |
+
+### `teachers_2_dinantia` Rules
+
+- `carrec` joins to `Càrrega lectiva` -> `carrecs`.`carrec`.
+- `dinantia_group_names` may contain one or many groups.
+- Parse `dinantia_group_names` by comma.
+- Trim spaces around each group value.
+- Ignore empty chunks.
+- Preserve the listed order unless a UI sort explicitly changes display order.
+- Each parsed group must exist in `Dinantia` -> `dinantia_2_dades_alumnes`.
+
+## Cache Tables
+
+The tutor panel uses cache tables as a fast read model.
+
+Cache tables are not the canonical database. The canonical sources remain Dinantia, `Dades alumnes`, `Càrrega lectiva`, `Dades de professors`, and `Autoritzacions`.
+
+### Cache Write Policy
+
+Editable data must follow this order:
+
+1. Validate the submitted value.
+2. Write to the canonical origin first.
+3. If the origin write succeeds, update the affected cache row.
+4. Append the changelog row when the field is audited.
+5. If the cache update fails after the origin write succeeds, do not roll back the origin write. Log the cache error and let the next nightly rebuild repair the read model.
+
+The panel must never persist user edits only in cache.
+
+### Nightly Rebuild
+
+The cache rebuild function is:
+
+```javascript
+rebuildTutorPanelCache()
+```
+
+This function is designed to be attached manually to a nightly Apps Script time trigger.
+
+The rebuild process must:
+
+1. Read every row from `Dinantia` -> `dinantia_2_dades_alumnes`.
+2. Fetch Dinantia accounts once.
+3. Build all cached student rows by matching Dinantia student group membership to each mapped group.
+4. Enrich students from the mapped `Dades alumnes` sheet using `ID`.
+5. Build all cached contact rows from each student's Dinantia parent account IDs.
+6. Build the authorization cache from `Autoritzacions` -> `autoritzacions` and latest token summaries from `Autoritzacions` -> `verification_tokens`.
+7. Completely overwrite the current cache tables, preserving row 1 headers.
+8. Append one historical run row to `Dinantia` -> `cache_runs`.
+
+Only `cache_runs` keeps history. The other cache sheets are fully replaced on every successful rebuild.
+
+### `Dinantia` -> `students_cache`
+
+This sheet stores one cached row per student per Dinantia group.
+
+Required headers:
+
+| Header | Meaning |
+| --- | --- |
+| `student_id` | Dinantia student account ID. |
+| `student_name` | Dinantia student display name. |
+| `student_email` | Student email from `Dades alumnes`.`Correu alumne`. |
+| `group_name` | Dinantia group name/id. |
+| `student_data_sheet` | Source sheet in `Dades alumnes`. |
+| `parent_ids` | JSON array of Dinantia parent/contact account IDs. |
+| `birthdate` | Display birthdate from `Dades alumnes`.`Data Naixement`. |
+| `birthdate_sort_key` | ISO date used for sorting. |
+| `age` | Full years calculated against today in `Europe/Madrid`. |
+| `document` | Student identity document when available. |
+| `study_type` | Inferred study type used by the authorization form. |
+| `is_adult` | `si` when age is 18 or more, otherwise `no`. |
+| `is_14_plus` | `si` when age is 14 or more, otherwise `no`. |
+
+### `Dinantia` -> `contacts_cache`
+
+This sheet stores one cached row per student contact.
+
+Required headers:
+
+| Header | Meaning |
+| --- | --- |
+| `student_id` | Dinantia student account ID. |
+| `student_name` | Dinantia student display name. |
+| `group_name` | Dinantia group name/id. |
+| `contact_id` | Dinantia parent/contact account ID. |
+| `contact_position` | 1-based position in the student's parent list. |
+| `contact_name` | Contact display name. |
+| `contact_email` | Contact email. |
+| `contact_phone` | Contact phone. |
+
+Contact edits must be written to Dinantia first. After a successful Dinantia update, update the matching `contacts_cache` row.
+
+### `Dinantia` -> `authorizations_cache`
+
+This sheet stores the latest authorization row per student, plus latest invitation summary columns.
+
+Required authorization headers are the same fields rendered by the tutor panel from `Autoritzacions` -> `autoritzacions`, including:
+
+```text
+id_student, resposta_id, data_hora_enviament, data_signatura, idioma_formulari,
+codi_document, tipus_alumne, sortida_sola, sortida_esbarjo, sortides_municipi,
+comunicacio_academica, comunicacio_salut, declaracio_plataformes,
+imatge_intranet, imatge_web, imatge_externa, obra_oberta, obra_centre,
+obra_biblioteca, obra_repositori, administracio_medicacio, paracetamol,
+problemes_salut, altres_salut, signatura_responsable, signatura_alumne,
+acad_contacte_nom, acad_contacte_email, acad_contacte_relacio,
+emergencia_nom, emergencia_telefon, emergencia_relacio, medicacio,
+posologia, dosi, plataformes_externes, estat_validacio, observacions_internes
+```
+
+Required latest-invitation headers:
+
+| Header | Meaning |
+| --- | --- |
+| `latest_invitation_created_at` | Latest token creation datetime for this student. |
+| `latest_invitation_expires_at` | Latest token expiry datetime. |
+| `latest_invitation_used_at` | Latest token used datetime, when used. |
+| `latest_invitation_sender` | `parent` or `student`. |
+| `latest_invitation_email` | Recipient email for the latest invitation. |
+| `latest_invitation_resposta_id` | Related authorization response ID, when available. |
+| `latest_invitation_status` | Latest token status. |
+
+When the panel sends invitations through the launcher, the app should refresh `authorizations_cache` after successful sends so the latest invitation shown in the detail popup is current.
+
+When the authorization form writes a new row to `Autoritzacions` -> `autoritzacions`, it must refresh `authorizations_cache` immediately after the canonical write succeeds.
+
+When a student confirmation changes `Autoritzacions` -> `autoritzacions.signatura_alumne`, the launcher must refresh `authorizations_cache` immediately after the canonical write succeeds.
+
+### `Dinantia` -> `cache_runs`
+
+This sheet stores one historical row per cache rebuild attempt.
+
+Required headers:
+
+| Header | Meaning |
+| --- | --- |
+| `id` | Autonumeric run ID. |
+| `started_at` | Rebuild start datetime. |
+| `finished_at` | Rebuild finish datetime. |
+| `status` | `ok` or `error`. |
+| `students_count` | Number of rows written to `students_cache`. |
+| `contacts_count` | Number of rows written to `contacts_cache`. |
+| `authorizations_count` | Number of rows written to `authorizations_cache`. |
+| `message` | Success or error summary. |
 
 ## Shared Table: `Dades alumnes` -> dynamic group sheet
 
 The logical table `Dades alumnes` contains local student data sheets.
 
-The sheet name is not fixed in the connector. It is read from `Dinantia` -> `class_groups`.`dades_alumnes_sheet` for the resolved group.
+The sheet name is not fixed in the connector. It is read from `Dinantia` -> `dinantia_2_dades_alumnes`.`dades_alumnes_sheet` for the resolved group.
 
 Rules:
 
 - `Dades alumnes` must be registered in the registry spreadsheet as a logical table.
 - The app must open the `Dades alumnes` spreadsheet through the registry.
-- The app must then open the sheet whose name is stored in `class_groups.dades_alumnes_sheet`.
+- The app must then open the sheet whose name is stored in `dinantia_2_dades_alumnes.dades_alumnes_sheet`.
 - If `dades_alumnes_sheet` is blank, the app must report a clear configuration or tutor-resolution error.
 - If the referenced sheet does not exist in `Dades alumnes`, the app must report a clear contextual error.
 
@@ -577,20 +747,22 @@ Additional values, such as phone or authorization fields, must be added to the c
 
 ## Student Group Tutor Resolution
 
-The app can resolve the teacher responsible for a Dinantia student group through `class_groups`, `carrecs`, and `Llista`.
+The app can resolve the Dinantia groups visible to a teacher through `teachers_2_dinantia`, `dinantia_2_dades_alumnes`, `carrecs`, and `Llista`.
 
 Resolution process:
 
-1. Start from `Dinantia` -> `class_groups`.
-2. Match `class_groups`.`tutor_carrec` to `Càrrega lectiva` -> `carrecs`.`carrec`.
-3. Read `carrecs`.`asignado?`.
-4. Match `carrecs`.`asignado?` to the teacher full name built from `Dades de professors` -> `Llista` as `NOM COGNOM1 COGNOM2`.
-5. Use the matched `Llista` row as the responsible teacher for the student group.
-6. Read the resolved `class_groups` row to obtain both:
-   - `dinantia_group_name`: Dinantia group ID.
-   - `dades_alumnes_sheet`: local `Dades alumnes` sheet name for the group.
+1. Match `carrecs`.`asignado?` to the teacher full name built from `Dades de professors` -> `Llista` as `NOM COGNOM1 COGNOM2`.
+2. Collect every matching `carrecs` row.
+3. Read `carrecs`.`carrec` from every matching row.
+4. Match each `carrecs`.`carrec` to `Dinantia` -> `teachers_2_dinantia`.`carrec` when such a row exists.
+5. Ignore matched responsibilities that do not have a `teachers_2_dinantia` row.
+6. Fail only if none of the teacher's responsibilities has a Dinantia mapping.
+7. Parse each matched `teachers_2_dinantia`.`dinantia_group_names` into one or more Dinantia group names.
+8. Merge groups from all mapped responsibilities, removing duplicates while preserving first-seen order.
+9. For each group name, match `Dinantia` -> `dinantia_2_dades_alumnes`.`dinantia_group_name`.
+10. Read `dinantia_2_dades_alumnes`.`dades_alumnes_sheet` for the group.
 
-String comparisons for `class_groups`.`tutor_carrec` to `carrecs`.`carrec`, and `carrecs`.`asignado?` to teacher full name, should trim surrounding whitespace.
+String comparisons for `teachers_2_dinantia`.`carrec` to `carrecs`.`carrec`, and `carrecs`.`asignado?` to teacher full name, should trim surrounding whitespace.
 
 ## Teacher Lookup By Email
 

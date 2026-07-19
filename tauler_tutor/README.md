@@ -2,7 +2,7 @@
 
 `tauler_tutor` is a Google Apps Script web app for tutor-facing student group management.
 
-The app resolves the logged-in teacher, finds the tutor group associated with that teacher, loads the group's students from Dinantia, enriches them with local school data, and provides tutor views for group information and contacts.
+The app resolves the logged-in teacher, finds every mapped responsibility associated with that teacher, loads the visible groups from the cache read model, and provides tutor views for students, contacts, and authorization status.
 
 ## Current Status
 
@@ -17,6 +17,7 @@ This app lives inside the parent workspace:
 ```text
 tutor_utils/
   auth_form/
+  form_launcher_example/
   tauler_tutor/
 ```
 
@@ -32,15 +33,17 @@ Local Apps Script files such as `.clasp.json` are intentionally ignored and must
 - Teacher lookup from `Dades de professors -> Llista`.
 - Substitute teacher handling through `Dades de professors -> leave_absence`.
 - Tutor responsibility lookup through `Càrrega lectiva -> carrecs`.
-- Dinantia group lookup through `Dinantia -> class_groups`.
-- Student list loaded from the Dinantia API.
-- Birthdate enrichment from `Dades alumnes`.
+- Dinantia group lookup through `Dinantia -> teachers_2_dinantia` and `Dinantia -> dinantia_2_dades_alumnes`.
+- Multi-responsibility and multi-group support.
+- Student list loaded from `Dinantia -> students_cache`.
+- Birthdate and age enrichment from cache data originally sourced from `Dades alumnes`.
 - Dynamic age calculation.
 - Sortable student table.
 - Contactes page for student contact accounts.
-- Autoritzacions page for read-only permission overview and missing-form launch action.
+- Autoritzacions page for read-only permission overview, form launch actions, refresh action, and read-only filled-form view.
 - Contact edit validation before sending updates to Dinantia.
 - Changelog entries for saved teacher-made changes.
+- Nightly cache rebuild function: `rebuildTutorPanelCache()`.
 
 ## Required Script Properties
 
@@ -51,6 +54,7 @@ The deployed Apps Script project requires these script properties:
 | `db` | Spreadsheet ID of the database registry spreadsheet. |
 | `dinantia_api_user` | Dinantia API Basic Auth user. |
 | `dinantia_api_secret` | Dinantia API Basic Auth secret. |
+| `launcher_internal_secret` | Shared secret used for trusted panel-to-launcher invitation requests. |
 
 Missing or blank required properties must produce clear configuration errors.
 
@@ -68,8 +72,9 @@ Current logical tables include:
 | --- | --- |
 | `Dades de professors` | `Llista`, `leave_absence` |
 | `Càrrega lectiva` | `carrecs` |
-| `Dinantia` | `class_groups`, `changelog` |
-| `Dades alumnes` | Dynamic group sheet from `class_groups.dades_alumnes_sheet` |
+| `Dinantia` | `dinantia_2_dades_alumnes`, `teachers_2_dinantia`, `students_cache`, `contacts_cache`, `authorizations_cache`, `cache_runs`, `changelog` |
+| `Dades alumnes` | Dynamic group sheet from `dinantia_2_dades_alumnes.dades_alumnes_sheet` |
+| `Autoritzacions` | `autoritzacions`, `persones_autoritzades`, `verification_tokens` |
 
 The connector must not hardcode spreadsheet IDs. Spreadsheet IDs are read from the registry spreadsheet configured by the `db` script property.
 
@@ -82,12 +87,12 @@ On access:
 3. Resolve the current user email.
 4. Find the teacher in `Dades de professors -> Llista` by `CORREU INSTIT`.
 5. If the teacher is a substitute, resolve the main teacher through active `leave_absence` rows.
-6. Find the main teacher's tutor responsibility in `Càrrega lectiva -> carrecs`.
-7. Map that responsibility to a Dinantia group ID in `Dinantia -> class_groups`.
-8. Fetch students in the group from Dinantia.
-9. Enrich students with local birthdates from `Dades alumnes`.
-10. Fetch contacts for the students.
-11. Render the `Inici` page by default.
+6. Find every main-teacher responsibility in `Càrrega lectiva -> carrecs`.
+7. Map those responsibilities to Dinantia groups through `Dinantia -> teachers_2_dinantia`.
+8. Validate every group through `Dinantia -> dinantia_2_dades_alumnes`.
+9. Load the visible student rows from `Dinantia -> students_cache`.
+10. Render the `Inici` page by default.
+11. Load contacts and authorizations from cache-backed endpoints when their pages are opened.
 
 If the user cannot be mapped to a tutor group, the app shows the configured Catalan tutor error message.
 
@@ -120,6 +125,7 @@ node --check Code.js
 node --check WebAppService.js
 node --check ContactService.js
 node --check DinantiaService.js
+node --check CacheService.js
 ```
 
 Client inline script parse check:

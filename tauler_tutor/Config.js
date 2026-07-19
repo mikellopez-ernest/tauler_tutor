@@ -10,7 +10,8 @@ var APP_CONFIG = {
 var SCRIPT_PROPERTIES = {
   databaseId: 'db',
   dinantiaUser: 'dinantia_api_user',
-  dinantiaSecret: 'dinantia_api_secret'
+  dinantiaSecret: 'dinantia_api_secret',
+  launcherInternalSecret: 'launcher_internal_secret'
 };
 
 var TABLES = {
@@ -25,10 +26,16 @@ var SHEETS = {
   teacherList: 'Llista',
   leaveAbsence: 'leave_absence',
   responsibilities: 'carrecs',
-  classGroups: 'class_groups',
+  groupStudentSheets: 'dinantia_2_dades_alumnes',
+  teacherGroups: 'teachers_2_dinantia',
   changelog: 'changelog',
+  studentsCache: 'students_cache',
+  contactsCache: 'contacts_cache',
+  authorizationsCache: 'authorizations_cache',
+  cacheRuns: 'cache_runs',
   registry: 'tables',
-  authorizations: 'autoritzacions'
+  authorizations: 'autoritzacions',
+  verificationTokens: 'verification_tokens'
 };
 
 var HEADERS = {
@@ -45,9 +52,11 @@ var HEADERS = {
   responsibilityName: 'carrec',
   responsibilityAssignee: 'asignado?',
   classGroupDinantiaId: 'dinantia_group_name',
-  classGroupTutorResponsibility: 'tutor_carrec',
+  classGroupTeacherResponsibility: 'carrec',
+  classGroupDinantiaNames: 'dinantia_group_names',
   classGroupStudentDataSheet: 'dades_alumnes_sheet',
   studentId: 'ID',
+  studentEmail: 'Correu alumne',
   studentBirthdate: 'Data Naixement',
   changelogId: 'id',
   changelogDatetime: 'datetime',
@@ -56,7 +65,15 @@ var HEADERS = {
   changelogOldValue: 'old_value',
   changelogNewValue: 'new_value',
   changelogStudentId: 'student_id',
-  authorizationStudentId: 'id_student'
+  authorizationStudentId: 'id_student',
+  cacheRunId: 'id',
+  cacheRunStartedAt: 'started_at',
+  cacheRunFinishedAt: 'finished_at',
+  cacheRunStatus: 'status',
+  cacheRunStudents: 'students_count',
+  cacheRunContacts: 'contacts_count',
+  cacheRunAuthorizations: 'authorizations_count',
+  cacheRunMessage: 'message'
 };
 
 var CHANGELOG_FIELDS = {

@@ -22,6 +22,8 @@ The form lets the user:
 
 The endpoint must persist submitted responses to the registry-backed `Autoritzacions` database. Each submitted form creates one parent response row and zero or more authorized-person rows.
 
+After a successful submission, the endpoint must refresh `Dinantia` -> `authorizations_cache` so the tutor panel can show the new authorization without waiting for the nightly cache rebuild.
+
 ## Deployment And Access
 
 The Apps Script project is configured as a web app.
@@ -372,6 +374,8 @@ The registry spreadsheet must map `Autoritzacions` to the spreadsheet that conta
 | --- | --- | --- |
 | `Autoritzacions` | `autoritzacions` | One row per submitted form response. |
 | `Autoritzacions` | `persones_autoritzades` | Zero-to-many authorized pickup people for each response. |
+| `Autoritzacions` | `verification_tokens` | Invitation/token history used to include latest invitation metadata in the cache. |
+| `Dinantia` | `authorizations_cache` | Fast authorization read model used by `tauler_tutor`. |
 
 Relationship:
 
@@ -422,7 +426,8 @@ The server-side function must:
 7. Append exactly one row to `Autoritzacions` -> `autoritzacions`.
 8. Extract all authorized pickup people from the submitted form data.
 9. For each non-empty authorized person, generate a new `id` and append one row to `Autoritzacions` -> `persones_autoritzades` using the same `resposta_id`.
-10. Return a success response containing at least the generated `resposta_id`.
+10. Refresh `Dinantia` -> `authorizations_cache` from `Autoritzacions` -> `autoritzacions` and `Autoritzacions` -> `verification_tokens`.
+11. Return a success response containing at least the generated `resposta_id`.
 
 A submitted response can have zero authorized pickup people. In that case, the app must still create the parent `autoritzacions` row and create no rows in `persones_autoritzades`.
 
@@ -515,8 +520,22 @@ Required behavior:
 - If child row creation fails after parent creation, the app must return a clear error and preserve enough diagnostic context for manual repair.
 - The server response must not expose credentials or sensitive implementation details.
 - The client must show a clear user-facing success or failure message.
+- After the user accepts the success dialog, the page must redirect automatically to `https://agora.xtec.cat/sesernestlluch-cunit/`.
 
 Google Sheets does not provide full database transactions, so implementation must be careful with write order, error reporting, and idempotency.
+
+### Authorization Cache Write-Through
+
+The canonical write remains `Autoritzacions` -> `autoritzacions`.
+
+After the canonical row is appended, the form endpoint must rebuild `Dinantia` -> `authorizations_cache`.
+
+Rules:
+
+- Preserve row 1 headers in `authorizations_cache`.
+- Overwrite data rows in `authorizations_cache`.
+- Keep the latest authorization row per `id_student`.
+- Include latest invitation metadata from `Autoritzacions` -> `verification_tokens`.
 
 ### Idempotency
 

@@ -94,10 +94,11 @@ function normalizeSiNo_(value) {
 }
 
 function authorizeServices() {
-  var databaseId = requireScriptProperty_('db');
-  var registry = loadTableRegistry_();
+  var databaseId = getRequiredScriptProperty_('db');
+  var registry = loadRegistry_();
   SpreadsheetApp.openById(databaseId).getName();
   SpreadsheetApp.openById(requireRegistryEntry_(registry, FORM_CONFIG.tableAuthorizations)).getName();
+  SpreadsheetApp.openById(requireRegistryEntry_(registry, FORM_CONFIG.tableDinantia)).getSheetByName(FORM_CONFIG.sheetAuthorizationsCache).getName();
   PropertiesService.getScriptProperties().getProperties();
   return 'Authorization OK';
 }

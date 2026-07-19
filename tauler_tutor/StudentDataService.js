@@ -1,14 +1,17 @@
-function enrichStudentsWithLocalBirthdates_(students, studentDataSheetName) {
+function enrichStudentsWithLocalBirthdates_(students, studentDataSheetName, groupName) {
   var registry = loadTableRegistry_();
   var sheet = openTableSheet_(registry, TABLES.students, studentDataSheetName);
   var localDataById = loadLocalStudentDataByDinantiaId_(sheet, studentDataSheetName);
 
   return students.map(function(student) {
-    var localInfo = localDataById[codeKey_(student.id)] || { birthdate: { display: '', iso: '' }, document: '', studyType: inferStudyType_(studentDataSheetName), isAdult: '', is14Plus: '' };
+    var localInfo = localDataById[codeKey_(student.id)] || { birthdate: { display: '', iso: '' }, document: '', email: '', studyType: inferStudyType_(studentDataSheetName), isAdult: '', is14Plus: '' };
     var age = calculateAge_(localInfo.birthdate.iso);
     return {
       id: student.id,
       name: student.name,
+      email: localInfo.email || '',
+      groupName: groupName || '',
+      studentDataSheetName: studentDataSheetName || '',
       parents: student.parents || [],
       birthdate: localInfo.birthdate.display,
       birthdateSortKey: localInfo.birthdate.iso,
@@ -24,6 +27,7 @@ function enrichStudentsWithLocalBirthdates_(students, studentDataSheetName) {
 function loadLocalStudentDataByDinantiaId_(sheet, contextName) {
   var headerMap = requireHeaders_(sheet, [
     HEADERS.studentId,
+    HEADERS.studentEmail,
     HEADERS.studentBirthdate
   ], TABLES.students + ' -> ' + sheet.getName());
   var values = sheet.getDataRange().getValues();
@@ -48,6 +52,7 @@ function loadLocalStudentDataByDinantiaId_(sheet, contextName) {
     });
     dataById[id] = {
       birthdate: normalizeBirthdate_(row[headerMap[HEADERS.studentBirthdate]]),
+      email: String(row[headerMap[HEADERS.studentEmail]] || '').trim().toLowerCase(),
       document: documentValue,
       studyType: inferStudyType_(contextName)
     };
