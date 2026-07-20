@@ -17,5 +17,6 @@ var FORM_CONFIG = {
   sheetAuthorizations: 'autoritzacions',
   sheetAuthorizedPeople: 'persones_autoritzades',
   sheetVerificationTokens: 'verification_tokens',
-  sheetAuthorizationsCache: 'authorizations_cache'
+  sheetAuthorizationsCache: 'authorizations_cache',
+  launcherUrl: 'https://script.google.com/macros/s/AKfycbwOgYsVCf-MdEEbpGFFmWyjMB__MrgDowQuo7W6Ky8ymZwkY_-c7gUPm9QGTGUxiYGrYg/exec'
 };

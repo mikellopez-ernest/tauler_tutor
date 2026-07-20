@@ -56,3 +56,10 @@ function loadContactsForStudents(students) {
 function sendAuthorizationInvitations(requests) {
   return sendAuthorizationInvitations_(requests);
 }
+
+/**
+ * Client-callable endpoint to create a short-lived print/review link.
+ */
+function createAuthorizationPrintLink(request) {
+  return createAuthorizationPrintLink_(request);
+}

@@ -148,9 +148,12 @@ When a student has a submitted authorization row, the student-name cell must sho
 Behavior:
 
 - The icon appears only when the student has a filled form.
-- The icon opens a window or modal with a read-only version of the submitted form data.
-- The read-only view must not allow edits or resubmission.
-- The view should organize fields in logical sections, not as an unstructured raw dump.
+- The icon requests a short-lived print/review link from the server and opens it in a new browser tab.
+- The opened view must render the exact `auth_form` UI populated with the submitted response.
+- The form controls must be disabled/read-only.
+- The form should be expanded and printable so the tutor can print it if a family asks for a paper copy.
+- The link must be created through `form_launcher_example` with a trusted server-to-server `panel_print_link` action.
+- The tutor panel must not place raw tokens, token hashes, or internal secrets in client-visible state.
 
 This action is required. Non-boolean fields must not disappear from the tutor workflow just because the main matrix uses tick/X icons for boolean answers.
 
@@ -167,6 +170,12 @@ Status rules:
 | Parent/responsible signature is not true | `Pendent tutors` | `Enviar a tutors` |
 | Parent/responsible signature is true and student signature is not true | `Pendent alumne` | `Enviar a alumne` |
 | Parent/responsible signature is true and student signature is true | `Complet` | None |
+
+Adult-student exception:
+
+- If the loaded student is 18 or older and has no authorization row, show `Pendent alumne` with `Enviar a alumne`.
+- If the loaded student is 18 or older and `signatura_alumne` is not true, show `Pendent alumne` with `Enviar a alumne`.
+- Do not send parent invitations for adult students.
 
 The inline action must appear behind or beside the status text, not in the `Alumne` column.
 
@@ -203,6 +212,13 @@ The launcher response must be JSON with a summary:
 | `sent` | Number of emails sent. |
 | `skipped` | Number of recipients skipped, for example missing or invalid email. |
 | `errors` | Safe error summaries. |
+
+For document/print links, the panel sends `action = panel_print_link` server-side with the same shared secret and receives:
+
+| Field | Meaning |
+| --- | --- |
+| `ok` | Whether the link was created. |
+| `url` | Short-lived launcher URL that POST-forwards to `auth_form` in `readonly_print` mode. |
 
 ### Bulk Invitation Button
 

@@ -450,10 +450,21 @@
     }
 
     function authorizationStatus(student, auth) {
-      if (!auth) return { label: 'Pendent', target: 'parents', sortKey: '0' };
+      var adult = isAdultStudent(student);
+      if (!auth) return adult ? { label: 'Pendent alumne', target: 'student', sortKey: '2' } : { label: 'Pendent', target: 'parents', sortKey: '0' };
+      if (adult) {
+        if (parseBooleanValue(auth.signatura_alumne) !== true) return { label: 'Pendent alumne', target: 'student', sortKey: '2' };
+        return { label: 'Complet', target: '', sortKey: '3' };
+      }
       if (parseBooleanValue(auth.signatura_responsable) !== true) return { label: 'Pendent tutors', target: 'parents', sortKey: '1' };
       if (parseBooleanValue(auth.signatura_alumne) !== true) return { label: 'Pendent alumne', target: 'student', sortKey: '2' };
       return { label: 'Complet', target: '', sortKey: '3' };
+    }
+
+    function isAdultStudent(student) {
+      var adultText = String(student && student.isAdult || '').trim().toLowerCase();
+      if (adultText === 'si' || adultText === 'sí' || adultText === 'true') return true;
+      return Number(student && student.age) >= 18;
     }
 
     function appendAuthorizationDetailCell(row, student, auth, latestInvitation) {
@@ -596,7 +607,7 @@
         docButton.setAttribute('aria-label', 'Mostra el formulari de ' + (student.name || 'alumne'));
         docButton.textContent = '📄';
         docButton.addEventListener('click', function() {
-          showReadonlyAuthorizationDocument(student, auth);
+          openReadonlyAuthorizationDocument(student, auth, docButton);
         });
         wrapper.appendChild(docButton);
       }
@@ -607,45 +618,41 @@
       row.appendChild(cell);
     }
 
-    function showReadonlyAuthorizationDocument(student, auth) {
-      var modal = document.getElementById('authorization-detail-modal');
-      var body = document.getElementById('authorization-detail-body');
-      if (!modal || !body) return;
-      document.getElementById('authorization-detail-title').textContent = 'Formulari de ' + (student.name || 'l alumne');
-      body.textContent = '';
-
-      [
-        {
-          title: 'Dades generals',
-          fields: [['resposta_id','Resposta'], ['data_hora_enviament','Enviament'], ['data_signatura','Data signatura'], ['idioma_formulari','Idioma'], ['codi_document','Codi document'], ['tipus_alumne','Tipus alumne'], ['alumne_nom','Alumne/a'], ['alumne_document','Document']]
-        },
-        {
-          title: 'Responsable',
-          fields: [['responent_nom_sencer','Nom sencer'], ['responent_telefon','Telefon'], ['responsable_nom','Nom responsable'], ['responsable_document','Document responsable']]
-        },
-        {
-          title: 'Sortides i comunicacions',
-          fields: [['sortida_sola','Sortida sola'], ['sortida_esbarjo','Sortida esbarjo'], ['sortides_municipi','Sortides municipi'], ['comunicacio_academica','Comunicacio academica'], ['comunicacio_salut','Comunicacio salut']]
-        },
-        {
-          title: 'Imatge, dades i obres',
-          fields: [['declaracio_plataformes','Declaracio plataformes'], ['plataformes_externes','Plataformes externes'], ['imatge_intranet','Imatge intranet'], ['imatge_web','Imatge web'], ['imatge_externa','Imatge externa'], ['obra_oberta','Obra oberta'], ['obra_centre','Obra centre'], ['obra_biblioteca','Obra biblioteca'], ['obra_repositori','Obra repositori']]
-        },
-        {
-          title: 'Contacte i salut',
-          fields: [['acad_contacte_nom','Contacte academic'], ['acad_contacte_email','Email academic'], ['acad_contacte_relacio','Relacio academica'], ['emergencia_nom','Emergencia'], ['emergencia_telefon','Telefon emergencia'], ['emergencia_relacio','Relacio emergencia'], ['problemes_salut','Problemes salut'], ['altres_salut','Altres salut'], ['medicacio','Medicacio'], ['posologia','Posologia'], ['dosi','Dosi'], ['administracio_medicacio','Administracio medicacio'], ['paracetamol','Paracetamol']]
-        },
-        {
-          title: 'Signatures i validacio',
-          fields: [['lloc','Lloc'], ['signatura_responsable','Signatura responsable'], ['signatura_alumne','Signatura alumne/a'], ['estat_validacio','Estat validacio'], ['observacions_internes','Observacions internes']]
-        }
-      ].forEach(function(group) {
-        appendDetailGroup(body, group.title, group.fields.map(function(pair) {
-          return { label: pair[1], value: formatReadonlyValue(auth[pair[0]]) };
-        }).filter(function(item) { return item.value; }));
-      });
-
-      modal.classList.remove('is-hidden');
+    function openReadonlyAuthorizationDocument(student, auth, button) {
+      if (!auth || !auth.resposta_id) {
+        alert('No hi ha cap formulari per obrir.');
+        return;
+      }
+      button.disabled = true;
+      google.script.run
+        .withSuccessHandler(function(result) {
+          button.disabled = false;
+          if (!result || !result.url) {
+            alert('No s ha pogut crear l enllaç del formulari.');
+            return;
+          }
+          window.open(result.url, '_blank', 'noopener');
+        })
+        .withFailureHandler(function(error) {
+          button.disabled = false;
+          alert('No s ha pogut obrir el formulari: ' + (error && error.message ? error.message : error));
+        })
+        .createAuthorizationPrintLink({
+          student: {
+            id: student.id || '',
+            name: student.name || '',
+            email: student.email || '',
+            document: student.document || '',
+            studyType: student.studyType || '',
+            isAdult: student.isAdult || '',
+            is14Plus: student.is14Plus || '',
+            age: student.age || '',
+            birthdateIso: student.birthdateSortKey || ''
+          },
+          authorization: {
+            resposta_id: auth.resposta_id || ''
+          }
+        });
     }
 
     function appendDetailGroup(body, titleText, values) {

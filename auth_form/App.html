@@ -1,15 +1,18 @@
 <script>
 // Inicialització de la interfície multilingüe.
 window.addEventListener('DOMContentLoaded', () => {
-  I18n.init({ defaultLanguage: 'ca', storageKey: 'autoritzacionsIdioma' });
-  fillForm(window.INITIAL_FORM_DATA || {});
+  const initialData = window.INITIAL_FORM_DATA || {};
+  I18n.init({ defaultLanguage: initialData.idioma_formulari || 'ca', storageKey: 'autoritzacionsIdioma' });
+  fillForm(initialData);
   setupRespondentStep();
   setupAuthorizedPeopleVisibility();
   setupExternalPlatformsDependency();
+  applyFormMode(initialData);
 });
 
 const form = document.getElementById('authorizationForm');
 const SUCCESS_REDIRECT_URL = 'https://agora.xtec.cat/sesernestlluch-cunit/';
+let currentFormMode = '';
 let personCounter = 0;
 const typeConfig = {
   eso_menor14: {code:'A1746-V01-26', subtitle:"Escolarització de l'alumnat menor de catorze anys", responsible:true, studentSignature:false, esoExit:true, recess:false, academic:false, municipal:true, healthConsent:false, paracetamol:true, tis:true},
@@ -133,12 +136,25 @@ function applyType() {
 }
 document.querySelectorAll('[name="tipus_alumne"]').forEach(x=>x.addEventListener('change',()=>{applyType();setSetupFromModel(x.value);}));
 
-function formToObject(){ updateSignatureFields(); const out={}; for(const [k,v] of new FormData(form).entries()) out[k]=v; out.curs_inici=document.getElementById('cursInici').value; out.curs_fi=document.getElementById('cursFi').value; out.idioma_formulari=I18n.currentLanguage||'ca'; return out; }
+function formToObject(){ updateSignatureFields(); const out={}; for(const [k,v] of new FormData(form).entries()) out[k]=v; out.curs_inici=document.getElementById('cursInici').value; out.curs_fi=document.getElementById('cursFi').value; out.idioma_formulari=I18n.currentLanguage||'ca'; out.form_mode=currentFormMode||document.getElementById('formMode').value||''; if(out.verified_actor_type==='student'&&out.isAdult==='si') out.signatura_alumne='true'; return out; }
 function fillForm(data){
+  Object.keys(data||{}).filter(key=>/^persona_autoritzada_nom_\d+$/.test(key)).sort((a,b)=>Number(a.match(/\d+$/)[0])-Number(b.match(/\d+$/)[0])).forEach(key=>{
+    const index=key.match(/\d+$/)[0];
+    addAuthorizedPerson({nom:data[key]||'', qualitat:data['persona_autoritzada_qualitat_'+index]||''});
+  });
   Object.entries(data||{}).forEach(([key,value])=>{
     if(key==='curs_inici'||key==='curs_fi'){document.getElementById(key==='curs_inici'?'cursInici':'cursFi').value=value;return;}
     if(key==='studyType'||key==='isAdult'||key==='is14Plus'){document.getElementById(key).value=value;return;}
     if(key==='id_student'){document.getElementById('idStudent').value=value;return;}
+    if(key==='form_mode'||key==='mode'){document.getElementById('formMode').value=value;currentFormMode=value;return;}
+    if(key==='resposta_id'){document.getElementById('responseId').value=value;return;}
+    if(key==='verified_actor_type'){document.getElementById('verifiedActorType').value=value;return;}
+    if(key==='verified_dinantia_account_id'){document.getElementById('verifiedDinantiaAccountId').value=value;return;}
+    if(key==='verified_email'){document.getElementById('verifiedEmail').value=value;return;}
+    if(key==='launcher_token'){document.getElementById('launcherToken').value=value;return;}
+    if(key==='responent_nom_sencer'){document.getElementById('responentNomSencer').value=value;document.getElementById('hiddenRespondentName').value=value;}
+    if(key==='responent_telefon'){document.getElementById('responentTelefon').value=value;document.getElementById('hiddenRespondentPhone').value=value;}
+    if(/^persona_autoritzada_/.test(key)) return;
     form.querySelectorAll(`[name="${CSS.escape(key)}"]`).forEach(field=>{if(field.type==='radio'||field.type==='checkbox') field.checked=field.value===value||value===true; else if(!key.startsWith('signatura_')) field.value=value;});
   });
   selectModelFromSetup();
@@ -169,6 +185,71 @@ function setupRespondentStep(){
     document.getElementById('initialSetup').classList.remove('is-hidden');
     form.classList.remove('is-hidden');
   });
+}
+
+function applyFormMode(data) {
+  currentFormMode = data.form_mode || data.mode || currentFormMode || '';
+  const skipRespondent = ['edit_owner','readonly','readonly_print','student_confirm'].includes(currentFormMode);
+  if (skipRespondent) {
+    document.getElementById('respondentStep').classList.add('is-hidden');
+    document.getElementById('initialSetup').classList.add('is-hidden');
+    form.classList.remove('is-hidden');
+  }
+  if (currentFormMode === 'edit_owner') {
+    document.getElementById('submitForm').textContent = 'Desa els canvis';
+  }
+  if (['readonly','readonly_print','student_confirm'].includes(currentFormMode)) {
+    setReadOnlyMode(currentFormMode === 'student_confirm');
+  }
+}
+
+function setReadOnlyMode(allowStudentConfirm) {
+  document.querySelectorAll('.translate-box input,.translate-box select,#authorizationForm input,#authorizationForm select,#authorizationForm textarea,#authorizationForm button').forEach(field => {
+    field.disabled = true;
+  });
+  document.querySelectorAll('.accordion-collapse').forEach(section => section.classList.add('show'));
+  document.querySelectorAll('.accordion-button').forEach(button => {
+    button.classList.remove('collapsed');
+    button.disabled = false;
+  });
+  const actions = document.querySelector('.sticky-actions .d-flex');
+  actions.textContent = '';
+  const printButton = document.createElement('button');
+  printButton.className = 'btn btn-outline-secondary';
+  printButton.type = 'button';
+  printButton.textContent = 'Imprimeix';
+  printButton.addEventListener('click', () => window.print());
+  actions.appendChild(printButton);
+  if (allowStudentConfirm) {
+    const confirmButton = document.createElement('button');
+    confirmButton.className = 'btn btn-primary';
+    confirmButton.type = 'button';
+    confirmButton.textContent = 'Confirmo';
+    confirmButton.addEventListener('click', confirmStudentAuthorization);
+    actions.appendChild(confirmButton);
+  }
+}
+
+function confirmStudentAuthorization() {
+  const token = document.getElementById('launcherToken').value;
+  const respostaId = document.getElementById('responseId').value;
+  const launcherUrl = (window.INITIAL_FORM_DATA || {}).launcher_url || '';
+  if (!token || !respostaId || !launcherUrl) {
+    alert('No s ha pogut confirmar: falten dades de verificació.');
+    return;
+  }
+  const formPost = document.createElement('form');
+  formPost.method = 'post';
+  formPost.action = launcherUrl;
+  [['action','confirm_student'],['token',token],['resposta_id',respostaId]].forEach(([name,value]) => {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = name;
+    input.value = value;
+    formPost.appendChild(input);
+  });
+  document.body.appendChild(formPost);
+  formPost.submit();
 }
 
 function isValidPhone(value){const compact=String(value||'').trim().replace(/[\s().-]/g,'');return /^\+?\d{8,15}$/.test(compact)||/^00\d{8,15}$/.test(compact)||/^[6789]\d{8}$/.test(compact);}

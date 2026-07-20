@@ -1,4 +1,5 @@
 function saveAuthorizationResponse_(payload) {
+  var tokenRecord = validateLauncherTokenForSave_(payload || {});
   var registry = loadRegistry_();
   var spreadsheet = SpreadsheetApp.openById(requireRegistryEntry_(registry, FORM_CONFIG.tableAuthorizations));
   var authSheet = openSheet_(spreadsheet, FORM_CONFIG.sheetAuthorizations);
@@ -8,16 +9,41 @@ function saveAuthorizationResponse_(payload) {
   requireHeaders_(authHeaders, ['resposta_id', 'data_hora_enviament'], FORM_CONFIG.sheetAuthorizations);
   requireHeaders_(peopleHeaders, ['id', 'resposta_id', 'nom_sencer', 'qualitat_de'], FORM_CONFIG.sheetAuthorizedPeople);
 
-  var respostaId = 'RSP-' + Utilities.getUuid();
   var now = Utilities.formatDate(new Date(), FORM_CONFIG.timezone, "yyyy-MM-dd'T'HH:mm:ssXXX");
   var normalized = normalizeAuthorizationPayload_(payload);
+  var mode = String(payload.form_mode || payload.mode || '').trim();
+  var existingResponseId = String(payload.resposta_id || '').trim();
+  var updateExisting = mode === 'edit_owner' && existingResponseId;
+  var respostaId = updateExisting ? existingResponseId : 'RSP-' + Utilities.getUuid();
+  var existingRow = updateExisting ? findRowByHeaderValue_(authSheet, authHeaders, 'resposta_id', existingResponseId) : null;
+  if (updateExisting && !existingRow) throw new Error('Authorization response not found for update: ' + existingResponseId);
+
   normalized.resposta_id = respostaId;
-  normalized.data_hora_enviament = now;
+  if (!updateExisting) normalized.data_hora_enviament = now;
   normalized.data_signatura = Utilities.formatDate(new Date(), FORM_CONFIG.timezone, 'yyyy-MM-dd');
   if (!normalized.estat_validacio) normalized.estat_validacio = '';
   if (!normalized.observacions_internes) normalized.observacions_internes = '';
+  normalized.updated_at = now;
+  normalized.updated_by_email = normalizeEmail_((tokenRecord && tokenRecord.email) || payload.verified_email || payload.updated_by_email || payload.submitted_by_email);
+  if (!updateExisting) {
+    normalized.submitted_by_dinantia_account_id = String((tokenRecord && tokenRecord.dinantia_account_id) || payload.verified_dinantia_account_id || '').trim();
+    normalized.submitted_by_email = normalizeEmail_((tokenRecord && tokenRecord.email) || payload.verified_email || payload.submitted_by_email);
+  }
 
-  appendObjectRow_(authSheet, authHeaders, normalized);
+  if (updateExisting) {
+    var existing = objectFromRow_(authSheet.getRange(existingRow, 1, 1, authSheet.getLastColumn()).getValues()[0], authHeaders);
+    normalized.data_hora_enviament = existing.data_hora_enviament || now;
+    normalized.submitted_by_dinantia_account_id = existing.submitted_by_dinantia_account_id || normalized.submitted_by_dinantia_account_id || '';
+    normalized.submitted_by_email = existing.submitted_by_email || normalized.submitted_by_email || '';
+    normalized.student_confirmed_at = existing.student_confirmed_at || '';
+    normalized.student_confirmed_email = existing.student_confirmed_email || '';
+    if (normalizeBooleanForSheet_(existing.signatura_alumne) === true) normalized.signatura_alumne = true;
+    if (normalizeBooleanForSheet_(existing.signatura_responsable) === true) normalized.signatura_responsable = true;
+    updateObjectRow_(authSheet, authHeaders, existingRow, normalized);
+    deleteAuthorizedPeopleForResponse_(peopleSheet, peopleHeaders, respostaId);
+  } else {
+    appendObjectRow_(authSheet, authHeaders, normalized);
+  }
 
   var people = extractAuthorizedPeople_(payload);
   people.forEach(function(person) {
@@ -30,8 +56,9 @@ function saveAuthorizationResponse_(payload) {
   });
 
   refreshAuthorizationsCache_();
+  markLauncherTokenUsedForEditableSave_(payload || {}, tokenRecord);
 
-  return { ok: true, resposta_id: respostaId, persones_autoritzades: people.length };
+  return { ok: true, resposta_id: respostaId, persones_autoritzades: people.length, updated: updateExisting };
 }
 
 function normalizeAuthorizationPayload_(payload) {
@@ -40,7 +67,8 @@ function normalizeAuthorizationPayload_(payload) {
     'idioma_formulari','codi_document','tipus_alumne','curs_inici','curs_fi','centre_nom','centre_codi','municipi','centre_email',
     'alumne_nom','alumne_document','id_student','responent_nom_sencer','responent_telefon','responsable_nom','responsable_document',
     'plataformes_externes','acad_contacte_nom','acad_contacte_email','acad_contacte_relacio','emergencia_nom','emergencia_telefon',
-    'emergencia_relacio','problemes_salut','altres_salut','medicacio','posologia','dosi','lloc','data_signatura'
+    'emergencia_relacio','problemes_salut','altres_salut','medicacio','posologia','dosi','lloc','data_signatura',
+    'submitted_by_dinantia_account_id','submitted_by_email','updated_at','updated_by_email','student_confirmed_at','student_confirmed_email'
   ];
   textFields.forEach(function(field) {
     out[field] = String(payload[field] === null || payload[field] === undefined ? '' : payload[field]).trim();
@@ -56,6 +84,24 @@ function normalizeAuthorizationPayload_(payload) {
   return out;
 }
 
+function loadAuthorizationResponse_(respostaId) {
+  var registry = loadRegistry_();
+  var spreadsheet = SpreadsheetApp.openById(requireRegistryEntry_(registry, FORM_CONFIG.tableAuthorizations));
+  var authSheet = openSheet_(spreadsheet, FORM_CONFIG.sheetAuthorizations);
+  var peopleSheet = openSheet_(spreadsheet, FORM_CONFIG.sheetAuthorizedPeople);
+  var authHeaders = getHeaderMap_(authSheet);
+  var peopleHeaders = getHeaderMap_(peopleSheet);
+  var rowNumber = findRowByHeaderValue_(authSheet, authHeaders, 'resposta_id', respostaId);
+  if (!rowNumber) throw new Error('Authorization response not found: ' + respostaId);
+  var out = objectFromRow_(authSheet.getRange(rowNumber, 1, 1, authSheet.getLastColumn()).getValues()[0], authHeaders);
+  var people = findAuthorizedPeopleForResponse_(peopleSheet, peopleHeaders, respostaId);
+  people.forEach(function(person, index) {
+    out['persona_autoritzada_nom_' + (index + 1)] = person.nom_sencer || '';
+    out['persona_autoritzada_qualitat_' + (index + 1)] = person.qualitat_de || '';
+  });
+  return out;
+}
+
 function normalizeBooleanForSheet_(value) {
   if (value === true) return true;
   if (value === false) return false;
@@ -64,6 +110,104 @@ function normalizeBooleanForSheet_(value) {
   if (['si', 'sí', 'true', '1', 'acceptada', 'on'].indexOf(text) !== -1) return true;
   if (['no', 'false', '0'].indexOf(text) !== -1) return false;
   return '';
+}
+
+function validateLauncherTokenForForm_(prefill) {
+  var mode = String(prefill.form_mode || prefill.mode || '').trim();
+  if (!mode) return null;
+  var token = String(prefill.launcher_token || '').trim();
+  if (!token) throw new Error('Missing launcher verification token.');
+  var record = validateLauncherToken_(token);
+  assertTokenMatchesPayload_(record, prefill);
+  return record;
+}
+
+function validateLauncherTokenForSave_(payload) {
+  var mode = String(payload.form_mode || payload.mode || '').trim();
+  if (!mode) throw new Error('The authorization form must be opened through the verified launcher before it can be submitted.');
+  if (['new_parent', 'new_student_adult', 'edit_owner'].indexOf(mode) === -1) return null;
+  var token = String(payload.launcher_token || '').trim();
+  if (!token) throw new Error('Missing launcher verification token.');
+  var record = validateLauncherToken_(token);
+  assertTokenMatchesPayload_(record, payload);
+  if (mode === 'edit_owner' && codeKey_(record.dinantia_account_id) !== codeKey_(payload.verified_dinantia_account_id)) {
+    throw new Error('Launcher token does not match the original respondent.');
+  }
+  return record;
+}
+
+function validateLauncherToken_(rawToken) {
+  expireOldLauncherTokens_();
+  var hash = hashLauncherToken_(rawToken);
+  var sheet = openTableSheetFromRegistry_(FORM_CONFIG.tableAuthorizations, FORM_CONFIG.sheetVerificationTokens);
+  var h = getHeaderMap_(sheet);
+  requireHeaders_(h, ['token_hash', 'status', 'expires_at', 'sender', 'email', 'student_id', 'resposta_id'], FORM_CONFIG.sheetVerificationTokens);
+  var values = sheet.getDataRange().getValues();
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][h.token_hash] || '').trim() !== hash) continue;
+    var record = objectFromRow_(values[i], h);
+    record._rowNumber = i + 1;
+    if (record.status === 'revoked') throw new Error('Launcher token revoked.');
+    if (record.status === 'used') throw new Error('Launcher token already used.');
+    if (new Date(record.expires_at).getTime() < new Date().getTime()) {
+      sheet.getRange(i + 1, h.status + 1).setValue('expired');
+      throw new Error('Launcher token expired.');
+    }
+    return record;
+  }
+  throw new Error('Launcher token not found.');
+}
+
+function assertTokenMatchesPayload_(record, payload) {
+  var mode = String(payload.form_mode || payload.mode || '').trim();
+  var studentId = String(payload.id_student || payload.student_id || '').trim();
+  var respostaId = String(payload.resposta_id || '').trim();
+  if (record.student_id && studentId && codeKey_(record.student_id) !== codeKey_(studentId)) {
+    throw new Error('Launcher token does not match the student.');
+  }
+  if (record.resposta_id && respostaId && String(record.resposta_id) !== respostaId) {
+    throw new Error('Launcher token does not match the response.');
+  }
+  if (mode === 'new_parent' && record.sender !== 'parent') throw new Error('Launcher token does not match the parent flow.');
+  if (mode === 'new_student_adult' && record.sender !== 'student') throw new Error('Launcher token does not match the student flow.');
+  if (mode === 'student_confirm' && record.sender !== 'student') throw new Error('Launcher token does not match the student confirmation flow.');
+  if (mode === 'readonly_print' && record.sender !== 'tutor_print') throw new Error('Launcher token does not match the tutor print flow.');
+}
+
+function markLauncherTokenUsedForEditableSave_(payload, tokenRecord) {
+  var mode = String(payload.form_mode || payload.mode || '').trim();
+  if (['new_parent', 'new_student_adult', 'edit_owner'].indexOf(mode) === -1) return;
+  var record = tokenRecord || validateLauncherToken_(String(payload.launcher_token || '').trim());
+  var sheet = openTableSheetFromRegistry_(FORM_CONFIG.tableAuthorizations, FORM_CONFIG.sheetVerificationTokens);
+  var h = getHeaderMap_(sheet);
+  sheet.getRange(record._rowNumber, h.used_at + 1).setValue(Utilities.formatDate(new Date(), FORM_CONFIG.timezone, "yyyy-MM-dd'T'HH:mm:ssXXX"));
+  sheet.getRange(record._rowNumber, h.status + 1).setValue('used');
+}
+
+function expireOldLauncherTokens_() {
+  var sheet = openTableSheetFromRegistry_(FORM_CONFIG.tableAuthorizations, FORM_CONFIG.sheetVerificationTokens);
+  var h = getHeaderMap_(sheet);
+  if (h.status === undefined || h.expires_at === undefined) return;
+  var values = sheet.getDataRange().getValues();
+  var now = new Date().getTime();
+  for (var i = 1; i < values.length; i++) {
+    var status = String(values[i][h.status] || '').trim();
+    var expiresAt = new Date(values[i][h.expires_at]).getTime();
+    if (status === 'pending' && expiresAt && expiresAt < now) {
+      sheet.getRange(i + 1, h.status + 1).setValue('expired');
+    }
+  }
+}
+
+function openTableSheetFromRegistry_(tableName, sheetName) {
+  var registry = loadRegistry_();
+  var spreadsheet = SpreadsheetApp.openById(requireRegistryEntry_(registry, tableName));
+  return openSheet_(spreadsheet, sheetName);
+}
+
+function hashLauncherToken_(rawToken) {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(rawToken));
+  return Utilities.base64EncodeWebSafe(bytes);
 }
 
 function extractAuthorizedPeople_(payload) {
@@ -135,6 +279,59 @@ function appendObjectRow_(sheet, headerMap, object) {
     if (headerMap[key] !== undefined) row[headerMap[key]] = object[key];
   });
   sheet.appendRow(row);
+}
+
+function updateObjectRow_(sheet, headerMap, rowNumber, object) {
+  var width = sheet.getLastColumn();
+  var current = sheet.getRange(rowNumber, 1, 1, width).getValues()[0];
+  Object.keys(object).forEach(function(key) {
+    if (headerMap[key] !== undefined) current[headerMap[key]] = object[key];
+  });
+  sheet.getRange(rowNumber, 1, 1, width).setValues([current]);
+}
+
+function findRowByHeaderValue_(sheet, headerMap, header, value) {
+  if (headerMap[header] === undefined) throw new Error('Missing required header in ' + sheet.getName() + ': ' + header);
+  var target = String(value || '').trim();
+  if (!target) return null;
+  var values = sheet.getDataRange().getValues();
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][headerMap[header]] || '').trim() === target) return i + 1;
+  }
+  return null;
+}
+
+function findAuthorizedPeopleForResponse_(sheet, headerMap, respostaId) {
+  var values = sheet.getDataRange().getValues();
+  var people = [];
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][headerMap.resposta_id] || '').trim() !== respostaId) continue;
+    people.push({
+      nom_sencer: String(values[i][headerMap.nom_sencer] || '').trim(),
+      qualitat_de: String(values[i][headerMap.qualitat_de] || '').trim()
+    });
+  }
+  return people;
+}
+
+function deleteAuthorizedPeopleForResponse_(sheet, headerMap, respostaId) {
+  for (var row = sheet.getLastRow(); row >= 2; row--) {
+    if (String(sheet.getRange(row, headerMap.resposta_id + 1).getValue() || '').trim() === respostaId) {
+      sheet.deleteRow(row);
+    }
+  }
+}
+
+function normalizeEmail_(value) {
+  return String(value === null || value === undefined ? '' : value).trim().toLowerCase();
+}
+
+function codeKey_(value) {
+  return String(value === null || value === undefined ? '' : value)
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
 }
 
 function refreshAuthorizationsCache_() {

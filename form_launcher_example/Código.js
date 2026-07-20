@@ -19,6 +19,7 @@ function doPost(e) {
     var payload = parseRequest_(e);
     var action = stringValue_(payload.action);
     if (action === 'panel_invite') return handlePanelInvite_(payload);
+    if (action === 'panel_print_link') return handlePanelPrintLink_(payload);
     if (action === 'verify_parent') return handleParentVerification_(payload);
     if (action === 'verify_student') return handleStudentVerification_(payload);
     if (action === 'select_parent_student') return handleParentStudentSelection_(payload);
@@ -48,6 +49,36 @@ function handlePanelInvite_(payload) {
     return jsonOutput_(sendPanelParentInvites_(student, contacts, authorization, tutorEmail));
   } catch (error) {
     return jsonOutput_({ ok: false, sent: 0, skipped: 0, errors: [safeErrorMessage_(error)] });
+  }
+}
+
+function handlePanelPrintLink_(payload) {
+  try {
+    assertPanelSecret_(payload.secret);
+    var student = normalizePanelStudent_(payload.student);
+    var authorization = payload.authorization || {};
+    var respostaId = stringValue_(authorization.resposta_id || payload.resposta_id);
+    if (!student.id || !respostaId) return jsonOutput_({ ok: false, error: 'Missing student id or response id.' });
+    var token = createVerificationToken_({
+      sender: 'tutor_print',
+      email: normalizeEmail_(payload.tutor_email),
+      dinantia_account_id: '',
+      student_id: student.id,
+      resposta_id: respostaId,
+      metadata: {
+        source: 'tauler_tutor',
+        tutor_email: normalizeEmail_(payload.tutor_email),
+        student: student,
+        form_payload: {
+          form_mode: 'readonly_print',
+          resposta_id: respostaId,
+          id_student: student.id
+        }
+      }
+    });
+    return jsonOutput_({ ok: true, url: LAUNCHER_CONFIG.launcherUrl + '?token=' + encodeURIComponent(token.rawToken) });
+  } catch (error) {
+    return jsonOutput_({ ok: false, error: safeErrorMessage_(error) });
   }
 }
 
@@ -159,7 +190,12 @@ function handleParentVerification_(payload) {
   if (!parent) return renderNotRegistered_();
 
   var children = findStudentsForParent_(parent.id);
-  if (!children.length) return renderNotRegistered_();
+  var availableChildren = children.map(function(child) {
+    return enrichStudentForLauncher_(child);
+  }).filter(function(child) {
+    return Number(child.age) < 18;
+  });
+  if (!availableChildren.length) return renderNoMinorChildren_();
 
   var token = createVerificationToken_({
     sender: 'parent',
@@ -167,7 +203,7 @@ function handleParentVerification_(payload) {
     dinantia_account_id: parent.id,
     student_id: '',
     resposta_id: '',
-    metadata: { parent_name: parent.name || '', children: children }
+    metadata: { parent_name: parent.name || '', children: availableChildren }
   });
   sendVerificationEmail_(email, 'parent', token.rawToken);
   return renderCheckEmail_();
@@ -219,6 +255,15 @@ function handleTokenGet_(rawToken) {
     return renderParentStudentOutcome_(rawToken, child);
   }
   if (record.sender === 'student') return renderStudentOutcome_(rawToken, metadata.student, metadata.auth, metadata.isAdult);
+  if (record.sender === 'tutor_print') {
+    var printPayload = metadata.form_payload || {
+      form_mode: 'readonly_print',
+      resposta_id: record.resposta_id,
+      id_student: record.student_id
+    };
+    printPayload.launcher_token = rawToken;
+    return renderAutoPostToForm_(printPayload);
+  }
   return renderMessagePage_('Enllac no valid', 'Aquest enllac de verificacio no es valid.', true);
 }
 
@@ -240,25 +285,40 @@ function renderParentStudentOutcome_(rawToken, child) {
     return renderMessagePage_('Alumne/a major d edat', 'Aquest formulari ha de ser emplenat pel mateix alumne/a perquè es major d edat. Si teniu qualsevol dubte, poseu-vos en contacte amb el centre.', false);
   }
   if (auth) {
-    return renderReadonlyAuthorization_(auth, 'Aquest formulari ja consta com a emplenat.', 'Podeu consultar-ne la informacio en mode nomes lectura. Si detecteu alguna errada o voleu fer qualsevol consulta o reclamacio, poseu-vos en contacte amb el centre.', null, rawToken);
+    var record = validateToken_(rawToken, { allowPendingOnly: true });
+    var owner = codeKey_(auth.submitted_by_dinantia_account_id) && codeKey_(auth.submitted_by_dinantia_account_id) === codeKey_(record.dinantia_account_id);
+    return renderFormAccessMessage_(rawToken, formPayloadForExistingAuthorization_(auth, detailed, owner ? 'edit_owner' : 'readonly', record, rawToken), owner ? 'Formulari ja emplenat' : 'Aquest formulari ja consta com a emplenat.', owner ? 'Ja existeix una resposta per aquest alumne/a. Com que coincideix amb la persona que la va emplenar, pots revisar-la i desar canvis sobre la mateixa resposta.' : 'Podeu consultar-ne la informacio en mode nomes lectura. Si detecteu alguna errada o voleu fer qualsevol consulta o reclamacio, poseu-vos en contacte amb el centre.', owner ? 'EDITAR EL FORMULARI' : 'VEURE EL FORMULARI');
   }
   var payload = formPayloadFromStudent_(detailed);
+  payload.form_mode = 'new_parent';
+  payload.verified_actor_type = 'parent';
+  var parentRecord = validateToken_(rawToken, { allowPendingOnly: true });
+  payload.verified_dinantia_account_id = parentRecord.dinantia_account_id || '';
+  payload.verified_email = parentRecord.email || '';
   return renderFamilyMessage_(rawToken, payload);
 }
 
 function renderStudentOutcome_(rawToken, student, auth, isAdult) {
-  if (isAdult && !auth) return renderFamilyMessage_(rawToken, formPayloadFromStudent_(student));
+  if (isAdult && !auth) {
+    var adultPayload = formPayloadFromStudent_(student);
+    var adultRecord = validateToken_(rawToken, { allowPendingOnly: true });
+    adultPayload.form_mode = 'new_student_adult';
+    adultPayload.verified_actor_type = 'student';
+    adultPayload.verified_dinantia_account_id = adultRecord.dinantia_account_id || adultRecord.student_id || '';
+    adultPayload.verified_email = adultRecord.email || '';
+    return renderFamilyMessage_(rawToken, adultPayload);
+  }
   if (!auth) return renderStudentNeedsParent_();
-  var action = parseBooleanValue_(auth.signatura_alumne) === true ? null : { token: rawToken, resposta_id: auth.resposta_id };
-  var title = action ? 'Confirma el formulari' : 'Confirmacio ja registrada';
-  var message = action ? 'Revisa la informacio en mode nomes lectura i confirma la teva conformitat.' : 'La teva confirmacio ja consta registrada.';
-  return renderReadonlyAuthorization_(auth, title, message, action, rawToken);
+  var record = validateToken_(rawToken, { allowPendingOnly: true });
+  var mode = parseBooleanValue_(auth.signatura_alumne) === true ? 'readonly' : 'student_confirm';
+  var title = mode === 'student_confirm' ? 'Confirma el formulari' : 'Confirmacio ja registrada';
+  var message = mode === 'student_confirm' ? 'Revisa la informacio en mode nomes lectura i confirma la teva conformitat.' : 'La teva confirmacio ja consta registrada.';
+  return renderFormAccessMessage_(rawToken, formPayloadForExistingAuthorization_(auth, student, mode, record, rawToken), title, message, mode === 'student_confirm' ? 'REVISAR I CONFIRMAR' : 'VEURE EL FORMULARI');
 }
 
 function handleForwardForm_(payload) {
   var rawToken = stringValue_(payload.token);
   validateToken_(rawToken, { allowPendingOnly: true });
-  markTokenUsed_(rawToken);
   var formPayload = parseJson_(payload.form_payload_json) || {};
   return renderAutoPostToForm_(formPayload);
 }
@@ -327,14 +387,25 @@ function renderStudentNeedsParent_() {
   return renderMessagePage_('Formulari familiar pendent', 'Encara no consta cap formulari d autoritzacions emplenat per a aquest alumne/a. Demana al teu pare, mare, tutor o tutora legal que empleni primer el formulari. Si teniu qualsevol dubte, poseu-vos en contacte amb el centre.', true);
 }
 
+function renderNoMinorChildren_() {
+  return renderMessagePage_('Cap alumne/a menor d edat disponible', 'No consta cap alumne/a menor de divuit anys associat a aquesta adreca. En cas d alumnat major d edat, el formulari l ha d emplenar directament l alumne/a. Si teniu qualsevol dubte, poseu-vos en contacte amb el centre.', true);
+}
+
 function renderCheckEmail_() {
   return renderMessagePage_('Revisa el correu electronic', 'Si l adreca indicada correspon a una persona autoritzada, rebreu un correu electronic amb l enllac de verificacio.', false);
 }
 
 function renderFamilyMessage_(token, payload) {
+  payload = Object.assign({}, payload || {}, { launcher_token: token });
   var formPayloadJson = JSON.stringify(payload || {});
   var body = '<p>Benvolguda familia,</p><p>Per tal d iniciar correctament el curs escolar i mantenir actualitzada la informacio de l alumnat, us demanem que empleneu el formulari d autoritzacions, declaracions i comunicacions corresponent al vostre fill o filla.</p><p>En aquest formulari podreu:</p><ul><li>revisar i actualitzar les dades basiques;</li><li>autoritzar les diferents activitats i serveis del centre;</li><li>indicar persones autoritzades per recollir l alumne/a;</li><li>facilitar la informacio sanitaria rellevant;</li><li>signar electronicament les autoritzacions.</li></ul><p>Per accedir al formulari, feu clic al seguent boto:</p><form method="post" action="' + escapeHtml_(LAUNCHER_CONFIG.launcherUrl) + '"><input type="hidden" name="action" value="forward_form"><input type="hidden" name="token" value="' + escapeHtml_(token) + '"><input type="hidden" name="form_payload_json" value="' + escapeHtml_(formPayloadJson) + '"><button class="button" type="submit">EMPLENAR EL FORMULARI</button></form><p>Temps aproximat: 10 minuts.</p><p>Es important que el formulari sigui emplenat abans del dia 01/10/2026, ja que aquesta informacio sera utilitzada durant tot el curs escolar.</p><p>Les dades facilitades seran tractades exclusivament per a finalitats educatives i administratives, d acord amb la normativa vigent en materia de proteccio de dades personals.</p><p>Si teniu qualsevol incidencia tecnica o dubte sobre el formulari, podeu contactar amb el centre a traves del correu:</p><p><strong>' + escapeHtml_(LAUNCHER_CONFIG.supportEmail) + '</strong></p><p>Moltes gracies per la vostra col·laboracio.</p><p>Cordialment,</p><p>Equip Directiu<br>Institut Ernest Lluch<br>Cunit</p>';
   return htmlPage_('Formulari d autoritzacions', body);
+}
+
+function renderFormAccessMessage_(token, payload, title, message, buttonText) {
+  var formPayloadJson = JSON.stringify(payload || {});
+  var body = '<h1>' + escapeHtml_(title) + '</h1><p>' + escapeHtml_(message) + '</p><form method="post" action="' + escapeHtml_(LAUNCHER_CONFIG.launcherUrl) + '"><input type="hidden" name="action" value="forward_form"><input type="hidden" name="token" value="' + escapeHtml_(token) + '"><input type="hidden" name="form_payload_json" value="' + escapeHtml_(formPayloadJson) + '"><button class="button" type="submit">' + escapeHtml_(buttonText || 'OBRIR EL FORMULARI') + '</button></form>';
+  return htmlPage_(title, body);
 }
 
 function renderReadonlyAuthorization_(auth, title, message, studentAction, token) {
@@ -743,6 +814,18 @@ function studentVerificationEmailHtml_(url) {
 
 function formPayloadFromStudent_(student) {
   return { id_student: student.id || '', alumne_nom: student.name || '', alumne_document: student.document || '', studyType: student.studyType || '', isAdult: student.isAdult || '', is14Plus: student.is14Plus || '' };
+}
+
+function formPayloadForExistingAuthorization_(auth, student, mode, record, rawToken) {
+  return {
+    form_mode: mode,
+    resposta_id: auth.resposta_id || record.resposta_id || '',
+    id_student: auth.id_student || student.id || record.student_id || '',
+    verified_actor_type: record.sender === 'student' ? 'student' : 'parent',
+    verified_dinantia_account_id: record.dinantia_account_id || '',
+    verified_email: record.email || '',
+    launcher_token: rawToken
+  };
 }
 
 function normalizeBirthdate_(value) {

@@ -20,7 +20,7 @@ The form lets the user:
 - Download the filled data as JSON.
 - Print or save the rendered form as PDF through the browser.
 
-The endpoint must persist submitted responses to the registry-backed `Autoritzacions` database. Each submitted form creates one parent response row and zero or more authorized-person rows.
+The endpoint must persist submitted responses to the registry-backed `Autoritzacions` database. A first submission creates one parent response row and zero or more authorized-person rows. A verified owner edit updates the existing response row and replaces the authorized-person rows for the same `resposta_id`.
 
 After a successful submission, the endpoint must refresh `Dinantia` -> `authorizations_cache` so the tutor panel can show the new authorization without waiting for the nightly cache rebuild.
 
@@ -146,9 +146,18 @@ The form must be split into two client-side steps.
 | 1 | Respondent identification | Collect the full name and phone number of the person answering the form. |
 | 2 | Authorization form | Show the existing authorization, declaration, communication, health, and signature-status form. |
 
-Step 1 must be shown first when the endpoint loads through either `doGet()` or `doPost(e)`.
+Step 1 must be shown first when the endpoint loads through either `doGet()` or `doPost(e)` in normal editable-new-submission mode.
 
 The existing authorization form must remain hidden until the user completes Step 1 and clicks `Següent`.
+
+Mode-specific exceptions:
+
+| Mode | Step 1 behavior |
+| --- | --- |
+| `edit_owner` | Skip Step 1 and render the existing form filled and editable. |
+| `readonly` | Skip Step 1 and render the existing form filled and disabled. |
+| `readonly_print` | Skip Step 1 and render the existing form filled, disabled, expanded, and printable. |
+| `student_confirm` | Skip Step 1 and render the existing form filled and disabled with only the student confirmation action. |
 
 ### Step 1: Respondent Identification
 
@@ -313,6 +322,33 @@ Supported request formats:
 If both are present, JSON body values should take precedence over `e.parameter` values.
 
 Unknown POST fields should be ignored by the prefill layer unless later specs define them.
+
+### POST Flow Mode Fields
+
+The launcher may send operational mode/context fields to control how the form renders and saves.
+
+| POST field | Meaning |
+| --- | --- |
+| `form_mode` / `mode` | Rendering/save mode: `new_parent`, `new_student_adult`, `edit_owner`, `readonly`, `readonly_print`, or `student_confirm`. |
+| `resposta_id` | Existing response ID to load for edit, read-only, print, or student confirmation. |
+| `verified_actor_type` | Verified actor type, usually `parent` or `student`. |
+| `verified_dinantia_account_id` | Dinantia account ID verified by the launcher. |
+| `verified_email` | Normalized verified email from the launcher token. |
+| `launcher_token` | Raw launcher token only when the form must POST a student confirmation back to the launcher. It must never be persisted in `autoritzacions`. |
+
+Rules:
+
+- `readonly`, `readonly_print`, and `student_confirm` must reuse the exact `auth_form` UI with controls disabled, not a separate simplified table.
+- Protected modes must require a valid short-lived launcher token before loading an existing response or accepting an editable save. The public form endpoint must not trust a naked `resposta_id`.
+- All persisted saves must require a verified launcher mode/token. A direct public `doGet()` page may render for compatibility or smoke testing, but it must not be able to write data to the database.
+- The raw launcher token may exist only as a transient POST/hidden-field value. It must not be stored in `autoritzacions`, logged, or shown in UI.
+- `readonly_print` must expand the form and offer browser printing.
+- `edit_owner` must load the existing row by `resposta_id` and save changes back to that same row.
+- New parent submissions write `submitted_by_dinantia_account_id` and `submitted_by_email`.
+- Owner edits preserve original submission ownership and update `updated_at` / `updated_by_email`.
+- Parent/legal-guardian modes must not set `signatura_alumne` to true.
+- Adult-student editable mode may set `signatura_alumne` to true because the adult student is the respondent.
+- Student-confirm mode must not save the whole form. It only submits confirmation back to the launcher so the launcher can set `signatura_alumne`.
 
 ### Prefill Merge Order
 

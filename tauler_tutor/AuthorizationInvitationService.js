@@ -31,6 +31,22 @@ function sendAuthorizationInvitations_(requests) {
   return totals;
 }
 
+function createAuthorizationPrintLink_(request) {
+  request = request || {};
+  var secret = getRequiredScriptProperty_(SCRIPT_PROPERTIES.launcherInternalSecret);
+  var tutorEmail = getCurrentUserEmail_();
+  var normalized = {
+    student: sanitizeInvitationStudent_(request.student),
+    authorization: sanitizeInvitationAuthorization_(request.authorization)
+  };
+  if (!normalized.student.id || !normalized.authorization.resposta_id) {
+    throw new AppError('No es pot obrir el formulari: falten dades de l alumne/a o de la resposta.', {
+      code: 'AUTH_PRINT_LINK_MISSING_DATA'
+    });
+  }
+  return callLauncherPrintLink_(normalized, tutorEmail, secret);
+}
+
 function normalizeInvitationRequests_(requests) {
   if (!Array.isArray(requests)) return [];
   return requests.map(function(request) {
@@ -55,7 +71,9 @@ function sanitizeInvitationStudent_(student) {
     document: String(student.document || '').trim(),
     studyType: String(student.studyType || '').trim(),
     isAdult: String(student.isAdult || '').trim(),
-    is14Plus: String(student.is14Plus || '').trim()
+    is14Plus: String(student.is14Plus || '').trim(),
+    age: String(student.age || '').trim(),
+    birthdateIso: String(student.birthdateIso || '').trim()
   };
 }
 
@@ -109,6 +127,37 @@ function callLauncherPanelInvite_(request, tutorEmail, secret) {
   }
 
   return body;
+}
+
+function callLauncherPrintLink_(request, tutorEmail, secret) {
+  var payload = {
+    action: 'panel_print_link',
+    secret: secret,
+    tutor_email: tutorEmail,
+    student: request.student,
+    authorization: request.authorization
+  };
+  var response = UrlFetchApp.fetch(APP_CONFIG.formLauncherUrl, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+  var status = response.getResponseCode();
+  var text = response.getContentText();
+  var body;
+
+  try {
+    body = JSON.parse(text);
+  } catch (error) {
+    throw new Error('Launcher print-link response is not valid JSON. HTTP ' + status + ': ' + text.slice(0, 200));
+  }
+
+  if (status < 200 || status >= 300 || !body.ok || !body.url) {
+    throw new Error('Launcher print-link failed. HTTP ' + status + ': ' + JSON.stringify(body));
+  }
+
+  return { ok: true, url: body.url };
 }
 
 function safeInvitationError_(request, error) {

@@ -55,16 +55,18 @@ If the email is found, the launcher must identify the students/children associat
 
 ### Parent With Multiple Children
 
-If the parent has more than one associated son/daughter, the first authenticated step must let them choose which student they want to access the form for.
+If the parent has more than one associated son/daughter under 18, the first authenticated step must let them choose which student they want to access the form for.
 
 Rules:
 
 - The parent must not be asked to type the student name manually if the system already knows the associated students.
-- Show only students associated with the verified parent/contact account.
+- Show only students associated with the verified parent/contact account and younger than 18.
 - After selection, continue using the selected student context.
 - The secure token must be tied to both the verified parent/contact and the selected student.
 
-If the parent has exactly one associated student, the selection step may be skipped.
+If the parent has exactly one associated under-18 student, the selection step may be skipped.
+
+If every associated student is 18 or older, show a safe message explaining that there is no under-18 student available for family submission and that adult students must complete the form themselves.
 
 ### Parent Access When Student Is Adult
 
@@ -84,14 +86,29 @@ The page must not render the form-forwarding button.
 
 ### Parent Access When Form Already Exists
 
-If the selected student already has a row in `Autoritzacions` -> `autoritzacions`, the parent must not be allowed to submit a new editable form through this flow.
+If the selected student already has a row in `Autoritzacions` -> `autoritzacions`, the launcher must check response ownership.
 
-Instead, after verification, show a read-only version of the already submitted form.
+Ownership is determined by comparing the verified Dinantia parent/contact account ID with `autoritzacions.submitted_by_dinantia_account_id`.
+
+If the verified parent/contact is the original submitter:
+
+- Open the exact `auth_form` UI filled with the existing response.
+- Use `form_mode = edit_owner`.
+- Allow editing.
+- Save changes to the same `resposta_id` row.
+- Do not create a new authorization row.
+
+If the verified parent/contact is not the original submitter:
+
+- Open the exact `auth_form` UI filled with the existing response.
+- Use `form_mode = readonly`.
+- Disable all form fields and normal submit actions.
+- Show only read/print behavior.
 
 The page must include a Catalan message explaining:
 
 - The authorization form for this student has already been submitted.
-- The displayed form is read-only.
+- Whether the current verified contact can edit it or only read it.
 - If they have questions, corrections, or complaints, they must contact the school.
 
 Required meaning:
@@ -102,7 +119,7 @@ Aquest formulari ja consta com a emplenat.
 Podeu consultar-ne la informació en mode només lectura. Si detecteu alguna errada o voleu fer qualsevol consulta o reclamació, poseu-vos en contacte amb el centre.
 ```
 
-No submit/edit button may be shown in this parent read-only mode.
+No submit/edit button may be shown in parent read-only mode.
 
 ### Parent Access When Student Is Under 18 And Form Missing
 
@@ -216,7 +233,8 @@ After token validation, the student must see the already submitted form in read-
 
 Rules:
 
-- All form fields must be read-only/disabled.
+- The launcher must POST the student to `auth_form` with `form_mode = student_confirm`.
+- `auth_form` must render the exact submitted form UI with all form fields disabled.
 - The student must not edit parent/legal-guardian answers.
 - Hide all normal form submit buttons.
 - Show only one student confirmation button, for example `Confirmo`.
@@ -248,12 +266,51 @@ Both parent and student flows may need to render a submitted form in read-only m
 Read-only mode requirements:
 
 - Load the existing `Autoritzacions` -> `autoritzacions` row by `id_student` and selected/latest response row.
-- Render the same form layout where practical, but all fields must be read-only or disabled.
+- Render the same `auth_form` layout used for editing.
+- All fields must be read-only or disabled.
 - Do not show editing controls.
 - Do not show the normal `Envia el formulari` submit button.
 - For parents, show only the informational message and no confirmation action.
 - For students, show only the student confirmation action when `signatura_alumne` is still not true.
 - If `signatura_alumne` is already true, show read-only mode with a message that the student confirmation has already been recorded.
+
+## Tutor Print Link Flow
+
+The launcher must also support a trusted server-to-server POST action from `tauler_tutor`:
+
+```json
+{
+  "action": "panel_print_link",
+  "secret": "script-property-value",
+  "tutor_email": "teacher@iernestlluch.cat",
+  "student": {
+    "id": "DIN-A-000000",
+    "name": "Student name"
+  },
+  "authorization": {
+    "resposta_id": "RSP-..."
+  }
+}
+```
+
+Behavior:
+
+- Validate `launcher_internal_secret`.
+- Create a short-lived token in `Autoritzacions` -> `verification_tokens`.
+- Store `sender = tutor_print`.
+- Store `student_id` and `resposta_id`.
+- Store metadata containing a form payload with `form_mode = readonly_print`.
+- Return JSON with a launcher URL containing the raw token.
+- Do not send an email for `panel_print_link`.
+- The token must not expose `token_hash`, secret values, or full metadata to the browser.
+
+When the tutor opens the returned launcher URL, the launcher validates the token and POST-forwards to `auth_form` with:
+
+| Field | Value |
+| --- | --- |
+| `form_mode` | `readonly_print` |
+| `resposta_id` | Response to render. |
+| `id_student` | Student ID. |
 
 ## Tutor Panel Impact
 
