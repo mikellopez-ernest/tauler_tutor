@@ -59,7 +59,9 @@ function resolveInitialFormData_(prefill) {
       if (prefill[key] !== undefined && prefill[key] !== null) initial[key] = normalizePrefillValue_(key, prefill[key]);
     });
   }
-  initial.data_signatura = Utilities.formatDate(new Date(), FORM_CONFIG.timezone, 'yyyy-MM-dd');
+  if (!initial.data_signatura) {
+    initial.data_signatura = Utilities.formatDate(new Date(), FORM_CONFIG.timezone, 'yyyy-MM-dd');
+  }
   initial.launcher_url = FORM_CONFIG.launcherUrl;
   return initial;
 }

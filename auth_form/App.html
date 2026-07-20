@@ -137,6 +137,26 @@ function applyType() {
 document.querySelectorAll('[name="tipus_alumne"]').forEach(x=>x.addEventListener('change',()=>{applyType();setSetupFromModel(x.value);}));
 
 function formToObject(){ updateSignatureFields(); const out={}; for(const [k,v] of new FormData(form).entries()) out[k]=v; out.curs_inici=document.getElementById('cursInici').value; out.curs_fi=document.getElementById('cursFi').value; out.idioma_formulari=I18n.currentLanguage||'ca'; out.form_mode=currentFormMode||document.getElementById('formMode').value||''; if(out.verified_actor_type==='student'&&out.isAdult==='si') out.signatura_alumne='true'; return out; }
+function normalizeStoredChoice(value) {
+  if (value === true) return 'si';
+  if (value === false) return 'no';
+  const text = String(value === null || value === undefined ? '' : value).trim().toLowerCase();
+  if (['true','si','sí','1','acceptada','on'].includes(text)) return 'si';
+  if (['false','no','0'].includes(text)) return 'no';
+  return String(value === null || value === undefined ? '' : value);
+}
+
+function normalizeDateInputValue(value) {
+  if (!value) return '';
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  const text = String(value).trim();
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const local = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (local) return `${local[3]}-${local[2].padStart(2, '0')}-${local[1].padStart(2, '0')}`;
+  return text;
+}
+
 function fillForm(data){
   Object.keys(data||{}).filter(key=>/^persona_autoritzada_nom_\d+$/.test(key)).sort((a,b)=>Number(a.match(/\d+$/)[0])-Number(b.match(/\d+$/)[0])).forEach(key=>{
     const index=key.match(/\d+$/)[0];
@@ -155,7 +175,12 @@ function fillForm(data){
     if(key==='responent_nom_sencer'){document.getElementById('responentNomSencer').value=value;document.getElementById('hiddenRespondentName').value=value;}
     if(key==='responent_telefon'){document.getElementById('responentTelefon').value=value;document.getElementById('hiddenRespondentPhone').value=value;}
     if(/^persona_autoritzada_/.test(key)) return;
-    form.querySelectorAll(`[name="${CSS.escape(key)}"]`).forEach(field=>{if(field.type==='radio'||field.type==='checkbox') field.checked=field.value===value||value===true; else if(!key.startsWith('signatura_')) field.value=value;});
+    form.querySelectorAll(`[name="${CSS.escape(key)}"]`).forEach(field=>{
+      if(field.type==='radio') field.checked=field.value===normalizeStoredChoice(value);
+      else if(field.type==='checkbox') field.checked=normalizeStoredChoice(value)==='si';
+      else if(field.type==='date') field.value=normalizeDateInputValue(value);
+      else if(!key.startsWith('signatura_')) field.value=value;
+    });
   });
   selectModelFromSetup();
   if(data.tipus_alumne) setSetupFromModel(data.tipus_alumne);
@@ -271,5 +296,5 @@ function submitForm(){
 
 
 function updateSignatureFields(){const cfg=typeConfig[form.querySelector('[name="tipus_alumne"]:checked')?.value];document.getElementById('signatureResponsibleData').value=cfg?.responsible?'true':'false';document.getElementById('signatureStudentData').value='false';}
-document.getElementById('dataSignatura').valueAsDate=new Date();
+if (!document.getElementById('dataSignatura').value) document.getElementById('dataSignatura').valueAsDate=new Date();
 </script>

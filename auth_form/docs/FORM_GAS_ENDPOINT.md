@@ -341,6 +341,9 @@ Rules:
 - `readonly`, `readonly_print`, and `student_confirm` must reuse the exact `auth_form` UI with controls disabled, not a separate simplified table.
 - Protected modes must require a valid short-lived launcher token before loading an existing response or accepting an editable save. The public form endpoint must not trust a naked `resposta_id`.
 - All persisted saves must require a verified launcher mode/token. A direct public `doGet()` page may render for compatibility or smoke testing, but it must not be able to write data to the database.
+- Read-only modes must translate stored sheet booleans into the form control values before filling the UI. Real boolean `TRUE` / string `TRUE` / `si` select the affirmative radio or checkbox state; real boolean `FALSE` / string `FALSE` / `no` select the negative radio state.
+- Existing `data_signatura` must be preserved when rendering a submitted response. The form may default to today's date only for a new response that does not already have `data_signatura`.
+- Date inputs must receive normalized `yyyy-mm-dd` values. When a stored sheet date arrives as an Apps Script date, ISO datetime, or local `dd/mm/yyyy` string, the renderer must convert it before assigning it to the `<input type="date">`.
 - The raw launcher token may exist only as a transient POST/hidden-field value. It must not be stored in `autoritzacions`, logged, or shown in UI.
 - `readonly_print` must expand the form and offer browser printing.
 - `edit_owner` must load the existing row by `resposta_id` and save changes back to that same row.
