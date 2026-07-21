@@ -35,6 +35,7 @@ var SHEETS = {
   cacheRuns: 'cache_runs',
   registry: 'tables',
   authorizations: 'autoritzacions',
+  authorizedPeople: 'persones_autoritzades',
   verificationTokens: 'verification_tokens'
 };
 

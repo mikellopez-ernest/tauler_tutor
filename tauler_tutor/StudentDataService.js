@@ -139,6 +139,15 @@ function calculateAge_(isoBirthdate) {
 function inferStudyType_(value) {
   var text = codeKey_(value);
   if (text.indexOf('BAT') !== -1) return 'batx';
-  if (text.indexOf('FP') !== -1 || text.indexOf('CF') !== -1 || text.indexOf('CICLE') !== -1 || text.indexOf('PFI') !== -1) return 'fp';
+  if (
+    text.indexOf('FP') !== -1 ||
+    text.indexOf('CF') !== -1 ||
+    text.indexOf('CICLE') !== -1 ||
+    text.indexOf('PFI') !== -1 ||
+    text.indexOf('SMX') !== -1 ||
+    text.indexOf('PCC') !== -1 ||
+    text === 'AC' ||
+    text.indexOf('AC ') !== -1
+  ) return 'fp';
   return 'eso';
 }

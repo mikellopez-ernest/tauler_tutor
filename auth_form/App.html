@@ -6,6 +6,7 @@ window.addEventListener('DOMContentLoaded', () => {
   fillForm(initialData);
   setupRespondentStep();
   setupAuthorizedPeopleVisibility();
+  setupAcademicContactDependency();
   setupExternalPlatformsDependency();
   applyFormMode(initialData);
 });
@@ -100,6 +101,25 @@ function setupAuthorizedPeopleVisibility() {
   setAuthorizedPeopleVisible(document.getElementById('sortidaSolaNo').checked);
 }
 
+function setAcademicContactVisible(show) {
+  const block = document.getElementById('academicContactDetails');
+  block.classList.toggle('is-hidden', !show);
+  block.querySelectorAll('input,select,textarea').forEach(field => {
+    field.disabled = !show;
+    if (!show) {
+      if (field.type === 'radio' || field.type === 'checkbox') field.checked = false;
+      else field.value = '';
+    }
+  });
+}
+
+function setupAcademicContactDependency() {
+  document.querySelectorAll('[name="comunicacio_academica"]').forEach(input => {
+    input.addEventListener('change', () => setAcademicContactVisible(document.getElementById('comAcadSi').checked));
+  });
+  setAcademicContactVisible(document.getElementById('comAcadSi').checked);
+}
+
 function setExternalPlatformsVisible(show) {
   const block = document.getElementById('externalPlatformsDetail');
   const input = document.getElementById('plataformesExternes');
@@ -128,6 +148,7 @@ function applyType() {
   setBlock('esoExitBlock',cfg.esoExit);
   setBlock('recessExitBlock',cfg.recess);
   setBlock('academicCommunicationBlock',cfg.academic);
+  setAcademicContactVisible(cfg.academic && document.getElementById('comAcadSi').checked);
   setBlock('municipalTripsBlock',cfg.municipal);
   setBlock('healthCommunicationBlock',cfg.healthConsent);
   setBlock('paracetamolBlock',cfg.paracetamol);
@@ -135,8 +156,9 @@ function applyType() {
   document.getElementById('signatureStudentData').value='false';
 }
 document.querySelectorAll('[name="tipus_alumne"]').forEach(x=>x.addEventListener('change',()=>{applyType();setSetupFromModel(x.value);}));
+document.getElementById('alumneNom').addEventListener('input', updateStudentBanner);
 
-function formToObject(){ updateSignatureFields(); const out={}; for(const [k,v] of new FormData(form).entries()) out[k]=v; out.curs_inici=document.getElementById('cursInici').value; out.curs_fi=document.getElementById('cursFi').value; out.idioma_formulari=I18n.currentLanguage||'ca'; out.form_mode=currentFormMode||document.getElementById('formMode').value||''; if(out.verified_actor_type==='student'&&out.isAdult==='si') out.signatura_alumne='true'; return out; }
+function formToObject(){ updateSignatureFields(); const out={}; for(const [k,v] of new FormData(form).entries()) out[k]=v; out.curs_inici=document.getElementById('cursInici').value; out.curs_fi=document.getElementById('cursFi').value; out.idioma_formulari=I18n.currentLanguage||'ca'; out.form_mode=currentFormMode||document.getElementById('formMode').value||''; out.isAdult=document.getElementById('isAdult').value; out.is14Plus=document.getElementById('is14Plus').value; if(out.verified_actor_type==='student'&&out.isAdult==='si') out.signatura_alumne='true'; return out; }
 function normalizeStoredChoice(value) {
   if (value === true) return 'si';
   if (value === false) return 'no';
@@ -185,7 +207,15 @@ function fillForm(data){
   selectModelFromSetup();
   if(data.tipus_alumne) setSetupFromModel(data.tipus_alumne);
   setAuthorizedPeopleVisible(document.getElementById('sortidaSolaNo').checked);
+  setAcademicContactVisible(document.getElementById('comAcadSi').checked);
   setExternalPlatformsVisible(document.getElementById('imatgeExternaSi').checked);
+  updateStudentBanner();
+}
+
+function updateStudentBanner() {
+  const name = document.getElementById('alumneNom').value.trim();
+  document.getElementById('studentBannerName').textContent = name;
+  document.getElementById('studentBanner').classList.toggle('is-hidden', !name);
 }
 
 document.getElementById('saveLocal')?.addEventListener('click',()=>{localStorage.setItem('autoritzacionsForm5Models',JSON.stringify(formToObject()));alert('Formulari desat en aquest navegador.');});
@@ -285,16 +315,37 @@ function submitForm(){
   button.textContent='Enviant...';
   google.script.run.withSuccessHandler(result=>{
     button.textContent='Enviat';
-    alert('Formulari enviat correctament. Codi: '+(result&&result.resposta_id?result.resposta_id:''));
-    window.top.location.href = SUCCESS_REDIRECT_URL;
+    showSubmissionSuccess(result);
   }).withFailureHandler(error=>{
     button.disabled=false;
-    button.textContent='Envia el formulari';
+    button.textContent=currentFormMode==='edit_owner'?'Desa els canvis':'Envia el formulari';
     alert('No s ha pogut enviar el formulari: '+(error&&error.message?error.message:error));
   }).submitAuthorizationResponse(formToObject());
 }
 
+function showSubmissionSuccess(result) {
+  ['respondentStep','initialSetup','authorizationForm'].forEach(id => {
+    const section = document.getElementById(id);
+    if (section) section.classList.add('is-hidden');
+  });
+  const code = result && result.resposta_id ? String(result.resposta_id) : '';
+  const codeNode = document.getElementById('submissionCode');
+  if (codeNode) {
+    codeNode.textContent = code ? I18n.t('Codi de resposta:') + ' ' + code : '';
+    codeNode.classList.toggle('is-hidden', !code);
+  }
+  const success = document.getElementById('submissionSuccess');
+  if (success) {
+    success.classList.remove('is-hidden');
+    success.focus();
+    window.scrollTo({top:0, behavior:'smooth'});
+    return;
+  }
+  alert(I18n.t('La teva resposta ha estat correctament enregistrada.'));
+  window.top.location.href = SUCCESS_REDIRECT_URL;
+}
 
-function updateSignatureFields(){const cfg=typeConfig[form.querySelector('[name="tipus_alumne"]:checked')?.value];document.getElementById('signatureResponsibleData').value=cfg?.responsible?'true':'false';document.getElementById('signatureStudentData').value='false';}
+
+function updateSignatureFields(){const type=form.querySelector('[name="tipus_alumne"]:checked')?.value;const cfg=typeConfig[type];const actor=document.getElementById('verifiedActorType').value;document.getElementById('signatureResponsibleData').value=cfg?.responsible?'true':'false';document.getElementById('signatureStudentData').value=actor==='student'&&type==='major18'?'true':'false';}
 if (!document.getElementById('dataSignatura').value) document.getElementById('dataSignatura').valueAsDate=new Date();
 </script>

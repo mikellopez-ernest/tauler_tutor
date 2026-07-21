@@ -85,7 +85,7 @@ function loadStudentsFromCacheForGroups_(groups) {
       studentDataSheetName: String(row[headers.student_data_sheet] || '').trim(),
       parents: parseJsonArray_(row[headers.parent_ids]),
       birthdate: String(row[headers.birthdate] || '').trim(),
-      birthdateSortKey: String(row[headers.birthdate_sort_key] || '').trim(),
+      birthdateSortKey: normalizeCacheDateSortKey_(row[headers.birthdate_sort_key]),
       age: String(row[headers.age] || '').trim(),
       document: String(row[headers.document] || '').trim(),
       studyType: String(row[headers.study_type] || '').trim(),
@@ -168,7 +168,8 @@ function loadAuthorizationDataFromCache_() {
     if (!studentId) continue;
 
     if (String(row[headers.resposta_id] || '').trim()) {
-      authorizations.push(rowToCacheAuthorization_(row, headers));
+      var auth = rowToCacheAuthorization_(row, headers);
+      if (parseAuthorizationBoolean_(auth.invalidated) !== true) authorizations.push(auth);
     }
     if (String(row[headers.latest_invitation_created_at] || '').trim()) {
       invitations.push({
@@ -196,9 +197,10 @@ function authorizationCacheRequiredHeaders_() {
     'id_student','resposta_id','data_hora_enviament','data_signatura','idioma_formulari','codi_document','tipus_alumne',
     'sortida_sola','sortida_esbarjo','sortides_municipi','comunicacio_academica','comunicacio_salut','declaracio_plataformes',
     'imatge_intranet','imatge_web','imatge_externa','obra_oberta','obra_centre','obra_biblioteca','obra_repositori',
-    'administracio_medicacio','paracetamol','problemes_salut','altres_salut','signatura_responsable','signatura_alumne',
+    'administracio_medicacio','paracetamol','carta_compromis_acceptada','consentiment_mobil','problemes_salut','altres_salut','signatura_responsable','signatura_alumne',
     'acad_contacte_nom','acad_contacte_email','acad_contacte_relacio','emergencia_nom','emergencia_telefon','emergencia_relacio',
     'medicacio','posologia','dosi','plataformes_externes','estat_validacio','observacions_internes',
+    'authorized_people_json',
     'id_student', 'latest_invitation_created_at', 'latest_invitation_expires_at',
     'latest_invitation_used_at', 'latest_invitation_sender', 'latest_invitation_email',
     'latest_invitation_resposta_id', 'latest_invitation_status'
@@ -211,20 +213,24 @@ function updateContactsCacheAfterSave_(changes) {
     var registry = loadTableRegistry_();
     var sheet = openTableSheet_(registry, TABLES.dinantia, SHEETS.contactsCache);
     var headers = requireHeaders_(sheet, [
-      'student_id', 'contact_id', 'contact_name', 'contact_email', 'contact_phone'
+      'contact_id', 'contact_name', 'contact_email', 'contact_phone'
     ], TABLES.dinantia + ' -> ' + SHEETS.contactsCache);
     var values = sheet.getDataRange().getValues();
-    var rowByKey = {};
+    var rowsByContactId = {};
     for (var i = 1; i < values.length; i++) {
-      var key = String(values[i][headers.student_id] || '').trim() + '|' + String(values[i][headers.contact_id] || '').trim();
-      rowByKey[key] = i + 1;
+      var contactId = String(values[i][headers.contact_id] || '').trim();
+      if (!contactId) continue;
+      if (!rowsByContactId[contactId]) rowsByContactId[contactId] = [];
+      rowsByContactId[contactId].push(i + 1);
     }
 
     changes.forEach(function(change) {
-      var rowNumber = rowByKey[change.studentId + '|' + change.contactId];
-      if (!rowNumber) return;
+      var rowNumbers = rowsByContactId[change.contactId] || [];
+      if (!rowNumbers.length) return;
       var header = change.accountField === 'name' ? 'contact_name' : change.accountField === 'email' ? 'contact_email' : 'contact_phone';
-      sheet.getRange(rowNumber, headers[header] + 1).setValue(change.newValue);
+      rowNumbers.forEach(function(rowNumber) {
+        sheet.getRange(rowNumber, headers[header] + 1).setValue(change.newValue);
+      });
     });
   } catch (error) {
     logError_('contacts_cache_update_failed', error, { changes: changes.length });
@@ -309,7 +315,7 @@ function buildContactsCacheRows_(accounts, students) {
 }
 
 function buildAuthorizationsCacheRows_() {
-  var authorizations = readAuthorizationRows_();
+  var authorizations = attachAuthorizedPeopleToAuthorizations_(readAuthorizationRows_());
   var invitations = readVerificationTokenSummaries_();
   var latestAuth = {};
   var latestInvitation = {};
@@ -317,6 +323,7 @@ function buildAuthorizationsCacheRows_() {
   authorizations.forEach(function(auth) {
     var id = String(auth.id_student || '').trim();
     if (!id) return;
+    if (parseAuthorizationBoolean_(auth.invalidated) === true) return;
     if (!latestAuth[id] || String(auth.data_hora_enviament || '') >= String(latestAuth[id].data_hora_enviament || '')) latestAuth[id] = auth;
   });
   invitations.forEach(function(invitation) {
@@ -369,7 +376,7 @@ function loadCacheGroupMappings_(registry) {
 
 function overwriteCacheSheet_(registry, tableName, sheetName, rows) {
   var sheet = openTableSheet_(registry, tableName, sheetName);
-  var headers = getHeaderMap_(sheet);
+  var headers = ensureCacheHeaders_(sheet, rows);
   var headerNames = Object.keys(headers);
   var lastRow = sheet.getLastRow();
   if (lastRow > 1) {
@@ -384,7 +391,24 @@ function overwriteCacheSheet_(registry, tableName, sheetName, rows) {
     });
     return row;
   });
-  sheet.getRange(2, 1, values.length, width).setValues(values);
+  var targetRange = sheet.getRange(2, 1, values.length, width);
+  targetRange.setNumberFormat('@');
+  targetRange.setValues(values);
+}
+
+function ensureCacheHeaders_(sheet, rows) {
+  var headers = getHeaderMap_(sheet);
+  var missing = {};
+  (rows || []).forEach(function(row) {
+    Object.keys(row || {}).forEach(function(key) {
+      if (headers[key] === undefined) missing[key] = true;
+    });
+  });
+  var missingNames = Object.keys(missing);
+  if (!missingNames.length) return headers;
+  var startColumn = sheet.getLastColumn() + 1;
+  sheet.getRange(1, startColumn, 1, missingNames.length).setValues([missingNames]);
+  return getHeaderMap_(sheet);
 }
 
 function appendCacheRun_(run) {
@@ -458,4 +482,19 @@ function formatCacheDateTime_(value) {
     return Utilities.formatDate(value, APP_CONFIG.timezone, "yyyy-MM-dd'T'HH:mm:ssXXX");
   }
   return String(value || '').trim();
+}
+
+function normalizeCacheDateSortKey_(value) {
+  if (!value) {
+    return '';
+  }
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, APP_CONFIG.timezone, 'yyyy-MM-dd');
+  }
+  var text = String(value || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return text;
+  }
+  var parsed = parseBirthdateText_(text);
+  return parsed ? Utilities.formatDate(parsed, APP_CONFIG.timezone, 'yyyy-MM-dd') : '';
 }

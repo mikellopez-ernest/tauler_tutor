@@ -221,7 +221,9 @@ This function fully overwrites `students_cache`, `contacts_cache`, and `authoriz
 
 The panel may keep a live fallback during the transition period, but the intended production path is cache-first.
 
-Editable contact data must still write to Dinantia first. After Dinantia accepts the change, update the matching `contacts_cache` row and append the changelog row.
+Editable contact data must still write to Dinantia first. After Dinantia accepts the change, update every matching `contacts_cache` row with the same `contact_id` and append the changelog row.
+
+The cache update must not be limited to `student_id + contact_id`, because siblings can share the same Dinantia contact account.
 
 ### Teacher Label
 
@@ -337,6 +339,8 @@ The page title must also be `Contactes`.
 
 The `Contactes` page works with the same resolved student list used by `Inici`.
 
+Default ordering must be by visible student full name, the same as `Inici` and `Autoritzacions`.
+
 It must not re-run the tutor resolution or group database lookup just to render contacts.
 
 Contact data must be lazy-loaded. The initial panel load must not fetch Dinantia parent/contact accounts.
@@ -380,6 +384,18 @@ Header row:
 | Contact email | `Email` |
 | Contact phone | `Telèfon` |
 
+Headers must be clickable sort controls:
+
+| Header | Sort rule |
+| --- | --- |
+| `Grup` | Group name when multiple groups are visible. |
+| `Alumne` | Visible student full name. |
+| `Nom` | First visible contact name for the student block. |
+| `Email` | First visible contact email for the student block. |
+| `Telèfon` | First visible contact phone for the student block. |
+
+Because one student can have multiple contact rows, sorting must keep each student's contact rows together as a block.
+
 Rows must use a white-grey alternating pattern by student, not merely by row, so contacts belonging to the same student share the same background color.
 
 ### Contact Editing
@@ -408,6 +424,7 @@ When saving:
 - Disable/block the save button immediately.
 - Prevent duplicate saves while a save is in progress.
 - Update the relevant Dinantia parent/contact account through `POST /v1.2/accounts/update/:id`.
+- After the Dinantia update succeeds, update all cached rows with the edited `contact_id`, including sibling rows that were not visible or directly edited.
 - Phone values must be sent to Dinantia in valid international/E.164 style.
 - Spanish 9-digit local phone numbers such as `686123456` should be normalized to `+34686123456` before calling Dinantia.
 - Empty phone values are valid and mean the phone number should be removed from the contact.

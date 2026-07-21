@@ -37,6 +37,8 @@ If `sender` is missing or invalid, the launcher should render a simple choice pa
 
 Both sender paths must use secure email-token verification. The launcher must not reveal form/student data immediately after a user types an email address.
 
+All emails sent by this launcher must use `Institut Ernest Lluch i Martín` as the sender display name.
+
 ## Parent Flow
 
 ### Parent Entry Page
@@ -155,11 +157,11 @@ Accés al formulari d'autoritzacions
 
 Benvolgut/da,
 
-Algunes de les autoritzacions i declaracions relatives al curs escolar també requereixen la conformitat de l'alumnat que ha complert els 14 anys.
+Aquest accés està pensat per a l'alumnat del centre. Si ets major d'edat, podràs emplenar directament el formulari d'autoritzacions, declaracions i comunicacions. Si tens 14 anys o més i la teva família ja ha emplenat el formulari, podràs revisar-lo i confirmar la teva conformitat.
 
 Per aquest motiu, abans d'accedir al formulari és necessari verificar la teva identitat.
 
-Per començar, introdueix la teva adreça de correu electrònic i selecciona el curs o grup al qual pertanys aquest curs escolar. Amb aquesta informació podrem localitzar el teu expedient i comprovar si hi ha un formulari pendent de la teva confirmació.
+Per començar, introdueix la teva adreça de correu electrònic i selecciona el curs o grup al qual pertanys aquest curs escolar. Amb aquesta informació podrem localitzar el teu expedient i obrir el procés que correspongui en el teu cas.
 
 Si les dades són correctes, rebràs un correu electrònic amb un enllaç personal i segur que et permetrà continuar el procés.
 
@@ -254,6 +256,37 @@ An adult student entering through `?sender=student` should receive the same func
 - If no authorization row exists yet, they may continue to an editable form for themselves.
 - The form prefill should identify the student and mark the flow as adult/student-driven according to the existing `auth_form` model rules.
 - If a row already exists, show the read-only already-submitted behavior instead of creating a duplicate.
+- Their verification email must not reuse the minor-student confirmation text. It must explain that, because the student is 18 or older, they must complete and sign the form themselves.
+- Their launcher page after token validation must not use family/legal-guardian wording. It must address the student directly and use the same core message as the family flow, adapted to singular student wording.
+- A successful adult-student submission is complete immediately. It must not require a second `student_confirm` flow.
+
+Adult-student verification email copy:
+
+```text
+Benvolgut/da,
+
+Per tal d iniciar correctament el curs escolar i mantenir actualitzada la teva informacio, et demanem que emplenis el teu formulari d autoritzacions, declaracions i comunicacions.
+
+En aquest formulari podràs revisar les teves dades bàsiques, autoritzar les activitats i serveis del centre, facilitar la informació sanitària rellevant i signar electrònicament les autoritzacions necessàries per al curs escolar.
+
+Per accedir-hi, fes clic al botó següent:
+
+EMPLENAR EL FORMULARI
+
+Aquest enllaç és personal i caduca en 24 hores.
+
+Temps aproximat: 10 minuts.
+
+Si tens qualsevol incidència tècnica o dubte sobre el formulari, pots contactar amb el centre a través del correu:
+
+e3009850@xtec.cat
+
+Cordialment,
+
+Equip Directiu
+Institut Ernest Lluch
+Cunit
+```
 
 Use `Data Naixement` from `Dades alumnes` to calculate whether the student is 18 or older. This is the same header used by the tutor panel for birthdate/age calculations and is currently located in column AA.
 
@@ -506,7 +539,14 @@ A GET request with a verification token must validate the token.
 
 If valid, it must render the existing family message with the `EMPLENAR EL FORMULARI` button.
 
-If invalid, expired, already used, revoked, or malformed, it must render a clear Catalan error page and must not render the form-forwarding button.
+If invalid, expired, already used, revoked, or malformed, it must render a clear Catalan error page and must not render the form-forwarding button. User-facing messages must not mention internal token terminology.
+
+Required friendly meanings:
+
+| Condition | User-facing meaning |
+| --- | --- |
+| Already used | `Aquest enllaç ja s'ha utilitzat. Si necessiteu tornar a accedir al formulari, torneu a iniciar el procés o demaneu un nou enllaç al centre.` |
+| Expired | `Aquest enllaç ha caducat. Torneu a iniciar el procés per rebre un nou enllaç. Si teniu qualsevol dubte, poseu-vos en contacte amb el centre.` |
 
 ### POST From Verification Page
 
@@ -617,7 +657,7 @@ The token must be tied to the verified request context, including at least:
 | Contact email | Normalized verified email address. |
 | Dinantia contact/account ID | Dinantia account found for the submitted email. |
 | Student/form context | Student ID and prefill fields if already known from the original launch context. |
-| Expiry timestamp | Absolute expiry datetime. |
+| Expiry timestamp | Absolute expiry datetime, currently 24 hours after creation. |
 | Nonce | Random UUID or cryptographically strong random value. |
 
 If the launcher is opened directly by GET without student context, the later implementation must define how student/form context is resolved before rendering the final form-forwarding button. The launcher must not guess student identity from email alone unless a later spec defines that relationship unambiguously.
@@ -659,7 +699,7 @@ The raw token must never be written to the sheet.
 
 ### Token Lifetime
 
-Initial recommended lifetime: 30 minutes.
+Current lifetime: 24 hours.
 
 The exact value can be adjusted later, but tokens must not be indefinite.
 
@@ -678,6 +718,13 @@ The email must contain the same family message already used in the launcher, wit
 In production, the call to action should first open the launcher verification link containing the secure token. After the token is validated, the launcher renders the final page with the POST button to `auth_form`.
 
 Do not place the raw form POST payload directly in the email.
+
+Rules:
+
+- Include the student full name in the subject when a single target student is known.
+- Include the student full name in the email body when a single target student is known.
+- State that the secure link is valid for 24 hours.
+- If a parent has multiple children and no student has been selected yet, the initial verification email may omit a student name. After selection, every form-forwarding context must be tied to the selected student.
 
 ## Final Verified Launcher Page
 
@@ -704,8 +751,9 @@ Forwarded fields remain:
 - The public GET page must not expose student data.
 - The email lookup must not leak sensitive relationship data.
 - Verification links must be signed or backed by a server-side token store.
-- Tokens must expire.
+- Tokens must expire. Current lifetime is 24 hours.
 - Tokens should be one-time use unless a temporary testing exception is documented.
+- Expired or already-used tokens must be shown as friendly Catalan link-status messages.
 - Hidden POST fields to `auth_form` must be produced only after token validation.
 - The launcher must not trust student/form fields submitted by an unauthenticated browser request.
 - All rendered values must be HTML-escaped.

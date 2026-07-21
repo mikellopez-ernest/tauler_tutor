@@ -17,12 +17,23 @@ The form lets the user:
 - Save and restore a local browser draft.
 - Receive prefill data from a POST request.
 - Submit the completed response to the school authorization database.
+- Update the verified Dinantia contact name/phone when the respondent-identification values change.
+- See a friendly confirmation page after a successful submission.
 - Download the filled data as JSON.
 - Print or save the rendered form as PDF through the browser.
 
 The endpoint must persist submitted responses to the registry-backed `Autoritzacions` database. A first submission creates one parent response row and zero or more authorized-person rows. A verified owner edit updates the existing response row and replaces the authorized-person rows for the same `resposta_id`.
 
 After a successful submission, the endpoint must refresh `Dinantia` -> `authorizations_cache` so the tutor panel can show the new authorization without waiting for the nightly cache rebuild.
+
+After the cache refresh succeeds and the client receives the success response, the form must hide the editable form and show a confirmation page instead of a browser alert. The confirmation page must use this Catalan copy:
+
+- Title: `Resposta enregistrada`
+- Body: `La teva resposta ha estat correctament enregistrada.`
+
+The confirmation page may show the generated `resposta_id` as a secondary reference code and may provide a button back to the school website, but it must not expose raw server payloads or technical details.
+
+When the form is opened from a verified parent/contact token, the first respondent-identification step must be prefilled with the verified Dinantia contact data. On submit, contact edits must be written back to Dinantia and to `Dinantia` -> `contacts_cache` after validation.
 
 ## Deployment And Access
 
@@ -174,6 +185,12 @@ Step 1 controls:
 | --- | --- |
 | `Següent` | Validates Step 1 and reveals Step 2 when both fields are valid. |
 
+Prefill rules:
+
+- Parent/contact flows should prefill `responent_nom_sencer` from the verified Dinantia contact name.
+- Parent/contact flows should prefill `responent_telefon` from the verified Dinantia contact phone.
+- Step 2 `responsable_nom` should be prefilled from the same verified contact full name when the form model requires responsible-person data.
+
 Validation rules:
 
 - `responent_nom_sencer` must be non-blank after trimming.
@@ -295,6 +312,9 @@ The endpoint should accept canonical form field names in POST data:
 | `alumne_nom` | Student full name. |
 | `alumne_document` | Student identity document. |
 | `id_student` | Internal student identifier from the school database. |
+| `responent_nom_sencer` | Verified respondent full name when provided by the launcher. |
+| `responent_telefon` | Verified respondent phone when provided by the launcher. |
+| `responsable_nom` | Legal responsible/contact full name when provided by the launcher. |
 
 For compatibility with database-oriented callers, the endpoint may also accept these aliases:
 
@@ -349,6 +369,7 @@ Rules:
 - `edit_owner` must load the existing row by `resposta_id` and save changes back to that same row.
 - New parent submissions write `submitted_by_dinantia_account_id` and `submitted_by_email`.
 - Owner edits preserve original submission ownership and update `updated_at` / `updated_by_email`.
+- Parent/contact submissions use `verified_dinantia_account_id` to identify the Dinantia contact that may be updated from Step 1 values.
 - Parent/legal-guardian modes must not set `signatura_alumne` to true.
 - Adult-student editable mode may set `signatura_alumne` to true because the adult student is the respondent.
 - Student-confirm mode must not save the whole form. It only submits confirmation back to the launcher so the launcher can set `signatura_alumne`.
@@ -389,6 +410,22 @@ When the user submits the form, the persisted `autoritzacions` row must include 
 - POST-provided student context that remained unchanged.
 - `id_student`, which identifies the student in the school database and must be persisted even if it is not visible/editable in the form.
 - Any user edits made after prefill.
+
+### Respondent Contact Write-Through
+
+For verified parent/contact flows, Step 1 respondent values are also a controlled contact update.
+
+Rules:
+
+- If `verified_dinantia_account_id` is present and the actor type is `parent`, compare submitted `responent_nom_sencer` and `responent_telefon` with the verified contact data.
+- Send changed contact values to Dinantia through the account update API.
+- Dinantia `phone` values must be sent in E.164 format. Spanish 9-digit values such as `686503045` must be sent to Dinantia as `+34686503045`.
+- Blank phone values are valid and must be sent to Dinantia as `null`, meaning the contact phone should be removed.
+- Validate phone format client-side before submit so obviously invalid values are not sent to Dinantia.
+- If the Dinantia update succeeds, update matching rows in `Dinantia` -> `contacts_cache`.
+- The canonical authorization row still stores the submitted respondent values as entered/displayed in the form.
+- Do not update Dinantia for student confirmation, tutor print, or read-only modes.
+- Do not expose Dinantia API errors directly to families; show a clear form-save error with safe detail.
 
 
 ## Required Script Properties
@@ -485,6 +522,8 @@ Important persistence rules:
 - `responent_nom_sencer` and `responent_telefon` must be persisted from Step 1.
 - `id_student` must be persisted from POST-provided context when available.
 - `data_signatura` must be generated automatically from today's date in `Europe/Madrid`, not manually entered by the user.
+- The student full name must appear near the top of every rendered form page/step when `alumne_nom` is known.
+- Existing saved responses must preserve and render their stored `data_signatura`; only new responses default it to today.
 - `lloc` must come from `FORM_DEFAULTS`, unless the user edits it before submission.
 - Boolean authorization and signature-status fields must be normalized before writing.
 - Internal fields `estat_validacio` and `observacions_internes` are reserved for school use and must not be taken from family input unless explicitly specified later.
@@ -544,6 +583,7 @@ Rules:
 - Both fields must be hidden from the user interface.
 - Both fields must be written as real booleans.
 - The app decides which field or fields are true depending on who answers the form and the selected authorization model.
+- For `form_mode = new_student_adult`, the app must write `signatura_alumne = TRUE`, `student_confirmed_at = submission timestamp`, and `student_confirmed_email = verified student email`.
 - If the selected model does not require a responsible person signature, `signatura_responsable` should be `FALSE` or blank according to the final implementation decision.
 - If the selected model does not require a student signature, `signatura_alumne` should be `FALSE` or blank according to the final implementation decision.
 - The app must ask before implementing the exact rule that determines who answered the form if that context is not yet available.
@@ -600,6 +640,26 @@ Rules:
 - The subsection must include an `Afegir persona` button so the user can add as many authorized-person rows as needed.
 - Hidden authorized-person fields must not block validation and must not be submitted as meaningful rows.
 
+The academic-communication question controls whether the academic-contact subsection is needed:
+
+Question:
+
+`Autoritzo el centre educatiu a comunicar dades acadèmiques rellevants i relatives a l'assistència a una tercera persona.`
+
+Rules:
+
+- If the answer is `yes`, show the dependent academic-contact fields:
+  - `Nom i cognoms de la persona de contacte`
+  - `Adreça electrònica`
+  - `Relació amb l'alumne/a`
+  - `Pare`
+  - `Mare`
+  - `Tutor/a legal`
+  - `Altres`
+- If the answer is `no`, hide the dependent academic-contact fields.
+- Hidden academic-contact fields must be disabled and cleared so old hidden data is not accidentally submitted.
+- Hidden academic-contact fields must not block validation.
+
 ### Section 3: Imatges, Veu, Dades I Obres
 
 `Plataformes no administrades pel centre` and `Plataformes o accés` are dependent fields.
@@ -612,7 +672,38 @@ Rules:
 - The field `Publicació de les inicials de l'alumne/a i del centre` must be removed from the current form UI.
 - Removed `publicacio_inicials` data must not be shown in the tutor authorization matrix.
 
-### Section 6: Lloc, Data I Signatures
+### Section 6: Carta De Compromís Educatiu
+
+The form must add a section titled `6. Carta de compromís educatiu`.
+
+Rules:
+
+- Show the educational commitment letter as a readable document block.
+- Store the mandatory acknowledgement in `carta_compromis_acceptada`.
+- The field is a required boolean acknowledgement.
+- The only valid submitted value is `TRUE`.
+- The visible acceptance text is `He llegit i accepto la Carta de compromís educatiu.`
+- The field must be included in editable, read-only, and print renderings.
+- The field must be present in every translation catalogue.
+
+### Section 7: Normativa D'ús De Telèfons Mòbils
+
+The form must add a section titled `7. Normativa d'ús de telèfons mòbils`.
+
+Rules:
+
+- Show the mobile phone policy as a readable document block.
+- Store the respondent choice in `consentiment_mobil`.
+- The field is required.
+- `TRUE` means consent is given for the student to bring a mobile phone to school under the described rules.
+- `FALSE` means consent is refused.
+- The two visible radio labels are:
+  - `NO DONO EL MEU CONSENTIMENT a què el meu fill/a porti telèfon mòbil, atenent-me a la normativa aquí descrita.`
+  - `DONO EL MEU CONSENTIMENT PARTICULAR a què el meu fill/a porti telèfon mòbil al centre, atenent-me a la normativa aquí descrita.`
+- The field must be included in editable, read-only, and print renderings.
+- The field must be present in every translation catalogue.
+
+### Section 8: Lloc, Data I Signatures
 
 During the current testing phase, only the responsible person's signature status is being tested.
 
@@ -677,7 +768,7 @@ The current form endpoint does not:
 - Read teacher, tutor group, or student data from `tauler_tutor` feature tables.
 - Save generated PDFs to Drive.
 - Send emails.
-- Call Dinantia.
+- Call Dinantia except for the verified parent/contact name and phone write-through explicitly specified above.
 - Register changelog entries in `Dinantia` -> `changelog`.
 
 These behaviors may be specified later if the form becomes connected to the tutor dashboard or other school workflows.

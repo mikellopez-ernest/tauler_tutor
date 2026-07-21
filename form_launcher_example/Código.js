@@ -9,7 +9,7 @@ function doGet(e) {
     return renderParentEntry_();
   } catch (error) {
     console.error(error && error.stack ? error.stack : error);
-    return renderMessagePage_('No s ha pogut obrir el formulari', 'S ha produit un error: ' + safeErrorMessage_(error), true);
+    return renderLauncherError_(error);
   }
 }
 
@@ -28,7 +28,7 @@ function doPost(e) {
     return renderMessagePage_('No s ha pogut continuar', 'La peticio no es valida.', true);
   } catch (error) {
     console.error(error && error.stack ? error.stack : error);
-    return renderMessagePage_('No s ha pogut continuar', 'S ha produit un error: ' + safeErrorMessage_(error), true);
+    return renderLauncherError_(error);
   }
 }
 
@@ -107,10 +107,11 @@ function sendPanelParentInvites_(student, contacts, authorization, tutorEmail) {
           source: 'tauler_tutor',
           tutor_email: tutorEmail,
           parent_name: contact.name || '',
+          parent_phone: contact.phone || '',
           student: student
         }
       });
-      sendVerificationEmail_(email, 'parent', token.rawToken);
+      sendVerificationEmail_(email, 'parent', token.rawToken, student);
       summary.sent++;
     } catch (error) {
       summary.errors.push('Parent invitation failed for ' + email + ': ' + safeErrorMessage_(error));
@@ -130,6 +131,7 @@ function sendPanelStudentInvite_(student, authorization, tutorEmail) {
 
   var auth = findLatestAuthorizationByStudentId_(student.id);
   if (!auth && authorization && authorization.resposta_id) auth = { resposta_id: stringValue_(authorization.resposta_id) };
+  var isAdult = stringValue_(student.isAdult).toLowerCase() === 'si' || Number(student.age) >= 18;
   var token = createVerificationToken_({
     sender: 'student',
     email: email,
@@ -141,10 +143,10 @@ function sendPanelStudentInvite_(student, authorization, tutorEmail) {
       tutor_email: tutorEmail,
       student: student,
       auth: auth || null,
-      isAdult: stringValue_(student.isAdult).toLowerCase() === 'si' || Number(student.age) >= 18
+      isAdult: isAdult
     }
   });
-  sendVerificationEmail_(email, 'student', token.rawToken);
+  sendVerificationEmail_(email, isAdult ? 'student_adult' : 'student', token.rawToken, student);
   return { ok: true, sent: 1, skipped: 0, errors: [] };
 }
 
@@ -203,9 +205,9 @@ function handleParentVerification_(payload) {
     dinantia_account_id: parent.id,
     student_id: '',
     resposta_id: '',
-    metadata: { parent_name: parent.name || '', children: availableChildren }
+    metadata: { parent_name: parent.name || '', parent_phone: parent.phone || '', children: availableChildren }
   });
-  sendVerificationEmail_(email, 'parent', token.rawToken);
+  sendVerificationEmail_(email, 'parent', token.rawToken, availableChildren.length === 1 ? availableChildren[0] : null);
   return renderCheckEmail_();
 }
 
@@ -240,7 +242,7 @@ function handleStudentVerification_(payload) {
       dades_alumnes_sheet: group.dades_alumnes_sheet
     }
   });
-  sendVerificationEmail_(email, 'student', token.rawToken);
+  sendVerificationEmail_(email, isAdult ? 'student_adult' : 'student', token.rawToken, student);
   return renderCheckEmail_();
 }
 
@@ -295,6 +297,10 @@ function renderParentStudentOutcome_(rawToken, child) {
   var parentRecord = validateToken_(rawToken, { allowPendingOnly: true });
   payload.verified_dinantia_account_id = parentRecord.dinantia_account_id || '';
   payload.verified_email = parentRecord.email || '';
+  var metadata = parseJson_(parentRecord.metadata_json) || {};
+  payload.responent_nom_sencer = metadata.parent_name || '';
+  payload.responent_telefon = metadata.parent_phone || '';
+  payload.responsable_nom = metadata.parent_name || '';
   return renderFamilyMessage_(rawToken, payload);
 }
 
@@ -306,7 +312,7 @@ function renderStudentOutcome_(rawToken, student, auth, isAdult) {
     adultPayload.verified_actor_type = 'student';
     adultPayload.verified_dinantia_account_id = adultRecord.dinantia_account_id || adultRecord.student_id || '';
     adultPayload.verified_email = adultRecord.email || '';
-    return renderFamilyMessage_(rawToken, adultPayload);
+    return renderAdultStudentMessage_(rawToken, adultPayload);
   }
   if (!auth) return renderStudentNeedsParent_();
   var record = validateToken_(rawToken, { allowPendingOnly: true });
@@ -359,9 +365,9 @@ function renderStudentEntry_(error) {
   var body = '<h1>Acces al formulari d autoritzacions</h1>' +
     (error ? '<div class="alert">' + escapeHtml_(error) + '</div>' : '') +
     '<p>Benvolgut/da,</p>' +
-    '<p>Algunes de les autoritzacions i declaracions relatives al curs escolar tambe requereixen la conformitat de l alumnat que ha complert els 14 anys.</p>' +
+    '<p>Aquest acces esta pensat per a l alumnat del centre. Si ets major d edat, podras emplenar directament el formulari d autoritzacions, declaracions i comunicacions. Si tens 14 anys o mes i la teva familia ja ha emplenat el formulari, podras revisar-lo i confirmar la teva conformitat.</p>' +
     '<p>Per aquest motiu, abans d accedir al formulari es necessari verificar la teva identitat.</p>' +
-    '<p>Per comencar, introdueix la teva adreca de correu electronic i selecciona el curs o grup al qual pertanys aquest curs escolar. Amb aquesta informacio podrem localitzar el teu expedient i comprovar si hi ha un formulari pendent de la teva confirmacio.</p>' +
+    '<p>Per comencar, introdueix la teva adreca de correu electronic i selecciona el curs o grup al qual pertanys aquest curs escolar. Amb aquesta informacio podrem localitzar el teu expedient i obrir el proces que correspongui en el teu cas.</p>' +
     '<p>Si les dades son correctes, rebras un correu electronic amb un enllac personal i segur que et permetra continuar el proces.</p>' +
     '<p><strong>Important:</strong> si no reps el correu electronic al cap d uns minuts, revisa tambe la carpeta de correu brossa o correu no desitjat. Si despres de revisar-la continues sense haver-lo rebut, posa t en contacte amb el centre.</p>' +
     '<form method="post" action="' + escapeHtml_(LAUNCHER_CONFIG.launcherUrl) + '"><input type="hidden" name="action" value="verify_student"><label>Correu electronic<span>Introdueix l adreca de correu electronic que tens registrada al centre educatiu.</span><input name="email" type="email" required></label><label>Curs o grup<span>Selecciona el curs o grup al qual pertanys aquest curs escolar.</span><select name="group" required><option value="">Selecciona el teu curs o grup</option>' + options + '</select></label><button class="button" type="submit">Continuar</button></form>' +
@@ -399,6 +405,26 @@ function renderFamilyMessage_(token, payload) {
   payload = Object.assign({}, payload || {}, { launcher_token: token });
   var formPayloadJson = JSON.stringify(payload || {});
   var body = '<p>Benvolguda familia,</p><p>Per tal d iniciar correctament el curs escolar i mantenir actualitzada la informacio de l alumnat, us demanem que empleneu el formulari d autoritzacions, declaracions i comunicacions corresponent al vostre fill o filla.</p><p>En aquest formulari podreu:</p><ul><li>revisar i actualitzar les dades basiques;</li><li>autoritzar les diferents activitats i serveis del centre;</li><li>indicar persones autoritzades per recollir l alumne/a;</li><li>facilitar la informacio sanitaria rellevant;</li><li>signar electronicament les autoritzacions.</li></ul><p>Per accedir al formulari, feu clic al seguent boto:</p><form method="post" action="' + escapeHtml_(LAUNCHER_CONFIG.launcherUrl) + '"><input type="hidden" name="action" value="forward_form"><input type="hidden" name="token" value="' + escapeHtml_(token) + '"><input type="hidden" name="form_payload_json" value="' + escapeHtml_(formPayloadJson) + '"><button class="button" type="submit">EMPLENAR EL FORMULARI</button></form><p>Temps aproximat: 10 minuts.</p><p>Es important que el formulari sigui emplenat abans del dia 01/10/2026, ja que aquesta informacio sera utilitzada durant tot el curs escolar.</p><p>Les dades facilitades seran tractades exclusivament per a finalitats educatives i administratives, d acord amb la normativa vigent en materia de proteccio de dades personals.</p><p>Si teniu qualsevol incidencia tecnica o dubte sobre el formulari, podeu contactar amb el centre a traves del correu:</p><p><strong>' + escapeHtml_(LAUNCHER_CONFIG.supportEmail) + '</strong></p><p>Moltes gracies per la vostra col·laboracio.</p><p>Cordialment,</p><p>Equip Directiu<br>Institut Ernest Lluch<br>Cunit</p>';
+  return htmlPage_('Formulari d autoritzacions', body);
+}
+
+function renderAdultStudentMessage_(token, payload) {
+  payload = Object.assign({}, payload || {}, { launcher_token: token });
+  var formPayloadJson = JSON.stringify(payload || {});
+  var studentName = payload.alumne_nom || '';
+  var body = '<p>Benvolgut/da' + (studentName ? ' ' + escapeHtml_(studentName) : '') + ',</p>' +
+    '<p>Com que ets major d edat, el formulari d autoritzacions, declaracions i comunicacions del centre ha de ser emplenat i signat directament per tu.</p>' +
+    '<p>En aquest formulari podràs revisar les teves dades bàsiques, autoritzar les activitats i serveis del centre, facilitar la informació sanitària rellevant i signar electrònicament les autoritzacions necessàries per al curs escolar.</p>' +
+    '<p>Per accedir-hi, fes clic al botó següent:</p>' +
+    '<form method="post" action="' + escapeHtml_(LAUNCHER_CONFIG.launcherUrl) + '"><input type="hidden" name="action" value="forward_form"><input type="hidden" name="token" value="' + escapeHtml_(token) + '"><input type="hidden" name="form_payload_json" value="' + escapeHtml_(formPayloadJson) + '"><button class="button" type="submit">EMPLENAR EL FORMULARI</button></form>' +
+    '<p>Aquest enllaç és personal i caduca en 24 hores.</p>' +
+    '<p>Temps aproximat: 10 minuts.</p>' +
+    '<p>Es important que el formulari sigui emplenat abans del dia 01/10/2026, ja que aquesta informacio sera utilitzada durant tot el curs escolar.</p>' +
+    '<p>Les dades facilitades seran tractades exclusivament per a finalitats educatives i administratives, d acord amb la normativa vigent en materia de proteccio de dades personals.</p>' +
+    '<p>Si tens qualsevol incidència tècnica o dubte sobre el formulari, pots contactar amb el centre a través del correu:</p>' +
+    '<p><strong>' + escapeHtml_(LAUNCHER_CONFIG.supportEmail) + '</strong></p>' +
+    '<p>Moltes gracies per la teva col·laboracio.</p>' +
+    '<p>Cordialment,<br>Equip Directiu<br>Institut Ernest Lluch<br>Cunit</p>';
   return htmlPage_('Formulari d autoritzacions', body);
 }
 
@@ -494,6 +520,17 @@ function renderMessagePage_(title, message, isError) {
   return htmlPage_(title, '<h1' + (isError ? ' class="danger"' : '') + '>' + escapeHtml_(title) + '</h1><p>' + escapeHtml_(message) + '</p>');
 }
 
+function renderLauncherError_(error) {
+  var message = safeErrorMessage_(error);
+  if (/already used/i.test(message)) {
+    return renderMessagePage_('Enllaç ja utilitzat', 'Aquest enllaç ja s ha utilitzat. Si necessiteu tornar a accedir al formulari, torneu a iniciar el procés o demaneu un nou enllaç al centre.', true);
+  }
+  if (/expired/i.test(message)) {
+    return renderMessagePage_('Enllaç caducat', 'Aquest enllaç ha caducat. Torneu a iniciar el procés per rebre un nou enllaç. Si teniu qualsevol dubte, poseu-vos en contacte amb el centre.', true);
+  }
+  return renderMessagePage_('No s ha pogut continuar', 'S ha produït un error. Si el problema continua, poseu-vos en contacte amb el centre.', true);
+}
+
 function htmlPage_(title, body) {
   return HtmlService.createHtmlOutput('<!doctype html><html lang="ca"><head><base target="_top"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + escapeHtml_(title) + '</title><style>body{margin:0;background:#f6f7f9;color:#17202a;font-family:Arial,sans-serif;line-height:1.5}main{width:min(820px,calc(100% - 32px));margin:32px auto;background:#fff;border:1px solid #d9e0e8;border-radius:8px;padding:30px;box-shadow:0 16px 40px rgba(21,34,50,.10)}h1{font-size:28px;line-height:1.2;margin:0 0 18px}h2{font-size:18px;margin-top:28px}.danger{color:#b42318}.alert{border:1px solid #f0b4b4;background:#fff1f1;color:#b42318;border-radius:6px;padding:10px 12px;margin-bottom:18px}label{display:block;font-weight:700;margin:18px 0}label span{display:block;color:#617080;font-size:14px;font-weight:400;margin:4px 0 8px}input,select{width:100%;border:1px solid #ccd6e0;border-radius:6px;font:inherit;padding:11px 12px}.button{display:inline-block;border:0;border-radius:6px;background:#0f766e;color:#fff;cursor:pointer;font-size:16px;font-weight:800;padding:13px 18px;text-decoration:none}.button.secondary{background:#344354}.actions{display:flex;gap:12px;flex-wrap:wrap}.small{color:#617080;font-size:14px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #d9e0e8;padding:9px 10px;text-align:left;vertical-align:top}th{width:230px;background:#edf1f5}</style></head><body><main>' + body + '</main></body></html>')
     .setTitle(title)
@@ -586,7 +623,7 @@ function findLocalStudentById_(studentId) {
 
 function localStudentFromRow_(row, h, sheetName) {
   var birth = normalizeBirthdate_(row[h['Data Naixement']]);
-  var name = firstExisting_(row, h, ['Nom complet', 'NOM_COMPLET', 'Alumne', 'Nom i cognoms', 'Nom']);
+  var name = localStudentFullName_(row, h);
   return {
     id: stringValue_(row[h.ID]),
     name: name,
@@ -599,6 +636,14 @@ function localStudentFromRow_(row, h, sheetName) {
     isAdult: calculateAge_(birth.iso) >= 18 ? 'si' : 'no',
     is14Plus: calculateAge_(birth.iso) >= 14 ? 'si' : 'no'
   };
+}
+
+function localStudentFullName_(row, h) {
+  var composed = ['Nom', 'Cognom1', 'Cognom2'].map(function(header) {
+    return h[header] !== undefined ? stringValue_(row[h[header]]) : '';
+  }).filter(Boolean).join(' ');
+  if (composed) return composed;
+  return firstExisting_(row, h, ['Nom complet', 'NOM_COMPLET', 'Alumne', 'Nom i cognoms', 'Cognoms, Nom', 'Nom']);
 }
 
 function firstExisting_(row, h, headers) {
@@ -624,6 +669,12 @@ function findDinantiaAccountByEmail_(email) {
   var body = fetchDinantiaJson_('/v1.2/accounts/index?email=' + encodeURIComponent(email) + '&limit=10');
   var accounts = body.data || [];
   return accounts.filter(function(account) { return normalizeEmail_(account.email) === email; })[0] || accounts[0] || null;
+}
+
+function findDinantiaAccountById_(accountId) {
+  if (!accountId) return null;
+  var body = fetchDinantiaJson_('/v1.2/accounts/view/' + encodeURIComponent(accountId));
+  return body.data || null;
 }
 
 function findStudentsForParent_(parentId) {
@@ -666,6 +717,7 @@ function findLatestAuthorizationByStudentId_(studentId) {
     var row = values[i];
     if (codeKey_(row[h.id_student]) !== codeKey_(studentId)) continue;
     var auth = objectFromRow_(row, h);
+    if (parseBooleanValue_(auth.invalidated) === true) continue;
     auth._rowNumber = i + 1;
     if (!latest || stringValue_(auth.data_hora_enviament) >= stringValue_(latest.data_hora_enviament)) latest = auth;
   }
@@ -774,20 +826,25 @@ function appendByHeaders_(sheet, h, object) {
   sheet.appendRow(row);
 }
 
-function sendVerificationEmail_(email, sender, rawToken) {
+function sendVerificationEmail_(email, sender, rawToken, student) {
   var url = LAUNCHER_CONFIG.launcherUrl + '?token=' + encodeURIComponent(rawToken);
-  var subject = sender === 'student' ? 'Enllac de verificacio del formulari d autoritzacions' : 'Formulari d autoritzacions - verificacio';
+  var studentName = student && student.name ? student.name : '';
+  var suffix = studentName ? ' - ' + studentName : '';
+  var lifetime = '24 hores';
+  var subject = sender === 'student' ? 'Enllac de confirmacio del formulari d autoritzacions' + suffix : sender === 'student_adult' ? 'Formulari d autoritzacions' + suffix : 'Formulari d autoritzacions' + suffix;
   var plain = sender === 'student'
-    ? 'Benvolgut/da,\n\nPer revisar el formulari d autoritzacions i confirmar la teva conformitat, obre aquest enllac personal i segur:\n\n' + url + '\n\nAquest enllac caduca en ' + LAUNCHER_CONFIG.tokenMinutes + ' minuts.\n\nInstitut Ernest Lluch'
-    : 'Benvolgut/da,\n\nPer continuar el proces d autoritzacions, obre aquest enllac personal i segur:\n\n' + url + '\n\nAquest enllac caduca en ' + LAUNCHER_CONFIG.tokenMinutes + ' minuts.\n\nInstitut Ernest Lluch';
-  var html = sender === 'student' ? studentVerificationEmailHtml_(url) : '<div style="font-family:Arial,sans-serif;line-height:1.5;color:#17202a;max-width:720px">' +
+    ? 'Benvolgut/da,\n\nPer revisar el formulari d autoritzacions' + (studentName ? ' de ' + studentName : '') + ' i confirmar la teva conformitat, obre aquest enllac personal i segur:\n\n' + url + '\n\nAquest enllac caduca en ' + lifetime + '.\n\nInstitut Ernest Lluch'
+    : sender === 'student_adult'
+    ? 'Benvolgut/da,\n\nPer tal d iniciar correctament el curs escolar i mantenir actualitzada la teva informacio, et demanem que emplenis el teu formulari d autoritzacions, declaracions i comunicacions.\n\nEn aquest formulari podràs revisar les teves dades bàsiques, autoritzar les activitats i serveis del centre, facilitar la informació sanitària rellevant i signar electrònicament les autoritzacions necessàries per al curs escolar.\n\nPer accedir-hi, fes clic al botó següent:\n\n' + url + '\n\nAquest enllaç és personal i caduca en ' + lifetime + '.\n\nTemps aproximat: 10 minuts.\n\nSi tens qualsevol incidència tècnica o dubte sobre el formulari, pots contactar amb el centre a través del correu:\n\n' + LAUNCHER_CONFIG.supportEmail + '\n\nCordialment,\n\nEquip Directiu\nInstitut Ernest Lluch\nCunit'
+    : 'Benvolgut/da,\n\nPer continuar el proces d autoritzacions' + (studentName ? ' de ' + studentName : '') + ', obre aquest enllac personal i segur:\n\n' + url + '\n\nAquest enllac caduca en ' + lifetime + '.\n\nInstitut Ernest Lluch';
+  var html = sender === 'student' ? studentVerificationEmailHtml_(url, student) : sender === 'student_adult' ? adultStudentVerificationEmailHtml_(url, student) : '<div style="font-family:Arial,sans-serif;line-height:1.5;color:#17202a;max-width:720px">' +
     '<p>Benvolguda familia,</p>' +
-    '<p>Per tal d iniciar correctament el curs escolar i mantenir actualitzada la informacio de l alumnat, us demanem que empleneu el formulari d autoritzacions, declaracions i comunicacions corresponent al vostre fill o filla.</p>' +
+    '<p>Per tal d iniciar correctament el curs escolar i mantenir actualitzada la informacio de l alumnat, us demanem que empleneu el formulari d autoritzacions, declaracions i comunicacions' + (studentName ? ' corresponent a <strong>' + escapeHtml_(studentName) + '</strong>' : ' corresponent al vostre fill o filla') + '.</p>' +
     '<p>En aquest formulari podreu:</p>' +
     '<ul><li>revisar i actualitzar les dades basiques;</li><li>autoritzar les diferents activitats i serveis del centre;</li><li>indicar persones autoritzades per recollir l alumne/a;</li><li>facilitar la informacio sanitaria rellevant;</li><li>signar electronicament les autoritzacions.</li></ul>' +
     '<p>Per accedir al formulari, feu clic al seguent boto:</p>' +
     '<p><a href="' + escapeHtml_(url) + '" style="display:inline-block;background:#0f766e;color:#fff;text-decoration:none;border-radius:6px;padding:13px 18px;font-weight:800">EMPLENAR EL FORMULARI</a></p>' +
-    '<p>Aquest enllac es personal i caduca en ' + LAUNCHER_CONFIG.tokenMinutes + ' minuts.</p>' +
+    '<p>Aquest enllac es personal i caduca en ' + lifetime + '.</p>' +
     '<p>Temps aproximat: 10 minuts.</p>' +
     '<p>Es important que el formulari sigui emplenat abans del dia 01/10/2026, ja que aquesta informacio sera utilitzada durant tot el curs escolar.</p>' +
     '<p>Les dades facilitades seran tractades exclusivament per a finalitats educatives i administratives, d acord amb la normativa vigent en materia de proteccio de dades personals.</p>' +
@@ -796,16 +853,33 @@ function sendVerificationEmail_(email, sender, rawToken) {
     '<p>Moltes gracies per la vostra col·laboracio.</p>' +
     '<p>Cordialment,<br>Equip Directiu<br>Institut Ernest Lluch<br>Cunit</p>' +
     '</div>';
-  MailApp.sendEmail({ to: email, subject: subject, body: plain, htmlBody: html });
+  MailApp.sendEmail({ to: email, subject: subject, body: plain, htmlBody: html, name: LAUNCHER_CONFIG.senderDisplayName });
 }
 
-function studentVerificationEmailHtml_(url) {
+function adultStudentVerificationEmailHtml_(url, student) {
+  var studentName = student && student.name ? student.name : '';
   return '<div style="font-family:Arial,sans-serif;line-height:1.5;color:#17202a;max-width:720px">' +
     '<p>Benvolgut/da,</p>' +
-    '<p>Algunes autoritzacions i declaracions del curs requereixen tambe la conformitat de l alumnat.</p>' +
+    '<p>Per tal d iniciar correctament el curs escolar i mantenir actualitzada la teva informacio, et demanem que emplenis el teu formulari d autoritzacions, declaracions i comunicacions.</p>' +
+    '<p>En aquest formulari podràs revisar les teves dades bàsiques, autoritzar les activitats i serveis del centre, facilitar la informació sanitària rellevant i signar electrònicament les autoritzacions necessàries per al curs escolar.</p>' +
+    '<p>Per accedir-hi, fes clic al botó següent:</p>' +
+    '<p><a href="' + escapeHtml_(url) + '" style="display:inline-block;background:#0f766e;color:#fff;text-decoration:none;border-radius:6px;padding:13px 18px;font-weight:800">EMPLENAR EL FORMULARI</a></p>' +
+    '<p>Aquest enllaç és personal i caduca en 24 hores.</p>' +
+    '<p>Temps aproximat: 10 minuts.</p>' +
+    '<p>Si tens qualsevol incidència tècnica o dubte sobre el formulari, pots contactar amb el centre a través del correu:</p>' +
+    '<p><strong>' + escapeHtml_(LAUNCHER_CONFIG.supportEmail) + '</strong></p>' +
+    '<p>Cordialment,<br>Equip Directiu<br>Institut Ernest Lluch<br>Cunit</p>' +
+    '</div>';
+}
+
+function studentVerificationEmailHtml_(url, student) {
+  var studentName = student && student.name ? student.name : '';
+  return '<div style="font-family:Arial,sans-serif;line-height:1.5;color:#17202a;max-width:720px">' +
+    '<p>Benvolgut/da,</p>' +
+    '<p>Algunes autoritzacions i declaracions del curs' + (studentName ? ' de <strong>' + escapeHtml_(studentName) + '</strong>' : '') + ' requereixen tambe la conformitat de l alumnat.</p>' +
     '<p>Per revisar el formulari ja emplenat i confirmar la teva conformitat, fes clic al boto seguent:</p>' +
     '<p><a href="' + escapeHtml_(url) + '" style="display:inline-block;background:#0f766e;color:#fff;text-decoration:none;border-radius:6px;padding:13px 18px;font-weight:800">REVISAR I CONFIRMAR</a></p>' +
-    '<p>Aquest enllac es personal i caduca en ' + LAUNCHER_CONFIG.tokenMinutes + ' minuts.</p>' +
+    '<p>Aquest enllac es personal i caduca en 24 hores.</p>' +
     '<p>Si tens qualsevol incidencia tecnica o dubte sobre el formulari, pots contactar amb el centre a traves del correu:</p>' +
     '<p><strong>' + escapeHtml_(LAUNCHER_CONFIG.supportEmail) + '</strong></p>' +
     '<p>Cordialment,<br>Equip Directiu<br>Institut Ernest Lluch<br>Cunit</p>' +
@@ -909,6 +983,7 @@ function buildAuthorizationsCacheRows_() {
   authorizations.forEach(function(auth) {
     var id = stringValue_(auth.id_student);
     if (!id) return;
+    if (parseBooleanValue_(auth.invalidated) === true) return;
     if (!latestAuth[id] || stringValue_(auth.data_hora_enviament) >= stringValue_(latestAuth[id].data_hora_enviament)) latestAuth[id] = auth;
   });
   tokens.forEach(function(token) {

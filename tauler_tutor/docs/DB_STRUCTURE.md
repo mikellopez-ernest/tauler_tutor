@@ -349,6 +349,13 @@ Health information headers:
 | `posologia` | Medication posology. |
 | `dosi` | Medication dose. |
 
+Commitment and mobile policy headers:
+
+| Header | Meaning |
+| --- | --- |
+| `carta_compromis_acceptada` | Boolean acknowledgement that the respondent has read and accepts the educational commitment letter. Required and always `TRUE` for new submissions. |
+| `consentiment_mobil` | Boolean consent for the student to bring a mobile phone to school under the centre rules. `TRUE` means consent is given; `FALSE` means consent is refused. |
+
 Signature headers:
 
 | Header | Meaning |
@@ -370,6 +377,10 @@ Internal headers:
 | `updated_by_email` | Normalized email of the verified respondent that last edited the row. |
 | `student_confirmed_at` | Datetime when the student confirmed the already submitted form. |
 | `student_confirmed_email` | Normalized student email used for confirmation. |
+| `invalidated` | Boolean flag set by the tutor panel when the submitted form must stop being considered active. |
+| `invalidated_at` | Datetime when the form was invalidated. |
+| `invalidated_by_email` | Tutor email that invalidated the form. |
+| `invalidated_reason` | Tutor-entered reason for the invalidation. |
 
 ### `autoritzacions` Rules
 
@@ -391,6 +402,9 @@ Internal headers:
 - Adult-student submissions may write `TRUE` to `signatura_alumne` because the adult student is the respondent.
 - Minor student confirmation must update only `signatura_alumne`, plus `student_confirmed_at` and `student_confirmed_email` when present.
 - Parent edits after student confirmation must not silently clear `signatura_alumne` or the student confirmation audit fields.
+- Invalidating a response must set `invalidated` to real boolean `TRUE` and write `invalidated_at`, `invalidated_by_email`, and `invalidated_reason`.
+- Invalidated rows must remain in the canonical sheet for audit/history, but app read models must treat them as inactive for current status resolution.
+- After invalidation, the student behaves as if no active authorization response exists, so the tutor can send a new invitation.
 - The form must not store handwritten signature images, Drive file IDs, Drive URLs, or Base64 signature strings in these fields in this version.
 - `estat_validacio` and `observacions_internes` are internal school fields and are not entered by the family.
 - Existing columns must not be reused later with a different meaning.
@@ -468,10 +482,11 @@ Row 1 contains headers. Data starts in row 2.
 ### `verification_tokens` Rules
 
 - Store only `token_hash`; never store or log the raw token.
-- Tokens must expire. Initial recommended lifetime is 30 minutes.
+- Tokens must expire. Current lifetime is 24 hours.
 - Preferred behavior is one-time use.
 - When a token is consumed successfully, set `used_at` and `status` to `used`.
 - Expired tokens should be treated as invalid even if `status` still says `pending`.
+- Expired or already-used token errors must be shown with friendly Catalan messages that do not mention internal token terminology.
 - `status = revoked` must always block token use.
 - `sender` must be `parent`, `student`, or `tutor_print`.
 - `email` must be normalized by trimming and lowercasing before storage.
@@ -607,10 +622,10 @@ Required headers:
 | `student_data_sheet` | Source sheet in `Dades alumnes`. |
 | `parent_ids` | JSON array of Dinantia parent/contact account IDs. |
 | `birthdate` | Display birthdate from `Dades alumnes`.`Data Naixement`. |
-| `birthdate_sort_key` | ISO date used for sorting. |
+| `birthdate_sort_key` | ISO date text (`yyyy-MM-dd`) used for sorting. Cache writers must preserve it as plain text so Sheets does not convert it to a localized date display. |
 | `age` | Full years calculated against today in `Europe/Madrid`. |
 | `document` | Student identity document when available. |
-| `study_type` | Inferred study type used by the authorization form. |
+| `study_type` | Inferred study type used by the authorization form. `BAT` maps to `batx`; `FP`, `CF`, `CICLE`, `PFI`, `SMX`, `PCC`, and `AC` map to `fp`; otherwise the default is `eso`. |
 | `is_adult` | `si` when age is 18 or more, otherwise `no`. |
 | `is_14_plus` | `si` when age is 14 or more, otherwise `no`. |
 
@@ -631,7 +646,9 @@ Required headers:
 | `contact_email` | Contact email. |
 | `contact_phone` | Contact phone. |
 
-Contact edits must be written to Dinantia first. After a successful Dinantia update, update the matching `contacts_cache` row.
+Contact edits must be written to Dinantia first. After a successful Dinantia update, update every `contacts_cache` row with the same `contact_id`.
+
+Reason: the same Dinantia parent/contact account can appear in multiple rows when siblings are loaded. `contacts_cache` is a denormalized read model, so updates must fan out by `contact_id` and must not be limited to the student row where the edit happened.
 
 ### `Dinantia` -> `authorizations_cache`
 
@@ -645,11 +662,20 @@ codi_document, tipus_alumne, sortida_sola, sortida_esbarjo, sortides_municipi,
 comunicacio_academica, comunicacio_salut, declaracio_plataformes,
 imatge_intranet, imatge_web, imatge_externa, obra_oberta, obra_centre,
 obra_biblioteca, obra_repositori, administracio_medicacio, paracetamol,
+carta_compromis_acceptada, consentiment_mobil,
 problemes_salut, altres_salut, signatura_responsable, signatura_alumne,
 acad_contacte_nom, acad_contacte_email, acad_contacte_relacio,
 emergencia_nom, emergencia_telefon, emergencia_relacio, medicacio,
 posologia, dosi, plataformes_externes, estat_validacio, observacions_internes
+authorized_people_json
 ```
+
+`authorized_people_json` stores a JSON array built from `Autoritzacions` -> `persones_autoritzades` for the active `resposta_id`. Each item contains:
+
+| Key | Meaning |
+| --- | --- |
+| `nom_sencer` | Authorized pickup person's full name. |
+| `qualitat_de` | Relationship/role with respect to the student/family. |
 
 Required latest-invitation headers:
 

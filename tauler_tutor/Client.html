@@ -13,7 +13,8 @@
       contactsLoading: false,
       authorizationsLoaded: false,
       inviting: false,
-      formLauncherUrl: ''
+      formLauncherUrl: '',
+      contactSort: { key: 'name', direction: 'asc' }
     };
 
     var appShell = document.querySelector('.app-shell');
@@ -178,17 +179,41 @@
     }
 
     function filteredStudents() {
-      if (!state.hasMultipleGroups || state.selectedGroup === '__all') return state.students.slice();
-      return state.students.filter(function(student) {
+      var students = (!state.hasMultipleGroups || state.selectedGroup === '__all') ? state.students.slice() : state.students.filter(function(student) {
         return String(student.groupName || '') === state.selectedGroup;
       });
+      return sortStudentListByName_(students);
     }
 
     function filteredContacts() {
-      if (!state.hasMultipleGroups || state.selectedGroup === '__all') return state.contacts.slice();
-      return state.contacts.filter(function(student) {
+      var contacts = (!state.hasMultipleGroups || state.selectedGroup === '__all') ? state.contacts.slice() : state.contacts.filter(function(student) {
         return String(student.groupName || '') === state.selectedGroup;
       });
+      return sortContactStudentList_(contacts);
+    }
+
+    function sortStudentListByName_(students) {
+      return (students || []).slice().sort(function(a, b) {
+        return String(a.name || '').localeCompare(String(b.name || ''), 'ca', { sensitivity: 'base' });
+      });
+    }
+
+    function sortContactStudentList_(students) {
+      var sort = state.contactSort || { key: 'name', direction: 'asc' };
+      var multiplier = sort.direction === 'desc' ? -1 : 1;
+      return (students || []).slice().sort(function(a, b) {
+        return contactSortValue_(a, sort.key).localeCompare(contactSortValue_(b, sort.key), 'ca', { sensitivity: 'base' }) * multiplier;
+      });
+    }
+
+    function contactSortValue_(student, key) {
+      var contacts = student && student.contacts && student.contacts.length ? student.contacts : [];
+      var first = contacts[0] || {};
+      if (key === 'group') return String(student && student.groupName || '');
+      if (key === 'contact-name') return String(first.name || '');
+      if (key === 'contact-email') return String(first.email || '');
+      if (key === 'contact-phone') return String(first.phone || '');
+      return String(student && student.name || '');
     }
 
     function rerenderCurrentData() {
@@ -399,6 +424,8 @@
           appendIconCell(row, auth ? auth[field] : '');
         });
         appendIconCell(row, auth && (textValue(auth.problemes_salut) || textValue(auth.altres_salut)) ? true : '');
+        appendIconCell(row, auth ? auth.carta_compromis_acceptada : '');
+        appendIconCell(row, auth ? auth.consentiment_mobil : '');
         appendIconCell(row, auth ? auth.signatura_responsable : '');
         appendIconCell(row, auth ? auth.signatura_alumne : '');
         tbody.appendChild(row);
@@ -412,6 +439,7 @@
       (state.authorizations || []).forEach(function(auth) {
         var id = String(auth.id_student || '').trim();
         if (!id) return;
+        if (parseBooleanValue(auth.invalidated) === true) return;
         if (!map[id] || String(auth.data_hora_enviament || '') >= String(map[id].data_hora_enviament || '')) {
           map[id] = auth;
         }
@@ -442,7 +470,12 @@
         button.type = 'button';
         button.textContent = status.target === 'student' ? 'Enviar a alumne' : 'Enviar a tutors';
         button.addEventListener('click', function() {
-          sendInvitationRequests([buildInvitationRequest(student, auth, status.target)]);
+          var request = buildInvitationRequest(student, auth, status.target);
+          if (status.target === 'parents') {
+            openContactSelectionModal(request);
+          } else {
+            sendInvitationRequests([request]);
+          }
         });
         cell.appendChild(button);
       }
@@ -453,10 +486,12 @@
       var adult = isAdultStudent(student);
       if (!auth) return adult ? { label: 'Pendent alumne', target: 'student', sortKey: '2' } : { label: 'Pendent', target: 'parents', sortKey: '0' };
       if (adult) {
+        if (String(auth.tipus_alumne || '').trim() === 'major18') return { label: 'Complet', target: '', sortKey: '3' };
         if (parseBooleanValue(auth.signatura_alumne) !== true) return { label: 'Pendent alumne', target: 'student', sortKey: '2' };
         return { label: 'Complet', target: '', sortKey: '3' };
       }
       if (parseBooleanValue(auth.signatura_responsable) !== true) return { label: 'Pendent tutors', target: 'parents', sortKey: '1' };
+      if (String(auth.tipus_alumne || '').trim() === 'eso_menor14') return { label: 'Complet', target: '', sortKey: '3' };
       if (parseBooleanValue(auth.signatura_alumne) !== true) return { label: 'Pendent alumne', target: 'student', sortKey: '2' };
       return { label: 'Complet', target: '', sortKey: '3' };
     }
@@ -501,10 +536,11 @@
       document.getElementById('authorization-detail-title').textContent = 'Detall de ' + (student.name || 'l alumne');
       body.textContent = '';
       var groups = [
-        { title: 'Enviament', fields: [['resposta_id','Resposta'], ['data_hora_enviament','Enviament'], ['idioma_formulari','Idioma'], ['codi_document','Codi document'], ['tipus_alumne','Tipus alumne']] },
+        { title: 'Enviament', fields: [['resposta_id','Resposta'], ['data_hora_enviament','Enviament'], ['idioma_formulari','Idioma'], ['codi_document','Codi document'], ['tipus_alumne','Tipus alumne'], ['submitted_by_email','Emplenat per'], ['submitted_by_dinantia_account_id','Compte Dinantia'], ['updated_at','Última actualització'], ['updated_by_email','Actualitzat per']] },
         { title: 'Contacte academic', fields: [['acad_contacte_nom','Nom'], ['acad_contacte_email','Email'], ['acad_contacte_relacio','Relacio']] },
         { title: 'Emergencia', fields: [['emergencia_nom','Nom'], ['emergencia_telefon','Telefon'], ['emergencia_relacio','Relacio']] },
         { title: 'Salut', fields: [['problemes_salut','Problemes de salut'], ['altres_salut','Altres salut'], ['medicacio','Medicacio'], ['posologia','Posologia'], ['dosi','Dosi']] },
+        { title: 'Documents i normativa', fields: [['carta_compromis_acceptada','Carta de compromís'], ['consentiment_mobil','Consentiment mòbil']] },
         { title: 'Publicacio', fields: [['plataformes_externes','Plataformes o acces']] },
         { title: 'Intern', fields: [['estat_validacio','Estat validacio'], ['observacions_internes','Observacions internes']] }
       ];
@@ -530,6 +566,7 @@
         section.appendChild(dl);
         body.appendChild(section);
       });
+      if (auth) appendAuthorizedPeopleDetail(body, auth);
       appendLatestInvitationDetail(body, latestInvitation);
       if (!body.children.length) {
         var empty = document.createElement('p');
@@ -538,6 +575,30 @@
         body.appendChild(empty);
       }
       modal.classList.remove('is-hidden');
+    }
+
+    function appendAuthorizedPeopleDetail(body, auth) {
+      var people = parseAuthorizedPeople_(auth);
+      if (!people.length) return;
+      var values = people.map(function(person, index) {
+        return {
+          label: 'Persona ' + (index + 1),
+          value: [person.nom_sencer || '', person.qualitat_de || ''].filter(Boolean).join(' · ')
+        };
+      }).filter(function(item) { return item.value; });
+      appendDetailGroup(body, 'Persones autoritzades', values);
+    }
+
+    function parseAuthorizedPeople_(auth) {
+      if (Array.isArray(auth.authorized_people)) return auth.authorized_people;
+      var raw = textValue(auth.authorized_people_json);
+      if (!raw) return [];
+      try {
+        var parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (error) {
+        return [];
+      }
     }
 
     function appendLatestInvitationDetail(body, latestInvitation) {
@@ -610,12 +671,48 @@
           openReadonlyAuthorizationDocument(student, auth, docButton);
         });
         wrapper.appendChild(docButton);
+        var invalidateButton = document.createElement('button');
+        invalidateButton.className = 'document-button invalidate-button';
+        invalidateButton.type = 'button';
+        invalidateButton.title = 'Invalida el formulari';
+        invalidateButton.setAttribute('aria-label', 'Invalida el formulari de ' + (student.name || 'alumne'));
+        invalidateButton.textContent = '✕';
+        invalidateButton.addEventListener('click', function() {
+          invalidateAuthorizationDocument(student, auth, invalidateButton);
+        });
+        wrapper.appendChild(invalidateButton);
       }
       var name = document.createElement('span');
       name.textContent = student.name || '';
       wrapper.appendChild(name);
       cell.appendChild(wrapper);
       row.appendChild(cell);
+    }
+
+    function invalidateAuthorizationDocument(student, auth, button) {
+      if (!auth || !auth.resposta_id) {
+        alert('No hi ha cap formulari per invalidar.');
+        return;
+      }
+      var reason = window.prompt('Motiu de la invalidació');
+      if (reason === null) return;
+      button.disabled = true;
+      setInitialLoading(true);
+      google.script.run
+        .withSuccessHandler(function() {
+          button.disabled = false;
+          setInitialLoading(false);
+          loadAuthorizations();
+        })
+        .withFailureHandler(function(error) {
+          button.disabled = false;
+          setInitialLoading(false);
+          alert('No s ha pogut invalidar el formulari: ' + (error && error.message ? error.message : error));
+        })
+        .invalidateAuthorizationResponse({
+          resposta_id: auth.resposta_id,
+          reason: reason || ''
+        });
     }
 
     function openReadonlyAuthorizationDocument(student, auth, button) {
@@ -748,6 +845,73 @@
     function contactsForStudent(studentId) {
       var record = (state.contacts || []).filter(function(item) { return String(item.id) === String(studentId); })[0];
       return record && record.contacts ? record.contacts : [];
+    }
+
+    function openContactSelectionModal(request) {
+      if (!request.contacts || !request.contacts.length) {
+        loadVisibleContactsIfNeeded(function() {
+          request.contacts = contactsForStudent(request.student && request.student.id);
+          openContactSelectionModal(request);
+        });
+        return;
+      }
+      var modal = document.getElementById('authorization-detail-modal');
+      var body = document.getElementById('authorization-detail-body');
+      if (!modal || !body) return;
+      document.getElementById('authorization-detail-title').textContent = 'Enviar a tutors';
+      body.textContent = '';
+
+      var intro = document.createElement('p');
+      intro.className = 'subtle';
+      intro.textContent = 'Selecciona els contactes que rebran l enllaç del formulari.';
+      body.appendChild(intro);
+
+      var list = document.createElement('div');
+      list.className = 'contact-checklist';
+      request.contacts.forEach(function(contact, index) {
+        var id = 'invite-contact-' + index;
+        var label = document.createElement('label');
+        label.className = 'contact-check';
+        var input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = true;
+        input.value = index;
+        input.id = id;
+        var text = document.createElement('span');
+        text.textContent = [contact.name || 'Contacte', contact.email || 'sense email'].join(' · ');
+        label.appendChild(input);
+        label.appendChild(text);
+        list.appendChild(label);
+      });
+      body.appendChild(list);
+
+      var actions = document.createElement('div');
+      actions.className = 'modal-actions';
+      var cancel = document.createElement('button');
+      cancel.className = 'detail-button';
+      cancel.type = 'button';
+      cancel.textContent = 'Cancel·la';
+      cancel.addEventListener('click', closeAuthorizationDetail);
+      var send = document.createElement('button');
+      send.className = 'status-action';
+      send.type = 'button';
+      send.textContent = 'Enviar';
+      send.addEventListener('click', function() {
+        var selected = Array.prototype.slice.call(list.querySelectorAll('input:checked')).map(function(input) {
+          return request.contacts[Number(input.value)];
+        }).filter(Boolean);
+        if (!selected.length) {
+          alert('Selecciona almenys un contacte.');
+          return;
+        }
+        closeAuthorizationDetail();
+        request.contacts = selected;
+        sendInvitationRequests([request]);
+      });
+      actions.appendChild(cancel);
+      actions.appendChild(send);
+      body.appendChild(actions);
+      modal.classList.remove('is-hidden');
     }
 
     function buildInvitationRequest(student, auth, target) {
@@ -974,16 +1138,35 @@
         button.addEventListener('click', function() {
           var tableId = button.getAttribute('data-sort-table');
           var key = button.getAttribute('data-sort-key');
-          var direction = button.classList.contains('sorted-asc') ? 'desc' : 'asc';
+          var currentDirection = tableId === 'contacts-table' && state.contactSort && state.contactSort.key === key
+            ? state.contactSort.direction
+            : (button.classList.contains('sorted-asc') ? 'asc' : '');
+          var direction = currentDirection === 'asc' ? 'desc' : 'asc';
 
           document.querySelectorAll('[data-sort-table="' + tableId + '"]').forEach(function(item) {
             item.classList.remove('sorted-asc', 'sorted-desc');
           });
           button.classList.add(direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
 
+          if (tableId === 'contacts-table') {
+            state.contactSort = { key: key, direction: direction };
+            renderContacts(filteredContacts());
+            updateSaveButton();
+            return;
+          }
+
           sortRows(tableId, key, direction);
           syncAuthorizationFloatingScroll();
         });
+      });
+      updateContactSortButtons_();
+    }
+
+    function updateContactSortButtons_() {
+      document.querySelectorAll('[data-sort-table="contacts-table"]').forEach(function(button) {
+        var active = state.contactSort && button.getAttribute('data-sort-key') === state.contactSort.key;
+        button.classList.toggle('sorted-asc', active && state.contactSort.direction === 'asc');
+        button.classList.toggle('sorted-desc', active && state.contactSort.direction === 'desc');
       });
     }
 

@@ -11,6 +11,7 @@ var FORM_DEFAULTS = {
 var FORM_CONFIG = {
   timezone: 'Europe/Madrid',
   databaseProperty: 'db',
+  dinantiaBaseUrl: 'https://app.dinantia.com/api/web',
   registrySheet: 'tables',
   tableAuthorizations: 'Autoritzacions',
   tableDinantia: 'Dinantia',

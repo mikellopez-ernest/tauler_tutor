@@ -3,10 +3,11 @@ var LAUNCHER_CONFIG = {
   authFormUrl: 'https://script.google.com/macros/s/AKfycbyZpqmW-iGRN6xr_GdpCpeQxstvcYjZTM8CcqI657YFPfuTCU7Il3Zp2gJRkBykbHjjzg/exec',
   dinantiaBaseUrl: 'https://app.dinantia.com/api/web',
   title: 'Formulari d’autoritzacions',
+  senderDisplayName: 'Institut Ernest Lluch i Martín',
   supportEmail: 'e3009850@xtec.cat',
   databaseProperty: 'db',
   internalSecretProperty: 'launcher_internal_secret',
   registrySheet: 'tables',
   timezone: 'Europe/Madrid',
-  tokenMinutes: 30
+  tokenMinutes: 1440
 };

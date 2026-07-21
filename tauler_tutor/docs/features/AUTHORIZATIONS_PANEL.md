@@ -39,6 +39,10 @@ Required headers from `Autoritzacions` -> `autoritzacions`:
 | `resposta_id` | Unique form response identifier. |
 | `data_hora_enviament` | Submission datetime. |
 | `data_signatura` | Signature/submission date. |
+| `invalidated` | Boolean flag. Rows with true are not active and must be ignored by the current-status read model. |
+| `invalidated_at` | Invalidation datetime. |
+| `invalidated_by_email` | Tutor email that invalidated the response. |
+| `invalidated_reason` | Tutor-entered reason. |
 
 The permission fields are listed in the table sections below.
 
@@ -58,6 +62,7 @@ Rules:
 - If a student has no matching authorization row, display the row with a pale red background, leave permission cells blank, and show the pending-family invitation action in the status column.
 - If a student has one matching authorization row, use that row.
 - If a student has multiple matching authorization rows, use the most recent row by `data_hora_enviament`. If that value is missing or invalid, use the last row encountered in sheet order.
+- Rows where `invalidated` is true must be ignored when resolving the active authorization for a student.
 
 ## Table Layout
 
@@ -157,6 +162,32 @@ Behavior:
 
 This action is required. Non-boolean fields must not disappear from the tutor workflow just because the main matrix uses tick/X icons for boolean answers.
 
+### Invalidate Form Action
+
+When a student has an active submitted authorization row, the student-name cell must also show a compact X icon next to the document icon.
+
+Behavior:
+
+- The icon appears only when the student has an active filled form.
+- Clicking it opens a popup asking for the invalidation reason.
+- The popup has `OK` and `Cancel` actions.
+- `Cancel` closes the popup and makes no change.
+- `OK` writes the invalidation audit fields in `Autoritzacions` -> `autoritzacions`:
+
+| Field | Value |
+| --- | --- |
+| `invalidated` | Real boolean `TRUE`. |
+| `invalidated_at` | Current datetime in Apps Script timezone `Europe/Madrid`. |
+| `invalidated_by_email` | Current tutor email from `Session.getActiveUser().getEmail()`. |
+| `invalidated_reason` | Tutor-entered reason. |
+
+After a successful invalidation:
+
+- Refresh `Dinantia` -> `authorizations_cache`.
+- Reload the `Autoritzacions` table.
+- Treat the student as pending again according to the normal status rules.
+- Do not delete the original canonical row.
+
 
 ## Status And Invitation Actions
 
@@ -171,10 +202,16 @@ Status rules:
 | Parent/responsible signature is true and student signature is not true | `Pendent alumne` | `Enviar a alumne` |
 | Parent/responsible signature is true and student signature is true | `Complet` | None |
 
+Student-signature exception:
+
+- If `tipus_alumne` is exactly `eso_menor14`, the student signature is not required.
+- When an `eso_menor14` response has `signatura_responsable` true, show `Complet` and do not show `Enviar a alumne`.
+
 Adult-student exception:
 
 - If the loaded student is 18 or older and has no authorization row, show `Pendent alumne` with `Enviar a alumne`.
-- If the loaded student is 18 or older and `signatura_alumne` is not true, show `Pendent alumne` with `Enviar a alumne`.
+- If the loaded student is 18 or older and the active authorization row has `tipus_alumne = major18`, show `Complet`; adult students complete the form themselves and do not need a later student-confirmation invitation.
+- If the loaded student is 18 or older and the active authorization row is not a `major18` adult-student submission and `signatura_alumne` is not true, show `Pendent alumne` with `Enviar a alumne`.
 - Do not send parent invitations for adult students.
 
 The inline action must appear behind or beside the status text, not in the `Alumne` column.
@@ -185,6 +222,15 @@ Invitation targets:
 | --- | --- |
 | `Enviar a tutors` | All loaded Dinantia contacts/parents for that student with a valid email. |
 | `Enviar a alumne` | The student email loaded from `Dades alumnes`.`Correu alumne`. |
+
+Before sending `Enviar a tutors`, the panel must open a contact-selection popup:
+
+- Show every loaded Dinantia contact for the student.
+- Each contact has a checkbox selected by default.
+- The tutor can unselect contacts that should not receive the email.
+- The popup has `Enviar` and `Cancel·la` actions.
+- If every contact is unchecked and the tutor presses `Enviar`, block the action and show `Selecciona almenys un contacte.`
+- The panel sends only the selected contacts to `form_launcher_example`.
 
 Panel-initiated invitations must call the deployed `form_launcher_example` endpoint server-side. The tutor panel must not create verification tokens directly; token creation and email delivery belong to the launcher.
 
@@ -313,10 +359,28 @@ Suggested fields:
 | --- | --- |
 | Submission | `resposta_id`, `data_hora_enviament`, `idioma_formulari`, `codi_document`, `tipus_alumne`. |
 | Academic contact | `acad_contacte_nom`, `acad_contacte_email`, `acad_contacte_relacio`. |
+| Authorized pickup people | `authorized_people_json`, built from `Autoritzacions` -> `persones_autoritzades` by `resposta_id`. |
 | Emergency contact | `emergencia_nom`, `emergencia_telefon`, `emergencia_relacio`. |
 | Health | `problemes_salut`, `altres_salut`, `medicacio`, `posologia`, `dosi`. |
 | Publication detail | `plataformes_externes`. |
 | Internal | `estat_validacio`, `observacions_internes`. |
+
+The `Enviament` / submission section must also show who submitted or edited the active form when those audit fields exist:
+
+| Label | Source |
+| --- | --- |
+| `Emplenat per` | `submitted_by_email`. |
+| `Compte Dinantia` | `submitted_by_dinantia_account_id`. |
+| `Darrera edició` | `updated_at`. |
+| `Editat per` | `updated_by_email`. |
+
+Authorized pickup people rendering:
+
+- Read the active authorization response `resposta_id`.
+- Include every child row where `persones_autoritzades.resposta_id` matches.
+- Show each item in a `Persones autoritzades` detail group.
+- Display `nom_sencer` and `qualitat_de`.
+- If there are no child rows, omit the group.
 
 The detail panel is read-only in this version.
 
@@ -346,7 +410,7 @@ The panel must never display `token_hash` or raw token values.
 
 ## Sorting
 
-Initial order must match the already-loaded student list order used in `Inici`.
+Initial order must sort by the visible student full name, matching the default `Inici` page behavior.
 
 The table should support sorting by:
 
@@ -357,6 +421,21 @@ The table should support sorting by:
 | `Data` | Sort by latest/oldest submission date. |
 
 Sorting the authorization table must not mutate the original in-memory student list used by other pages.
+
+The table header must remain sticky at the top of the viewport while scrolling so the tutor keeps column context in long authorization tables.
+
+## Documents Columns
+
+The authorization matrix must include a `Documents` header group between `Salut` and `Signatura`.
+
+Columns:
+
+| Column | Source |
+| --- | --- |
+| `Compromís educatiu` | `carta_compromis_acceptada` |
+| `Normativa mòbils` | `consentiment_mobil` |
+
+Both columns use the same boolean icon rendering as the rest of the authorization matrix.
 
 ## Loading Behavior
 
@@ -383,6 +462,5 @@ This section does not:
 
 - Edit authorization responses.
 - Write changelog entries.
-- Read `persones_autoritzades` directly.
 - Generate PDFs.
 - Create verification tokens directly in `tauler_tutor`.

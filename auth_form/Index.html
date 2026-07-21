@@ -29,7 +29,16 @@
 </div>
 </div>
 </div>
+<div class="student-banner mt-3 is-hidden" id="studentBanner">Alumne/a: <strong id="studentBannerName"></strong></div>
 </header>
+<section class="card section-card mb-4 submission-success is-hidden" id="submissionSuccess" tabindex="-1">
+<div class="card-body text-center py-5">
+<h2 class="h4 mb-3">Resposta enregistrada</h2>
+<p class="lead mb-2">La teva resposta ha estat correctament enregistrada.</p>
+<p class="text-secondary small mb-4 is-hidden" id="submissionCode"></p>
+<a class="btn btn-primary" href="https://agora.xtec.cat/sesernestlluch-cunit/" target="_top">Torna al web del centre</a>
+</div>
+</section>
 <section class="card section-card mb-4" id="respondentStep">
 <div class="card-body">
 <h2 class="h5 mb-3">Identificació de la persona que respon</h2>
@@ -149,7 +158,7 @@
 <h3 class="h6">Comunicació de dades acadèmiques i d'assistència</h3>
 <p>Autoritzo el centre educatiu a comunicar dades acadèmiques rellevants i relatives a l'assistència a una tercera persona.</p>
 <div class="d-flex gap-4 flex-wrap mb-3"><div class="form-check"><input class="form-check-input" id="comAcadSi" name="comunicacio_academica" type="radio" value="si"/><label class="form-check-label" for="comAcadSi">Sí, ho autoritzo</label></div><div class="form-check"><input class="form-check-input" id="comAcadNo" name="comunicacio_academica" type="radio" value="no"/><label class="form-check-label" for="comAcadNo">No, no ho autoritzo</label></div></div>
-<div class="row g-3">
+<div class="row g-3 is-hidden" id="academicContactDetails">
 <div class="col-md-6"><label class="form-label" for="acadContactNom">Nom i cognoms de la persona de contacte</label><input class="form-control" id="acadContactNom" name="acad_contacte_nom"/></div>
 <div class="col-md-6"><label class="form-label" for="acadContactEmail">Adreça electrònica</label><input class="form-control" id="acadContactEmail" name="acad_contacte_email" type="email"/></div>
 <div class="col-12"><label class="form-label">Relació amb l'alumne/a</label><div class="d-flex gap-4 flex-wrap"><div class="form-check"><input class="form-check-input" id="acadPare" name="acad_contacte_relacio" type="radio" value="pare"/><label class="form-check-label" for="acadPare">Pare</label></div><div class="form-check"><input class="form-check-input" id="acadMare" name="acad_contacte_relacio" type="radio" value="mare"/><label class="form-check-label" for="acadMare">Mare</label></div><div class="form-check"><input class="form-check-input" id="acadTutor" name="acad_contacte_relacio" type="radio" value="tutor"/><label class="form-check-label" for="acadTutor">Tutor/a legal</label></div><div class="form-check"><input class="form-check-input" id="acadAltres" name="acad_contacte_relacio" type="radio" value="altres"/><label class="form-check-label" for="acadAltres">Altres</label></div></div></div>
@@ -221,7 +230,81 @@
 </div></div>
 </section>
 <section class="accordion-item section-card mb-3">
-<h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-target="#signatures" data-bs-toggle="collapse" type="button">6. Lloc, data i signatures</button></h2>
+<h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-target="#cartaCompromis" data-bs-toggle="collapse" type="button">6. Carta de compromís educatiu</button></h2>
+<div class="accordion-collapse collapse" data-bs-parent="#formAccordion" id="cartaCompromis"><div class="accordion-body">
+<div class="legal-document mb-4">
+<h3 class="h5 section-title">Carta de compromís educatiu</h3>
+<p class="fw-semibold">Institut Ernest Lluch i Martín</p>
+<p>La Llei d'Educació de Catalunya (12/2009), a l'article 20, estableix que els centres, d'acord amb els seus projectes educatius, han de formular una carta de compromís educatiu per assolir un entorn de convivència i respecte.</p>
+<p>L'educació de l'alumnat implica l'acció conjunta de la família i de l'institut. Aquesta carta comporta els compromisos següents:</p>
+<h4 class="h6 mt-4">Per part del centre</h4>
+<ol>
+<li>Vetllar per fer efectius els drets de l'alumnat en l'àmbit escolar: formació integral, valoració objectiva, respecte a les conviccions, integritat i dignitat personal, participació, reunió i associació, informació, llibertat d'expressió, orientació, igualtat d'oportunitats, protecció social i protecció dels drets de l'alumnat.</li>
+<li>Assignar un tutor/a a cada alumne/a i mantenir com a mínim una entrevista per curs amb la família quan correspongui.</li>
+<li>Lliurar els butlletins d'avaluació i explicar els criteris d'avaluació a l'alumnat.</li>
+<li>Utilitzar estratègies metodològiques diverses per exigir a cada alumne/a el màxim de les seves possibilitats i proporcionar un alt nivell acadèmic.</li>
+<li>Proporcionar experiències culturals, socials, ambientals i d'orientació mitjançant activitats, sortides, xerrades, concursos i certàmens.</li>
+<li>Facilitar un correu electrònic corporatiu, incentivar l'ús responsable de les tecnologies i informar del PEC, de les NOFC i dels acords sobre l'ús dels telèfons mòbils.</li>
+<li>Derivar als serveis sanitaris qualsevol lesió o patologia quan sigui raonable, col·laborar amb l'AFA i revisar i millorar l'acció educativa amb aportacions de la comunitat.</li>
+<li>Realitzar activitats que fomentin hàbits saludables i la pràctica d'activitat física i esportiva.</li>
+</ol>
+<h4 class="h6 mt-4">Per part de la família i l'alumne/a</h4>
+<ol>
+<li>Respectar el sistema educatiu català, el caràcter propi de l'institut i l'autoritat del tutor/a, del professorat i de l'equip directiu.</li>
+<li>Compartir amb el centre l'educació de l'alumne/a i afavorir el seu desenvolupament acadèmic i personal.</li>
+<li>Considerar les recomanacions del centre relatives a atenció educativa, derivacions, repetició o promoció de curs i orientació acadèmica.</li>
+<li>Instar l'alumne/a a respectar les normes de funcionament del centre, el deure d'estudi, el respecte als altres i les normes de convivència.</li>
+<li>Facilitar a l'institut informacions rellevants per al procés d'aprenentatge i la salut de l'alumne/a.</li>
+<li>Aportar documents de justificació oficial en cas d'absència.</li>
+<li>No enviar l'alumne/a a l'institut quan tingui febre, malalties contagioses, infeccions per polls o causes equivalents, i recollir-lo personalment o mitjançant una persona major d'edat autoritzada quan calgui.</li>
+<li>Atendre en un període raonable les peticions d'entrevista o comunicació del centre i assistir puntualment a les reunions.</li>
+<li>Respectar les NOFC i la regulació dels telèfons mòbils.</li>
+<li>Informar l'alumne/a menor d'edat de la signatura d'aquesta Carta de compromís educatiu i del que implica.</li>
+</ol>
+<p>I perquè així consti, ho signem a tots els efectes, a partir de la data d'avui.</p>
+</div>
+<div class="form-check question"><input class="form-check-input" id="cartaCompromisAcceptada" name="carta_compromis_acceptada" required="" type="checkbox" value="acceptada"/><label class="form-check-label required" for="cartaCompromisAcceptada">He llegit i accepto la Carta de compromís educatiu.</label></div>
+</div></div>
+</section>
+<section class="accordion-item section-card mb-3">
+<h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-target="#normativaMobils" data-bs-toggle="collapse" type="button">7. Normativa d'ús de telèfons mòbils</button></h2>
+<div class="accordion-collapse collapse" data-bs-parent="#formAccordion" id="normativaMobils"><div class="accordion-body">
+<div class="legal-document mb-4">
+<h3 class="h5 section-title">Normativa d'ús de telèfons mòbils</h3>
+<p class="fw-semibold">Institut Ernest Lluch i Martín</p>
+<p>Arran de l'aprovació de l'actualització de les NOFC, us informem de la normativa que regularà l'ús dels telèfons mòbils a l'institut Ernest Lluch i Martín.</p>
+<p>El centre entén que no hi ha cap urgència que justifiqui la utilització del telèfon mòbil. L'institut disposa de telèfon i personal de consergeria per agilitzar qualsevol informació que hagi d'arribar de les famílies a l'alumnat i viceversa.</p>
+<p>L'ús de telèfons mòbils està prohibit per a l'alumnat en tots els espais del centre educatiu i en totes les activitats educatives que puguin tenir lloc fora del centre. La tinència del dispositiu només és possible si està completament apagat en entrar al centre i si l'institut té constància escrita del consentiment familiar.</p>
+<p>Aquestes indicacions també s'han de complir en activitats fora del centre: sortides, colònies, viatges, projectes compartits, activitats amb famílies o comunitat educativa, extraescolars i activitats amb entitats de l'entorn.</p>
+<h4 class="h6 mt-4">Estudis postobligatoris</h4>
+<p>L'alumnat d'estudis postobligatoris ha de fer un ús responsable dels dispositius mòbils i vincular-los a les activitats d'aprenentatge quan el professorat ho indiqui.</p>
+<h4 class="h6 mt-4">Excepcionalitats</h4>
+<ul>
+<li>Salut: es permet utilitzar un dispositiu quan l'alumnat tingui una necessitat específica per motius de salut.</li>
+<li>NESE: es permet utilitzar un dispositiu quan sigui necessari per facilitar l'accés a l'aprenentatge, la participació o la comunicació.</li>
+<li>Emergències: en una situació d'emergència, l'alumnat pot utilitzar el telèfon mòbil per comunicar-se amb la família.</li>
+</ul>
+<h4 class="h6 mt-4">Mesures correctores i sancions</h4>
+<ul>
+<li>L'ús del telèfon mòbil sense consentiment previ d'un docent pot constituir una falta lleu si no afecta drets fonamentals o protecció de dades.</li>
+<li>L'ús que vulneri drets fonamentals pot constituir una falta greument perjudicial per a la convivència i comportar expedient disciplinari.</li>
+<li>Si un alumne/a es nega a lliurar el telèfon quan se li demana, es considera falta molt greu.</li>
+</ul>
+<p>L'institut no es fa responsable de desperfectes o robatoris. Les famílies i l'alumnat han de conèixer aquesta normativa, i qualsevol professor/a pot comprovar que el telèfon està completament apagat.</p>
+<p>Només es considera realment apagat si l'accés a qualsevol aplicació necessita que el dispositiu iniciï el sistema operatiu. No ho són el bloqueig de pantalla, el mode avió, el mode rellotge o estats equivalents.</p>
+<p>En cas d'ús de telèfon mòbil sense consentiment familiar o sense complir la normativa, s'aplicaran les mesures disciplinàries corresponents.</p>
+</div>
+<div class="question">
+<label class="form-label required d-block">Consentiment sobre la tinència de telèfon mòbil al centre</label>
+<div class="vstack gap-2">
+<div class="form-check"><input class="form-check-input" id="consentimentMobilNo" name="consentiment_mobil" required="" type="radio" value="no"/><label class="form-check-label" for="consentimentMobilNo">NO DONO EL MEU CONSENTIMENT a què el meu fill/a porti telèfon mòbil, atenent-me a la normativa aquí descrita.</label></div>
+<div class="form-check"><input class="form-check-input" id="consentimentMobilSi" name="consentiment_mobil" required="" type="radio" value="si"/><label class="form-check-label" for="consentimentMobilSi">DONO EL MEU CONSENTIMENT PARTICULAR a què el meu fill/a porti telèfon mòbil al centre, atenent-me a la normativa aquí descrita.</label></div>
+</div>
+</div>
+</div></div>
+</section>
+<section class="accordion-item section-card mb-3">
+<h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-target="#signatures" data-bs-toggle="collapse" type="button">8. Lloc, data i signatures</button></h2>
 <div class="accordion-collapse collapse" data-bs-parent="#formAccordion" id="signatures"><div class="accordion-body">
 <div class="row g-3 mb-4"><div class="col-md-6"><label class="form-label required" for="lloc">Lloc</label><input class="form-control" id="lloc" name="lloc" required=""/></div><div class="col-md-6"><label class="form-label required" for="dataSignatura">Data</label><input class="form-control" id="dataSignatura" name="data_signatura" required="" type="date"/></div></div>
 <input id="signatureResponsibleData" name="signatura_responsable" type="hidden"/>

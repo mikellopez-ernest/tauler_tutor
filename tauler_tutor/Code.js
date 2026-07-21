@@ -63,3 +63,10 @@ function sendAuthorizationInvitations(requests) {
 function createAuthorizationPrintLink(request) {
   return createAuthorizationPrintLink_(request);
 }
+
+/**
+ * Client-callable endpoint to invalidate a submitted authorization response.
+ */
+function invalidateAuthorizationResponse(request) {
+  return invalidateAuthorizationResponse_(request);
+}

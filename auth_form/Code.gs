@@ -1,9 +1,17 @@
 function doGet() {
-  return renderForm_({});
+  try {
+    return renderForm_({});
+  } catch (error) {
+    return renderFormError_(error);
+  }
 }
 
 function doPost(e) {
-  return renderForm_(parsePrefillFromEvent_(e));
+  try {
+    return renderForm_(parsePrefillFromEvent_(e));
+  } catch (error) {
+    return renderFormError_(error);
+  }
 }
 
 function include(filename) {
@@ -20,6 +28,32 @@ function renderForm_(prefill) {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
+function renderFormError_(error) {
+  var message = String(error && error.message ? error.message : error || '');
+  var title = 'No s ha pogut obrir el formulari';
+  var body = 'S ha produït un error. Si el problema continua, poseu-vos en contacte amb el centre.';
+  if (/already used/i.test(message)) {
+    title = 'Enllaç ja utilitzat';
+    body = 'Aquest enllaç ja s ha utilitzat. Si necessiteu tornar a accedir al formulari, torneu a iniciar el procés o demaneu un nou enllaç al centre.';
+  } else if (/expired/i.test(message)) {
+    title = 'Enllaç caducat';
+    body = 'Aquest enllaç ha caducat. Torneu a iniciar el procés per rebre un nou enllaç. Si teniu qualsevol dubte, poseu-vos en contacte amb el centre.';
+  }
+  return HtmlService.createHtmlOutput('<!doctype html><html lang="ca"><head><base target="_top"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + escapeHtml_(title) + '</title><style>body{margin:0;background:#f6f7f9;color:#17202a;font-family:Arial,sans-serif;line-height:1.5}main{width:min(760px,calc(100% - 32px));margin:36px auto;background:#fff;border:1px solid #d9e0e8;border-radius:8px;padding:30px;box-shadow:0 16px 40px rgba(21,34,50,.10)}h1{font-size:28px;line-height:1.2;margin:0 0 18px;color:#b42318}</style></head><body><main><h1>' + escapeHtml_(title) + '</h1><p>' + escapeHtml_(body) + '</p></main></body></html>')
+    .setTitle(title)
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function escapeHtml_(value) {
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function submitAuthorizationResponse(payload) {
   return saveAuthorizationResponse_(payload || {});
 }
@@ -28,6 +62,7 @@ function resolveInitialFormData_(prefill) {
   var initial = Object.assign({}, FORM_DEFAULTS);
   var accepted = [
     'studyType', 'isAdult', 'is14Plus', 'alumne_nom', 'alumne_document', 'id_student',
+    'responent_nom_sencer', 'responent_telefon', 'responsable_nom',
     'form_mode', 'mode', 'resposta_id', 'verified_actor_type', 'verified_dinantia_account_id',
     'verified_email', 'launcher_token'
   ];
@@ -131,5 +166,6 @@ function authorizeServices() {
   SpreadsheetApp.openById(requireRegistryEntry_(registry, FORM_CONFIG.tableAuthorizations)).getName();
   SpreadsheetApp.openById(requireRegistryEntry_(registry, FORM_CONFIG.tableDinantia)).getSheetByName(FORM_CONFIG.sheetAuthorizationsCache).getName();
   PropertiesService.getScriptProperties().getProperties();
+  UrlFetchApp.fetch('https://www.google.com/generate_204', { muteHttpExceptions: true });
   return 'Authorization OK';
 }

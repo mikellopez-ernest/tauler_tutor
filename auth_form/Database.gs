@@ -1,5 +1,6 @@
 function saveAuthorizationResponse_(payload) {
   var tokenRecord = validateLauncherTokenForSave_(payload || {});
+  updateVerifiedRespondentContact_(payload || {}, tokenRecord);
   var registry = loadRegistry_();
   var spreadsheet = SpreadsheetApp.openById(requireRegistryEntry_(registry, FORM_CONFIG.tableAuthorizations));
   var authSheet = openSheet_(spreadsheet, FORM_CONFIG.sheetAuthorizations);
@@ -25,9 +26,15 @@ function saveAuthorizationResponse_(payload) {
   if (!normalized.observacions_internes) normalized.observacions_internes = '';
   normalized.updated_at = now;
   normalized.updated_by_email = normalizeEmail_((tokenRecord && tokenRecord.email) || payload.verified_email || payload.updated_by_email || payload.submitted_by_email);
+  if (mode === 'new_student_adult') {
+    normalized.signatura_alumne = true;
+    normalized.student_confirmed_at = now;
+    normalized.student_confirmed_email = normalizeEmail_((tokenRecord && tokenRecord.email) || payload.verified_email);
+  }
   if (!updateExisting) {
     normalized.submitted_by_dinantia_account_id = String((tokenRecord && tokenRecord.dinantia_account_id) || payload.verified_dinantia_account_id || '').trim();
     normalized.submitted_by_email = normalizeEmail_((tokenRecord && tokenRecord.email) || payload.verified_email || payload.submitted_by_email);
+    normalized.invalidated = false;
   }
 
   if (updateExisting) {
@@ -61,6 +68,73 @@ function saveAuthorizationResponse_(payload) {
   return { ok: true, resposta_id: respostaId, persones_autoritzades: people.length, updated: updateExisting };
 }
 
+function updateVerifiedRespondentContact_(payload, tokenRecord) {
+  if (!tokenRecord || tokenRecord.sender !== 'parent' || !tokenRecord.dinantia_account_id) return;
+  var fields = {};
+  var name = String(payload.responent_nom_sencer || '').trim();
+  var phone = String(payload.responent_telefon || '').trim();
+  if (name) fields.name = name;
+  fields.phone = apiPhoneValueForDinantia_(phone);
+  if (!Object.keys(fields).length) return;
+  updateDinantiaAccountFields_(tokenRecord.dinantia_account_id, fields);
+  updateContactsCacheForRespondent_(tokenRecord.dinantia_account_id, { name: name, phone: phone });
+}
+
+function apiPhoneValueForDinantia_(value) {
+  var text = String(value === null || value === undefined ? '' : value).trim();
+  if (!text) return null;
+  var compact = text.replace(/[\s().-]/g, '');
+  if (compact.indexOf('00') === 0) return '+' + compact.slice(2);
+  if (compact.charAt(0) === '+') return compact;
+  var digits = compact.replace(/\D/g, '');
+  if (/^[6789]\d{8}$/.test(digits)) return '+34' + digits;
+  throw new Error('Invalid phone number: ' + text);
+}
+
+function updateDinantiaAccountFields_(accountId, fields) {
+  var user = getRequiredScriptProperty_('dinantia_api_user');
+  var secret = getRequiredScriptProperty_('dinantia_api_secret');
+  var response = UrlFetchApp.fetch(FORM_CONFIG.dinantiaBaseUrl + '/v1.2/accounts/update/' + encodeURIComponent(accountId), {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(fields),
+    headers: {
+      Authorization: 'Basic ' + Utilities.base64Encode(user + ':' + secret),
+      Accept: 'application/vnd.api+json',
+      'Content-Type': 'application/vnd.api+json'
+    },
+    muteHttpExceptions: true
+  });
+  var status = response.getResponseCode();
+  var text = response.getContentText();
+  var body;
+  try {
+    body = JSON.parse(text);
+  } catch (error) {
+    throw new Error('Dinantia contact update response is not valid JSON. HTTP ' + status + ': ' + text);
+  }
+  if (status < 200 || status >= 300 || body.success === false) {
+    throw new Error('Dinantia contact update failed. HTTP ' + status + ': ' + text);
+  }
+}
+
+function updateContactsCacheForRespondent_(contactId, fields) {
+  var sheet;
+  try {
+    sheet = openTableSheetFromRegistry_(FORM_CONFIG.tableDinantia, 'contacts_cache');
+  } catch (error) {
+    return;
+  }
+  var h = getHeaderMap_(sheet);
+  if (h.contact_id === undefined) return;
+  var values = sheet.getDataRange().getValues();
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][h.contact_id] || '').trim() !== String(contactId)) continue;
+    if (h.contact_name !== undefined && fields.name !== undefined) sheet.getRange(i + 1, h.contact_name + 1).setValue(fields.name);
+    if (h.contact_phone !== undefined && fields.phone !== undefined) sheet.getRange(i + 1, h.contact_phone + 1).setValue(fields.phone);
+  }
+}
+
 function normalizeAuthorizationPayload_(payload) {
   var out = {};
   var textFields = [
@@ -68,7 +142,8 @@ function normalizeAuthorizationPayload_(payload) {
     'alumne_nom','alumne_document','id_student','responent_nom_sencer','responent_telefon','responsable_nom','responsable_document',
     'plataformes_externes','acad_contacte_nom','acad_contacte_email','acad_contacte_relacio','emergencia_nom','emergencia_telefon',
     'emergencia_relacio','problemes_salut','altres_salut','medicacio','posologia','dosi','lloc','data_signatura',
-    'submitted_by_dinantia_account_id','submitted_by_email','updated_at','updated_by_email','student_confirmed_at','student_confirmed_email'
+    'submitted_by_dinantia_account_id','submitted_by_email','updated_at','updated_by_email','student_confirmed_at','student_confirmed_email',
+    'invalidated_at','invalidated_by_email','invalidated_reason'
   ];
   textFields.forEach(function(field) {
     out[field] = String(payload[field] === null || payload[field] === undefined ? '' : payload[field]).trim();
@@ -76,7 +151,7 @@ function normalizeAuthorizationPayload_(payload) {
   var boolFields = [
     'sortida_sola','sortida_esbarjo','comunicacio_academica','sortides_municipi','imatge_intranet','imatge_web','imatge_externa',
     'publicacio_inicials','obra_oberta','obra_centre','obra_biblioteca','obra_repositori','declaracio_plataformes','comunicacio_salut',
-    'administracio_medicacio','paracetamol','signatura_responsable','signatura_alumne'
+    'administracio_medicacio','paracetamol','carta_compromis_acceptada','consentiment_mobil','signatura_responsable','signatura_alumne','invalidated'
   ];
   boolFields.forEach(function(field) {
     out[field] = normalizeBooleanForSheet_(payload[field]);
@@ -338,18 +413,21 @@ function refreshAuthorizationsCache_() {
   var registry = loadRegistry_();
   var dinantiaSpreadsheet = SpreadsheetApp.openById(requireRegistryEntry_(registry, FORM_CONFIG.tableDinantia));
   var cacheSheet = openSheet_(dinantiaSpreadsheet, FORM_CONFIG.sheetAuthorizationsCache);
-  var cacheHeaders = getHeaderMap_(cacheSheet);
   var rows = buildAuthorizationsCacheRows_(registry);
+  var cacheHeaders = ensureHeadersForRows_(cacheSheet, rows);
   overwriteByHeaders_(cacheSheet, cacheHeaders, rows);
 }
 
 function buildAuthorizationsCacheRows_(registry) {
   var authSpreadsheet = SpreadsheetApp.openById(requireRegistryEntry_(registry, FORM_CONFIG.tableAuthorizations));
   var authSheet = openSheet_(authSpreadsheet, FORM_CONFIG.sheetAuthorizations);
+  var peopleSheet = openSheet_(authSpreadsheet, FORM_CONFIG.sheetAuthorizedPeople);
   var tokensSheet = openSheet_(authSpreadsheet, FORM_CONFIG.sheetVerificationTokens);
   var authHeaders = getHeaderMap_(authSheet);
+  var peopleHeaders = getHeaderMap_(peopleSheet);
   var tokenHeaders = getHeaderMap_(tokensSheet);
   var authorizations = objectsFromSheet_(authSheet, authHeaders);
+  var peopleByResponse = authorizedPeopleByResponse_(peopleSheet, peopleHeaders);
   var tokens = objectsFromSheet_(tokensSheet, tokenHeaders);
   var latestAuth = {};
   var latestToken = {};
@@ -357,6 +435,8 @@ function buildAuthorizationsCacheRows_(registry) {
   authorizations.forEach(function(auth) {
     var id = stringValue_(auth.id_student);
     if (!id) return;
+    if (normalizeBooleanForSheet_(auth.invalidated) === true) return;
+    auth.authorized_people_json = JSON.stringify(peopleByResponse[stringValue_(auth.resposta_id)] || []);
     if (!latestAuth[id] || stringValue_(auth.data_hora_enviament) >= stringValue_(latestAuth[id].data_hora_enviament)) {
       latestAuth[id] = auth;
     }
@@ -389,6 +469,26 @@ function buildAuthorizationsCacheRows_(registry) {
     out.latest_invitation_status = token.status || '';
     return out;
   });
+}
+
+function authorizedPeopleByResponse_(sheet, headerMap) {
+  var required = ['resposta_id', 'nom_sencer', 'qualitat_de'];
+  requireHeaders_(headerMap, required, sheet.getName());
+  var values = sheet.getDataRange().getValues();
+  var byResponse = {};
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    var responseId = stringValue_(row[headerMap.resposta_id]);
+    if (!responseId) continue;
+    var person = {
+      nom_sencer: stringValue_(row[headerMap.nom_sencer]),
+      qualitat_de: stringValue_(row[headerMap.qualitat_de])
+    };
+    if (!person.nom_sencer && !person.qualitat_de) continue;
+    if (!byResponse[responseId]) byResponse[responseId] = [];
+    byResponse[responseId].push(person);
+  }
+  return byResponse;
 }
 
 function objectsFromSheet_(sheet, headerMap) {
@@ -425,6 +525,20 @@ function overwriteByHeaders_(sheet, headerMap, objects) {
     return row;
   });
   sheet.getRange(2, 1, values.length, width).setValues(values);
+}
+
+function ensureHeadersForRows_(sheet, rows) {
+  var headerMap = getHeaderMap_(sheet);
+  var missing = {};
+  (rows || []).forEach(function(row) {
+    Object.keys(row || {}).forEach(function(key) {
+      if (headerMap[key] === undefined) missing[key] = true;
+    });
+  });
+  var missingNames = Object.keys(missing);
+  if (!missingNames.length) return headerMap;
+  sheet.getRange(1, sheet.getLastColumn() + 1, 1, missingNames.length).setValues([missingNames]);
+  return getHeaderMap_(sheet);
 }
 
 function stringValue_(value) {
