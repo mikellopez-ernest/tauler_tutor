@@ -20,7 +20,7 @@ function include(filename) {
 
 function renderForm_(prefill) {
   var template = HtmlService.createTemplateFromFile('Index');
-  template.initialFormDataJson = JSON.stringify(resolveInitialFormData_(prefill || {}));
+  template.initialFormDataJson = JSON.stringify(buildFastInitialFormData_(prefill || {}));
   return template
     .evaluate()
     .setTitle('Autoritzacions, declaracions i comunicacions')
@@ -56,6 +56,45 @@ function escapeHtml_(value) {
 
 function submitAuthorizationResponse(payload) {
   return saveAuthorizationResponse_(payload || {});
+}
+
+function resolveInitialFormData(payload) {
+  try {
+    return {
+      ok: true,
+      data: resolveInitialFormData_(normalizePrefillAliases_(payload || {}))
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      html: renderFormError_(error).getContent()
+    };
+  }
+}
+
+function buildFastInitialFormData_(prefill) {
+  var normalized = normalizePrefillAliases_(prefill || {});
+  var initial = Object.assign({}, FORM_DEFAULTS);
+  var accepted = [
+    'studyType', 'isAdult', 'is14Plus', 'alumne_nom', 'alumne_document', 'id_student',
+    'responent_nom_sencer', 'responent_telefon', 'responsable_nom',
+    'form_mode', 'mode', 'resposta_id', 'verified_actor_type', 'verified_dinantia_account_id',
+    'verified_email', 'launcher_token'
+  ];
+  accepted.forEach(function(key) {
+    if (normalized[key] !== undefined && normalized[key] !== null && String(normalized[key]).trim() !== '') {
+      initial[key] = normalizePrefillValue_(key, normalized[key]);
+    }
+  });
+  if (!initial.form_mode && initial.mode) initial.form_mode = initial.mode;
+  if (!initial.data_signatura) {
+    initial.data_signatura = Utilities.formatDate(new Date(), FORM_CONFIG.timezone, 'yyyy-MM-dd');
+  }
+  initial.launcher_url = FORM_CONFIG.launcherUrl;
+  if (initial.form_mode || initial.launcher_token || initial.resposta_id) {
+    initial.__async_initial_payload = normalized;
+  }
+  return initial;
 }
 
 function resolveInitialFormData_(prefill) {

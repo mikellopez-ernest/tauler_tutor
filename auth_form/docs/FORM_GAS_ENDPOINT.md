@@ -359,6 +359,7 @@ The launcher may send operational mode/context fields to control how the form re
 Rules:
 
 - `readonly`, `readonly_print`, and `student_confirm` must reuse the exact `auth_form` UI with controls disabled, not a separate simplified table.
+- Token-protected form openings may render a fast client shell first and resolve the protected initial data asynchronously. The shell must show a loading indicator immediately and must not allow saving until token validation and initial data resolution have completed.
 - Protected modes must require a valid short-lived launcher token before loading an existing response or accepting an editable save. The public form endpoint must not trust a naked `resposta_id`.
 - All persisted saves must require a verified launcher mode/token. A direct public `doGet()` page may render for compatibility or smoke testing, but it must not be able to write data to the database.
 - Read-only modes must translate stored sheet booleans into the form control values before filling the UI. Real boolean `TRUE` / string `TRUE` / `si` select the affirmative radio or checkbox state; real boolean `FALSE` / string `FALSE` / `no` select the negative radio state.

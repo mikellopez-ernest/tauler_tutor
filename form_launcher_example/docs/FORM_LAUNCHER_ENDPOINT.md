@@ -535,11 +535,21 @@ The page must follow the same visual criteria as the current launcher/form famil
 
 ### GET With Token
 
-A GET request with a verification token must validate the token.
+A GET request with a verification token must render a fast loading shell first.
+
+The loading shell must:
+
+- Show a centered loading indicator immediately.
+- Use `google.script.run` or an equivalent async Apps Script call to resolve the token after the visible shell has rendered.
+- Show a friendly Catalan timeout/failure message if the async resolver does not return in a reasonable time.
+
+The async resolver must validate the token.
 
 If valid, it must render the existing family message with the `EMPLENAR EL FORMULARI` button.
 
 If invalid, expired, already used, revoked, or malformed, it must render a clear Catalan error page and must not render the form-forwarding button. User-facing messages must not mention internal token terminology.
+
+The token-opening path must be optimized for user navigation. It must not perform sheet-wide maintenance such as expiring all old tokens, rebuilding caches, or scanning unrelated student sheets when equivalent trusted context is already present in the token metadata.
 
 Required friendly meanings:
 
@@ -670,7 +680,8 @@ Required approach for this project: use the registry-backed sheet `Autoritzacion
 - Store metadata needed to render the final form-forwarding page.
 - Store creation datetime, expiry datetime, used/revoked state, and safe audit fields.
 - Mark token as used after successful verification if the selected policy is one-time use.
-- Mark expired pending tokens as `expired` opportunistically when the launcher handles requests, creates tokens, or validates tokens.
+- Mark expired pending tokens as `expired` opportunistically during token creation, scheduled maintenance, or explicit admin/cache jobs.
+- Do not run full expired-token cleanup during `GET ?token=...`, token validation, or form-forwarding POSTs. Those paths must only validate the current token row and, if the current token itself is expired, mark that row as expired.
 
 A stateless signed token may be used only as an additional integrity layer, not as the primary persistence strategy. The authoritative token state is `Autoritzacions` -> `verification_tokens`.
 
@@ -734,6 +745,10 @@ After token validation, the launcher renders the existing family message:
 - Same `EMPLENAR EL FORMULARI` button.
 - The button sends a POST request to `auth_form`.
 - Hidden inputs are generated server-side from the verified token metadata, not from editable browser-provided fields.
+
+For panel-created invitations, the token metadata should already contain normalized student context from the tutor-panel cache. In that case, the launcher must reuse that metadata instead of re-opening `Dades alumnes` only to enrich the same student again. `Dades alumnes` lookup is a fallback for older/manual tokens or incomplete metadata.
+
+The final POST-forwarding page must not hide itself behind a permanent full-screen overlay. It should render a small visible `Obrint el formulari...` page, auto-submit to `auth_form`, and keep a manual `Obrir formulari` button as a fallback.
 
 Forwarded fields remain:
 

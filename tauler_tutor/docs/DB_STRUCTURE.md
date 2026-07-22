@@ -486,12 +486,14 @@ Row 1 contains headers. Data starts in row 2.
 - Preferred behavior is one-time use.
 - When a token is consumed successfully, set `used_at` and `status` to `used`.
 - Expired tokens should be treated as invalid even if `status` still says `pending`.
+- Full expired-token cleanup must not run during user-facing token navigation. `GET ?token=...`, token validation, and form-forwarding POSTs must only inspect the current token row and, when that current row is expired, update only that row. Sheet-wide cleanup belongs in token creation, scheduled maintenance, or explicit admin/cache jobs.
 - Expired or already-used token errors must be shown with friendly Catalan messages that do not mention internal token terminology.
 - `status = revoked` must always block token use.
 - `sender` must be `parent`, `student`, or `tutor_print`.
 - `email` must be normalized by trimming and lowercasing before storage.
 - `metadata_json` may include context such as `alumne_nom`, `alumne_document`, `studyType`, `isAdult`, `is14Plus`, selected group name, `dades_alumnes_sheet`, read-only-mode flags, or short-lived tutor print payloads.
 - The token record must contain enough context to render the verified next step without trusting editable browser-submitted student data.
+- Panel-created invitation tokens should include normalized student context from the tutor-panel cache. The launcher should reuse that trusted metadata and avoid reopening `Dades alumnes` during token opening unless the metadata is incomplete.
 - This table is operational security data. The tutor panel may show only non-sensitive invitation summaries such as latest `created_at`, `email`, `sender`, and `status`.
 - The tutor panel must never display `token_hash`, raw token values, or full `metadata_json`.
 

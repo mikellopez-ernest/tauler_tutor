@@ -3,12 +3,17 @@
 window.addEventListener('DOMContentLoaded', () => {
   const initialData = window.INITIAL_FORM_DATA || {};
   I18n.init({ defaultLanguage: initialData.idioma_formulari || 'ca', storageKey: 'autoritzacionsIdioma' });
-  fillForm(initialData);
   setupRespondentStep();
   setupAuthorizedPeopleVisibility();
   setupAcademicContactDependency();
   setupExternalPlatformsDependency();
+  fillForm(initialData);
   applyFormMode(initialData);
+  if (initialData.__async_initial_payload) {
+    loadResolvedInitialData(initialData.__async_initial_payload);
+  } else {
+    hideFormLoading();
+  }
 });
 
 const form = document.getElementById('authorizationForm');
@@ -157,6 +162,33 @@ function applyType() {
 }
 document.querySelectorAll('[name="tipus_alumne"]').forEach(x=>x.addEventListener('change',()=>{applyType();setSetupFromModel(x.value);}));
 document.getElementById('alumneNom').addEventListener('input', updateStudentBanner);
+
+function hideFormLoading() {
+  document.getElementById('formLoadingOverlay')?.classList.add('is-hidden');
+}
+
+function loadResolvedInitialData(payload) {
+  google.script.run
+    .withSuccessHandler(result => {
+      if (!result || result.ok !== true) {
+        if (result && result.html) {
+          document.open();
+          document.write(result.html);
+          document.close();
+          return;
+        }
+        throw new Error('No s ha pogut preparar el formulari.');
+      }
+      window.INITIAL_FORM_DATA = result.data || {};
+      fillForm(result.data || {});
+      applyFormMode(result.data || {});
+      hideFormLoading();
+    })
+    .withFailureHandler(error => {
+      document.body.innerHTML = '<main style="width:min(760px,calc(100% - 32px));margin:36px auto;background:#fff;border:1px solid #d9e0e8;border-radius:8px;padding:30px;font-family:Arial,sans-serif"><h1 style="color:#b42318">No s ha pogut obrir el formulari</h1><p>S ha produït un error. Si el problema continua, poseu-vos en contacte amb el centre.</p></main>';
+    })
+    .resolveInitialFormData(payload);
+}
 
 function formToObject(){ updateSignatureFields(); const out={}; for(const [k,v] of new FormData(form).entries()) out[k]=v; out.curs_inici=document.getElementById('cursInici').value; out.curs_fi=document.getElementById('cursFi').value; out.idioma_formulari=I18n.currentLanguage||'ca'; out.form_mode=currentFormMode||document.getElementById('formMode').value||''; out.isAdult=document.getElementById('isAdult').value; out.is14Plus=document.getElementById('is14Plus').value; if(out.verified_actor_type==='student'&&out.isAdult==='si') out.signatura_alumne='true'; return out; }
 function normalizeStoredChoice(value) {

@@ -1,8 +1,7 @@
 function doGet(e) {
   try {
-    expireOldPendingTokens_();
     var params = (e && e.parameter) || {};
-    if (params.token) return handleTokenGet_(params.token);
+    if (params.token) return renderTokenLoadingPage_(params.token);
     var sender = normalizeSender_(params.sender);
     if (!sender) return renderSenderChoice_();
     if (sender === 'student') return renderStudentEntry_();
@@ -15,7 +14,6 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    expireOldPendingTokens_();
     var payload = parseRequest_(e);
     var action = stringValue_(payload.action);
     if (action === 'panel_invite') return handlePanelInvite_(payload);
@@ -29,6 +27,15 @@ function doPost(e) {
   } catch (error) {
     console.error(error && error.stack ? error.stack : error);
     return renderLauncherError_(error);
+  }
+}
+
+function resolveTokenHtml(rawToken) {
+  try {
+    return handleTokenGet_(rawToken).getContent();
+  } catch (error) {
+    console.error(error && error.stack ? error.stack : error);
+    return renderLauncherError_(error).getContent();
   }
 }
 
@@ -254,7 +261,7 @@ function handleTokenGet_(rawToken) {
     if (children.length > 1 && !record.student_id) return renderParentStudentChoice_(rawToken, children);
     var child = children[0] || metadata.student || null;
     if (!child) return renderMessagePage_('No s ha pogut continuar', 'No s ha pogut identificar cap alumne associat.', true);
-    return renderParentStudentOutcome_(rawToken, child);
+    return renderParentStudentOutcome_(rawToken, child, metadata.auth || null);
   }
   if (record.sender === 'student') return renderStudentOutcome_(rawToken, metadata.student, metadata.auth, metadata.isAdult);
   if (record.sender === 'tutor_print') {
@@ -277,12 +284,12 @@ function handleParentStudentSelection_(payload) {
   var metadata = parseJson_(record.metadata_json) || {};
   var child = (metadata.children || []).filter(function(item) { return String(item.id) === String(studentId); })[0];
   if (!child) return renderMessagePage_('No s ha pogut continuar', 'L alumne seleccionat no correspon a aquest enllac.', true);
-  return renderParentStudentOutcome_(rawToken, child);
+  return renderParentStudentOutcome_(rawToken, child, metadata.auth || null);
 }
 
-function renderParentStudentOutcome_(rawToken, child) {
+function renderParentStudentOutcome_(rawToken, child, existingAuth) {
   var detailed = enrichStudentForLauncher_(child);
-  var auth = findLatestAuthorizationByStudentId_(detailed.id);
+  var auth = existingAuth || findLatestAuthorizationByStudentId_(detailed.id);
   if (Number(detailed.age) >= 18) {
     return renderMessagePage_('Alumne/a major d edat', 'Aquest formulari ha de ser emplenat pel mateix alumne/a perquè es major d edat. Si teniu qualsevol dubte, poseu-vos en contacte amb el centre.', false);
   }
@@ -512,8 +519,11 @@ function renderAutoPostToForm_(payload) {
   var inputs = Object.keys(payload || {}).map(function(key) {
     return '<input type="hidden" name="' + escapeHtml_(key) + '" value="' + escapeHtml_(payload[key]) + '">';
   }).join('');
-  var body = '<h1>Obrint el formulari...</h1><p>Si el formulari no s obre automaticament, prem el boto.</p><form id="forwardForm" method="post" action="' + escapeHtml_(LAUNCHER_CONFIG.authFormUrl) + '">' + inputs + '<button class="button" type="submit">Obrir formulari</button></form><script>document.getElementById("forwardForm").submit();</script>';
-  return htmlPage_('Obrint el formulari', body);
+  var html = '<!doctype html><html lang="ca"><head><base target="_top"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Obrint el formulari</title><style>body{margin:0;background:#f6f7f9;color:#17202a;font-family:Arial,sans-serif;line-height:1.5}main{width:min(680px,calc(100% - 32px));margin:32px auto;background:#fff;border:1px solid #d9e0e8;border-radius:8px;padding:30px;box-shadow:0 16px 40px rgba(21,34,50,.10)}h1{font-size:26px;line-height:1.2;margin:0 0 12px}.button{display:inline-block;border:0;border-radius:6px;background:#0f766e;color:#fff;cursor:pointer;font-size:16px;font-weight:800;padding:13px 18px;text-decoration:none}.note{color:#617080}.loading-row{display:flex;gap:12px;align-items:center;margin:16px 0}.spinner{width:24px;height:24px;border:3px solid #d9e0e8;border-top-color:#0f766e;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}</style></head><body><main><h1>Obrint el formulari...</h1><div class="loading-row"><div class="spinner" aria-hidden="true"></div><p>Carregant el formulari.</p></div><p class="note">Si el formulari no s obre automaticament, prem el boto.</p><form id="forwardForm" method="post" action="' + escapeHtml_(LAUNCHER_CONFIG.authFormUrl) + '">' + inputs + '<button class="button" type="submit">Obrir formulari</button></form></main><script>(function(){var form=document.getElementById("forwardForm");if(!form)return;setTimeout(function(){try{form.submit();}catch(error){}},250);})();</script></body></html>';
+  return HtmlService.createHtmlOutput(html)
+    .setTitle('Obrint el formulari')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 function renderMessagePage_(title, message, isError) {
@@ -531,8 +541,16 @@ function renderLauncherError_(error) {
   return renderMessagePage_('No s ha pogut continuar', 'S ha produït un error. Si el problema continua, poseu-vos en contacte amb el centre.', true);
 }
 
+function renderTokenLoadingPage_(rawToken) {
+  var html = '<!doctype html><html lang="ca"><head><base target="_top"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Carregant</title><style>body{margin:0;background:#f6f7f9;color:#17202a;font-family:Arial,sans-serif}.loading-screen{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:#f6f7f9}.loading-card{display:flex;flex-direction:column;align-items:center;gap:14px;background:#fff;border:1px solid #d9e0e8;border-radius:8px;padding:26px 34px;box-shadow:0 16px 40px rgba(21,34,50,.12);font-weight:800;text-align:center}.loading-spinner{width:42px;height:42px;border:4px solid #d9e0e8;border-top-color:#0f766e;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.loading-note{color:#617080;font-size:14px;font-weight:400}.error-card{width:min(760px,calc(100% - 32px));margin:36px auto;background:#fff;border:1px solid #d9e0e8;border-radius:8px;padding:30px;font-family:Arial,sans-serif}.error-card h1{color:#b42318}</style></head><body><div class="loading-screen" role="status" aria-live="polite" aria-busy="true"><div class="loading-card"><div class="loading-spinner" aria-hidden="true"></div><div>Carregant</div><div class="loading-note">Preparant el formulari...</div></div></div><script>(function(){var finished=false;function showError(title,message){if(finished)return;finished=true;document.body.innerHTML="<main class=\\"error-card\\"><h1>"+title+"</h1><p>"+message+"</p></main>";}var timeout=setTimeout(function(){showError("No s ha pogut continuar","El formulari esta trigant massa a carregar-se. Torneu-ho a provar d aqui a uns instants i, si el problema continua, poseu-vos en contacte amb el centre.");},60000);google.script.run.withSuccessHandler(function(html){if(finished)return;finished=true;clearTimeout(timeout);document.open();document.write(html);document.close();}).withFailureHandler(function(error){clearTimeout(timeout);showError("No s ha pogut continuar","S ha produït un error. Si el problema continua, poseu-vos en contacte amb el centre.");}).resolveTokenHtml(' + JSON.stringify(String(rawToken || '')) + ');})();</script></body></html>';
+  return HtmlService.createHtmlOutput(html)
+    .setTitle('Carregant')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
 function htmlPage_(title, body) {
-  return HtmlService.createHtmlOutput('<!doctype html><html lang="ca"><head><base target="_top"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + escapeHtml_(title) + '</title><style>body{margin:0;background:#f6f7f9;color:#17202a;font-family:Arial,sans-serif;line-height:1.5}main{width:min(820px,calc(100% - 32px));margin:32px auto;background:#fff;border:1px solid #d9e0e8;border-radius:8px;padding:30px;box-shadow:0 16px 40px rgba(21,34,50,.10)}h1{font-size:28px;line-height:1.2;margin:0 0 18px}h2{font-size:18px;margin-top:28px}.danger{color:#b42318}.alert{border:1px solid #f0b4b4;background:#fff1f1;color:#b42318;border-radius:6px;padding:10px 12px;margin-bottom:18px}label{display:block;font-weight:700;margin:18px 0}label span{display:block;color:#617080;font-size:14px;font-weight:400;margin:4px 0 8px}input,select{width:100%;border:1px solid #ccd6e0;border-radius:6px;font:inherit;padding:11px 12px}.button{display:inline-block;border:0;border-radius:6px;background:#0f766e;color:#fff;cursor:pointer;font-size:16px;font-weight:800;padding:13px 18px;text-decoration:none}.button.secondary{background:#344354}.actions{display:flex;gap:12px;flex-wrap:wrap}.small{color:#617080;font-size:14px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #d9e0e8;padding:9px 10px;text-align:left;vertical-align:top}th{width:230px;background:#edf1f5}</style></head><body><main>' + body + '</main></body></html>')
+  return HtmlService.createHtmlOutput('<!doctype html><html lang="ca"><head><base target="_top"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + escapeHtml_(title) + '</title><style>body{margin:0;background:#f6f7f9;color:#17202a;font-family:Arial,sans-serif;line-height:1.5}main{width:min(820px,calc(100% - 32px));margin:32px auto;background:#fff;border:1px solid #d9e0e8;border-radius:8px;padding:30px;box-shadow:0 16px 40px rgba(21,34,50,.10)}h1{font-size:28px;line-height:1.2;margin:0 0 18px}h2{font-size:18px;margin-top:28px}.danger{color:#b42318}.alert{border:1px solid #f0b4b4;background:#fff1f1;color:#b42318;border-radius:6px;padding:10px 12px;margin-bottom:18px}label{display:block;font-weight:700;margin:18px 0}label span{display:block;color:#617080;font-size:14px;font-weight:400;margin:4px 0 8px}input,select{width:100%;border:1px solid #ccd6e0;border-radius:6px;font:inherit;padding:11px 12px}.button{display:inline-block;border:0;border-radius:6px;background:#0f766e;color:#fff;cursor:pointer;font-size:16px;font-weight:800;padding:13px 18px;text-decoration:none}.button.secondary{background:#344354}.actions{display:flex;gap:12px;flex-wrap:wrap}.small{color:#617080;font-size:14px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #d9e0e8;padding:9px 10px;text-align:left;vertical-align:top}th{width:230px;background:#edf1f5}.loading-screen{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:#f6f7f9;color:#17202a;transition:opacity .18s ease,visibility .18s ease}.loading-card{display:flex;flex-direction:column;align-items:center;gap:14px;background:#fff;border:1px solid #d9e0e8;border-radius:8px;padding:26px 34px;box-shadow:0 16px 40px rgba(21,34,50,.12);font-weight:800}.loading-spinner{width:42px;height:42px;border:4px solid #d9e0e8;border-top-color:#0f766e;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}body:not(.is-loading) .loading-screen{opacity:0;visibility:hidden;pointer-events:none}</style><script>document.documentElement.classList.add("js");function showLauncherLoading(){document.body&&document.body.classList.add("is-loading")}function hideLauncherLoading(){document.body&&document.body.classList.remove("is-loading")}window.addEventListener("pageshow",function(){setTimeout(hideLauncherLoading,180)});window.addEventListener("load",function(){setTimeout(hideLauncherLoading,180)});document.addEventListener("DOMContentLoaded",function(){setTimeout(hideLauncherLoading,180)});document.addEventListener("submit",function(){showLauncherLoading()},true);document.addEventListener("click",function(event){var link=event.target&&event.target.closest?event.target.closest("a.button"):null;if(link&&link.href)showLauncherLoading()},true);</script></head><body class="is-loading"><div class="loading-screen" role="status" aria-live="polite" aria-busy="true"><div class="loading-card"><div class="loading-spinner" aria-hidden="true"></div><div>Carregant</div></div></div><main>' + body + '</main></body></html>')
     .setTitle(title)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -652,6 +670,23 @@ function firstExisting_(row, h, headers) {
 }
 
 function enrichStudentForLauncher_(student) {
+  student = student || {};
+  var normalized = normalizePanelStudent_(student);
+  if (normalized.id && (normalized.age || normalized.birthdateIso || normalized.isAdult) && (normalized.studyType || normalized.document || normalized.is14Plus)) {
+    var age = normalized.age !== '' ? Number(normalized.age) : '';
+    var isAdult = normalized.isAdult || (age !== '' && age >= 18 ? 'si' : 'no');
+    var is14Plus = normalized.is14Plus || (age !== '' && age >= 14 ? 'si' : 'no');
+    return {
+      id: normalized.id,
+      name: normalized.name || student.name || '',
+      birthdateIso: normalized.birthdateIso || '',
+      age: normalized.age,
+      document: normalized.document || '',
+      studyType: normalized.studyType || inferStudyType_(student.group_name || student.groupName || student.name || ''),
+      isAdult: isAdult,
+      is14Plus: is14Plus
+    };
+  }
   var local = findLocalStudentById_(student.id) || {};
   return {
     id: student.id || local.id || '',
@@ -772,12 +807,11 @@ function createVerificationToken_(data) {
 }
 
 function validateToken_(rawToken, options) {
-  expireOldPendingTokens_();
   var hash = hashToken_(rawToken);
   var sheet = openTableSheet_('Autoritzacions', 'verification_tokens');
   var h = headerMap_(sheet);
   var values = sheet.getDataRange().getValues();
-  for (var i = 1; i < values.length; i++) {
+  for (var i = values.length - 1; i >= 1; i--) {
     var row = values[i];
     if (stringValue_(row[h.token_hash]) !== hash) continue;
     var record = objectFromRow_(row, h);
@@ -798,14 +832,19 @@ function expireOldPendingTokens_() {
   var h = headerMap_(sheet);
   if (h.status === undefined || h.expires_at === undefined) return;
   var values = sheet.getDataRange().getValues();
+  if (values.length <= 1) return;
   var now = new Date().getTime();
+  var statuses = sheet.getRange(2, h.status + 1, values.length - 1, 1).getValues();
+  var changed = false;
   for (var i = 1; i < values.length; i++) {
     var status = stringValue_(values[i][h.status]);
     var expiresAt = new Date(values[i][h.expires_at]).getTime();
     if (status === 'pending' && expiresAt && expiresAt < now) {
-      markTokenExpired_(sheet, h, i + 1);
+      statuses[i - 1][0] = 'expired';
+      changed = true;
     }
   }
+  if (changed) sheet.getRange(2, h.status + 1, statuses.length, 1).setValues(statuses);
 }
 
 function markTokenExpired_(sheet, h, rowNumber) {
