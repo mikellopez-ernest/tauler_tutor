@@ -1,107 +1,122 @@
 # Tutor Utils
 
-Parent repository for the school tutor utilities Apps Script system.
+Google Apps Script workspace for the Institut Ernest Lluch tutor utilities system.
 
-This repo contains three related GAS web apps that share the same registry-backed database model:
+This repository contains three coordinated GAS web apps. They share a registry-backed database model, but each app has its own Apps Script project, clasp configuration, deployment, and security boundary.
 
-| Folder | Purpose |
+## Apps
+
+| Folder | App | Audience | Access | Purpose |
+| --- | --- | --- | --- | --- |
+| `tauler_tutor/` | Tutor panel | Teachers | Domain users only | Resolve the logged-in teacher, show their students, edit contacts, and manage authorization workflows. |
+| `form_launcher_example/` | Form launcher | Families, students, tutor panel | Public endpoint | Verify identity, create secure tokens, send invitation emails, and forward verified users to the form. |
+| `auth_form/` | Authorization form | Families and students | Public endpoint | Render the multilingual form, persist submissions, and refresh authorization cache data. |
+
+## Current URLs
+
+| App | URL |
 | --- | --- |
-| `tauler_tutor/` | Domain-restricted tutor panel for teachers. |
-| `form_launcher_example/` | Public launcher and verification gateway for authorization forms. |
-| `auth_form/` | Public multilingual authorization form endpoint. |
+| Tutor panel | `https://script.google.com/a/macros/iernestlluch.cat/s/AKfycbwOcqce-v40j7kv1wVuhnERUtdup3GMZhdCHXnN-vP_CqlycQl_ttjaClbzQqUxSq3Leg/exec` |
+| Launcher | `https://script.google.com/macros/s/AKfycbwOgYsVCf-MdEEbpGFFmWyjMB__MrgDowQuo7W6Ky8ymZwkY_-c7gUPm9QGTGUxiYGrYg/exec` |
+| Auth form | `https://script.google.com/macros/s/AKfycbyZpqmW-iGRN6xr_GdpCpeQxstvcYjZTM8CcqI657YFPfuTCU7Il3Zp2gJRkBykbHjjzg/exec` |
 
-## Local Structure
+Useful launcher entry points:
+
+```text
+https://script.google.com/macros/s/AKfycbwOgYsVCf-MdEEbpGFFmWyjMB__MrgDowQuo7W6Ky8ymZwkY_-c7gUPm9QGTGUxiYGrYg/exec?sender=parent
+https://script.google.com/macros/s/AKfycbwOgYsVCf-MdEEbpGFFmWyjMB__MrgDowQuo7W6Ky8ymZwkY_-c7gUPm9QGTGUxiYGrYg/exec?sender=student
+```
+
+## Workspace Layout
 
 ```text
 tutor_utils/
-  .gitignore
+  README.md
   PENDING_DEVELOPMENTS.local.md
   auth_form/
   form_launcher_example/
   tauler_tutor/
 ```
 
-The parent git repository is rooted at `tutor_utils`.
+The git repository is rooted at `tutor_utils`.
 
-Each GAS app keeps its own clasp project files inside its folder. Run `clasp` commands from the specific app folder you want to sync or deploy.
+Run `clasp` commands from the specific app folder you want to sync or deploy.
 
-## Security
+## Data Model
 
-Never commit:
+Every app reads the Apps Script property `db`, which points to the database registry spreadsheet.
+
+The registry spreadsheet contains a `tables` sheet that maps logical table names to spreadsheet IDs. The apps must not hardcode spreadsheet IDs in source.
+
+Primary data/spec documentation:
+
+| Path | Purpose |
+| --- | --- |
+| `tauler_tutor/docs/DB_STRUCTURE.md` | Shared registry, logical tables, sheets, headers, relationships, and cache rules. |
+| `tauler_tutor/docs/features/TUTOR_GROUP_ENDPOINT.md` | Tutor panel endpoint behavior. |
+| `tauler_tutor/docs/features/AUTHORIZATIONS_PANEL.md` | Authorization panel behavior. |
+| `form_launcher_example/docs/FORM_LAUNCHER_ENDPOINT.md` | Launcher identity, token, email, and forwarding behavior. |
+| `auth_form/docs/FORM_GAS_ENDPOINT.md` | Form rendering, validation, persistence, and cache write-through behavior. |
+
+## Security Rules
+
+Never commit credentials or local Apps Script connection files.
+
+Ignored/sensitive material includes:
 
 - `.clasp.json`
 - clasp credentials
 - Apps Script script properties
 - Dinantia API credentials
 - launcher shared secrets
-- local planning notes
+- raw verification tokens or token hashes
+- local planning notes in `PENDING_DEVELOPMENTS.local.md`
 
 The root `.gitignore` intentionally ignores `.clasp.json` at every level.
 
-## Shared Database Model
+## Required Script Properties
 
-All apps use the `db` Apps Script property to open the registry spreadsheet.
+| Property | Apps | Meaning |
+| --- | --- | --- |
+| `db` | All apps | Spreadsheet ID of the registry spreadsheet. |
+| `dinantia_api_user` | `tauler_tutor`, `form_launcher_example`, `auth_form` | Dinantia API Basic Auth user. |
+| `dinantia_api_secret` | `tauler_tutor`, `form_launcher_example`, `auth_form` | Dinantia API Basic Auth secret. |
+| `launcher_internal_secret` | `tauler_tutor`, `form_launcher_example` | Shared high-entropy secret for trusted panel-to-launcher calls. |
 
-The registry spreadsheet maps logical table names to spreadsheet IDs. Specs for the shared structure live mainly in:
+Missing properties must fail with clear configuration errors.
 
-```text
-tauler_tutor/docs/DB_STRUCTURE.md
-```
+## Operational Model
 
-## Apps
+- Canonical writes go to the source table first.
+- Cache tables are read models and may be overwritten.
+- After a canonical authorization write, refresh `Dinantia -> authorizations_cache` immediately.
+- After contact edits, write Dinantia first, then update `Dinantia -> contacts_cache`.
+- Nightly cache rebuild function: `rebuildTutorPanelCache()` in `tauler_tutor`.
+- Manual authorization/scope helper: `authorizeServices()`.
 
-### Tauler Tutor
+## Development
 
-Run from:
+Examples:
 
 ```bash
 cd tauler_tutor
+clasp push
 ```
-
-Main deployment:
-
-```text
-https://script.google.com/a/macros/iernestlluch.cat/s/AKfycbwOcqce-v40j7kv1wVuhnERUtdup3GMZhdCHXnN-vP_CqlycQl_ttjaClbzQqUxSq3Leg/exec
-```
-
-### Form Launcher
-
-Run from:
 
 ```bash
 cd form_launcher_example
+clasp push
 ```
-
-Main deployment:
-
-```text
-https://script.google.com/macros/s/AKfycbwOgYsVCf-MdEEbpGFFmWyjMB__MrgDowQuo7W6Ky8ymZwkY_-c7gUPm9QGTGUxiYGrYg/exec
-```
-
-Useful entry points:
-
-```text
-?sender=parent
-?sender=student
-```
-
-### Auth Form
-
-Run from:
 
 ```bash
 cd auth_form
+clasp push
 ```
 
-Main deployment:
+Deploy only when explicitly requested, and reuse the existing deployment ID unless the user asks for a new deployment.
 
-```text
-https://script.google.com/macros/s/AKfycbyZpqmW-iGRN6xr_GdpCpeQxstvcYjZTM8CcqI657YFPfuTCU7Il3Zp2gJRkBykbHjjzg/exec
-```
+## Local Notes
 
-## Operational Notes
+`PENDING_DEVELOPMENTS.local.md` is for local planning only. Keep it ignored and out of git.
 
-- Cache tables are read models, not canonical data.
-- Writes must go to the canonical origin first, then refresh the affected cache.
-- `rebuildTutorPanelCache()` is the nightly cache rebuild function in `tauler_tutor`.
-- `authorizeServices()` should be run manually from Apps Script after scopes or spreadsheet access paths change.
+Documentation and specs belong in each app's `docs/` folder. Top-level documentation should describe the whole workspace, not detailed feature behavior.
