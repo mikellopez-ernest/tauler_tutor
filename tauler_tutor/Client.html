@@ -721,9 +721,11 @@
         return;
       }
       button.disabled = true;
+      setInitialLoading(true);
       google.script.run
         .withSuccessHandler(function(result) {
           button.disabled = false;
+          setInitialLoading(false);
           if (!result || !result.url) {
             alert('No s ha pogut crear l enllaç del formulari.');
             return;
@@ -732,6 +734,7 @@
         })
         .withFailureHandler(function(error) {
           button.disabled = false;
+          setInitialLoading(false);
           alert('No s ha pogut obrir el formulari: ' + (error && error.message ? error.message : error));
         })
         .createAuthorizationPrintLink({

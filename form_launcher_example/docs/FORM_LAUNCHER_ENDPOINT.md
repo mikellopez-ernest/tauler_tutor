@@ -748,7 +748,7 @@ After token validation, the launcher renders the existing family message:
 
 For panel-created invitations, the token metadata should already contain normalized student context from the tutor-panel cache. In that case, the launcher must reuse that metadata instead of re-opening `Dades alumnes` only to enrich the same student again. `Dades alumnes` lookup is a fallback for older/manual tokens or incomplete metadata.
 
-The final POST-forwarding page must not hide itself behind a permanent full-screen overlay. It should render a small visible `Obrint el formulari...` page, auto-submit to `auth_form`, and keep a manual `Obrir formulari` button as a fallback.
+The final POST-forwarding page is a transport layer, not a user-facing step. It should render minimal HTML and submit to `auth_form` immediately, with no visible content during the normal path. If the browser does not navigate quickly, reveal a small fallback page with `Obrint el formulari...` and a manual `Obrir formulari` button.
 
 Forwarded fields remain:
 

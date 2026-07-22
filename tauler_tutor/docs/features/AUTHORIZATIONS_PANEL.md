@@ -154,6 +154,7 @@ Behavior:
 
 - The icon appears only when the student has a filled form.
 - The icon requests a short-lived print/review link from the server and opens it in a new browser tab.
+- While the print/review link is being created, the tutor panel must disable the current page and show the existing centered loading indicator. The indicator must be removed when the link is opened or if link creation fails.
 - The opened view must render the exact `auth_form` UI populated with the submitted response.
 - The form controls must be disabled/read-only.
 - The form should be expanded and printable so the tutor can print it if a family asks for a paper copy.
