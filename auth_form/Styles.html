@@ -14,9 +14,32 @@
     .legal-document { max-height:420px; overflow:auto; padding:1rem; border:1px solid #dee2e6; border-radius:.5rem; background:#fff; }
     .legal-document li { margin-bottom:.45rem; }
     .question { padding:1rem; border:1px solid #dee2e6; border-radius:.5rem; background:#fff; }
+    .question.has-validation-error { border-color:#dc3545; box-shadow:0 0 0 .08rem rgba(220,53,69,.18); }
+    .validation-summary { border-left:4px solid #dc3545; }
+    .validation-summary ul { margin:.5rem 0 0; padding-left:1.15rem; }
+    .field-validation-message { color:#dc3545; font-size:.875rem; margin-top:.35rem; }
+    .option-grid { display:grid; gap:.85rem; }
+    .option-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:1rem; align-items:start; }
+    .option-row-child, .option-heading-child { margin-left:1.5rem; }
+    .option-row-grandchild { margin-left:3rem; }
+    .option-heading { margin-top:.35rem; }
+    .option-controls { display:flex; flex-wrap:wrap; gap:1rem; min-width:8rem; }
     .signature-pad { width:100%; height:150px; border:1px dashed #6c757d; border-radius:.375rem; background:#fff; touch-action:none; }
     .sticky-actions { position:sticky; bottom:0; z-index:1020; background:rgba(255,255,255,.96); border-top:1px solid #dee2e6; backdrop-filter:blur(6px); }
-    .required::after { content:" *"; color:#dc3545; }
+    .required::after,
+    .required-question::after,
+    .question:not(.optional-question) > h3.h6::after,
+    .question:not(.optional-question) .option-label::after,
+    .question:not(.optional-question) .option-heading::after,
+    :not(.optional-question) > label.form-label:not(.required)::after,
+    :not(.optional-question) > .form-label:not(.required)::after {
+      content:" *";
+      color:#dc3545;
+    }
+    .optional-question h3.h6::after,
+    .optional-question label.form-label::after {
+      content:none !important;
+    }
     .is-hidden { display:none !important; }
     .translate-box { min-width:280px; }
     .student-banner {
@@ -48,5 +71,11 @@
     margin-left: 1rem;
     padding-left: 1rem;
     width: calc(100% - 1rem);
+  }
+  @media (max-width: 767.98px) {
+    .option-row { grid-template-columns:1fr; gap:.35rem; }
+    .option-row-child, .option-heading-child { margin-left:.75rem; }
+    .option-row-grandchild { margin-left:1.5rem; }
+    .option-controls { min-width:0; }
   }
 </style>

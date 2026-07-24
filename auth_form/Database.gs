@@ -149,7 +149,7 @@ function normalizeAuthorizationPayload_(payload) {
     out[field] = String(payload[field] === null || payload[field] === undefined ? '' : payload[field]).trim();
   });
   var boolFields = [
-    'sortida_sola','sortida_esbarjo','comunicacio_academica','sortides_municipi','imatge_intranet','imatge_web','imatge_externa',
+    'sortida_sola','sortida_esbarjo','sortida_imprevistos','comunicacio_academica','sortides_municipi','imatge_intranet','imatge_web','imatge_externa',
     'publicacio_inicials','obra_oberta','obra_centre','obra_biblioteca','obra_repositori','declaracio_plataformes','comunicacio_salut',
     'administracio_medicacio','paracetamol','carta_compromis_acceptada','consentiment_mobil','signatura_responsable','signatura_alumne','invalidated'
   ];

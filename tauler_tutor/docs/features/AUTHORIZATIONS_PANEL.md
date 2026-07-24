@@ -86,6 +86,7 @@ Permission columns must be grouped logically.
 | --- | --- |
 | `Surt sol/a` | `sortida_sola` |
 | `Esbarjo` | `sortida_esbarjo` |
+| `Imprevistos` | `sortida_imprevistos` |
 | `Sortides municipi` | `sortides_municipi` |
 
 ### Group: `Comunicacions`

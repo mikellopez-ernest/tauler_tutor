@@ -154,7 +154,7 @@ function loadAuthorizationDataFromCache_() {
   var registry = loadTableRegistry_();
   var sheet = openTableSheet_(registry, TABLES.dinantia, SHEETS.authorizationsCache);
   var required = authorizationCacheRequiredHeaders_();
-  var headers = requireHeaders_(sheet, required, TABLES.dinantia + ' -> ' + SHEETS.authorizationsCache);
+  var headers = ensureHeaderNames_(sheet, required);
   if (sheet.getLastRow() < 2) {
     throw new Error('Authorization cache is empty.');
   }
@@ -195,7 +195,7 @@ function loadAuthorizationDataFromCache_() {
 function authorizationCacheRequiredHeaders_() {
   return [
     'id_student','resposta_id','data_hora_enviament','data_signatura','idioma_formulari','codi_document','tipus_alumne',
-    'sortida_sola','sortida_esbarjo','sortides_municipi','comunicacio_academica','comunicacio_salut','declaracio_plataformes',
+    'sortida_sola','sortida_esbarjo','sortida_imprevistos','sortides_municipi','comunicacio_academica','comunicacio_salut','declaracio_plataformes',
     'imatge_intranet','imatge_web','imatge_externa','obra_oberta','obra_centre','obra_biblioteca','obra_repositori',
     'administracio_medicacio','paracetamol','carta_compromis_acceptada','consentiment_mobil','problemes_salut','altres_salut','signatura_responsable','signatura_alumne',
     'acad_contacte_nom','acad_contacte_email','acad_contacte_relacio','emergencia_nom','emergencia_telefon','emergencia_relacio',
@@ -408,6 +408,16 @@ function ensureCacheHeaders_(sheet, rows) {
   if (!missingNames.length) return headers;
   var startColumn = sheet.getLastColumn() + 1;
   sheet.getRange(1, startColumn, 1, missingNames.length).setValues([missingNames]);
+  return getHeaderMap_(sheet);
+}
+
+function ensureHeaderNames_(sheet, requiredHeaders) {
+  var headers = getHeaderMap_(sheet);
+  var missing = (requiredHeaders || []).filter(function(header) {
+    return headers[header] === undefined;
+  });
+  if (!missing.length) return headers;
+  sheet.getRange(1, sheet.getLastColumn() + 1, 1, missing.length).setValues([missing]);
   return getHeaderMap_(sheet);
 }
 

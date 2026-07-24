@@ -76,7 +76,7 @@ function buildFastInitialFormData_(prefill) {
   var normalized = normalizePrefillAliases_(prefill || {});
   var initial = Object.assign({}, FORM_DEFAULTS);
   var accepted = [
-    'studyType', 'isAdult', 'is14Plus', 'alumne_nom', 'alumne_document', 'id_student',
+    'studyType', 'isAdult', 'is14Plus', 'tipus_alumne', 'alumne_nom', 'alumne_document', 'id_student',
     'responent_nom_sencer', 'responent_telefon', 'responsable_nom',
     'form_mode', 'mode', 'resposta_id', 'verified_actor_type', 'verified_dinantia_account_id',
     'verified_email', 'launcher_token'
@@ -87,6 +87,7 @@ function buildFastInitialFormData_(prefill) {
     }
   });
   if (!initial.form_mode && initial.mode) initial.form_mode = initial.mode;
+  applyDerivedModelDefaults_(initial);
   if (!initial.data_signatura) {
     initial.data_signatura = Utilities.formatDate(new Date(), FORM_CONFIG.timezone, 'yyyy-MM-dd');
   }
@@ -100,7 +101,7 @@ function buildFastInitialFormData_(prefill) {
 function resolveInitialFormData_(prefill) {
   var initial = Object.assign({}, FORM_DEFAULTS);
   var accepted = [
-    'studyType', 'isAdult', 'is14Plus', 'alumne_nom', 'alumne_document', 'id_student',
+    'studyType', 'isAdult', 'is14Plus', 'tipus_alumne', 'alumne_nom', 'alumne_document', 'id_student',
     'responent_nom_sencer', 'responent_telefon', 'responsable_nom',
     'form_mode', 'mode', 'resposta_id', 'verified_actor_type', 'verified_dinantia_account_id',
     'verified_email', 'launcher_token'
@@ -111,6 +112,7 @@ function resolveInitialFormData_(prefill) {
     }
   });
   if (!initial.form_mode && initial.mode) initial.form_mode = initial.mode;
+  applyDerivedModelDefaults_(initial);
   var tokenRecord = validateLauncherTokenForForm_(initial);
   if (tokenRecord) {
     initial.verified_actor_type = tokenRecord.sender === 'student' ? 'student' : 'parent';
@@ -133,11 +135,21 @@ function resolveInitialFormData_(prefill) {
       if (prefill[key] !== undefined && prefill[key] !== null) initial[key] = normalizePrefillValue_(key, prefill[key]);
     });
   }
+  applyDerivedModelDefaults_(initial);
   if (!initial.data_signatura) {
     initial.data_signatura = Utilities.formatDate(new Date(), FORM_CONFIG.timezone, 'yyyy-MM-dd');
   }
   initial.launcher_url = FORM_CONFIG.launcherUrl;
   return initial;
+}
+
+function applyDerivedModelDefaults_(initial) {
+  if (!initial) return;
+  if (initial.form_mode === 'new_student_adult' || initial.tipus_alumne === 'major18') {
+    initial.tipus_alumne = 'major18';
+    initial.isAdult = 'si';
+    initial.is14Plus = 'si';
+  }
 }
 
 function parsePrefillFromEvent_(e) {
@@ -187,6 +199,9 @@ function normalizePrefillValue_(key, value) {
   }
   if (key === 'isAdult' || key === 'is14Plus') {
     return normalizeSiNo_(text);
+  }
+  if (key === 'tipus_alumne') {
+    return ['eso_menor14', 'eso_14_17', 'batx_menor18', 'post_menor18', 'major18'].indexOf(text) !== -1 ? text : '';
   }
   return text;
 }

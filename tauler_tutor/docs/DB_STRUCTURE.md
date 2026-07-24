@@ -307,6 +307,7 @@ Authorization and declaration headers:
 | --- | --- |
 | `sortida_sola` | Authorization for the student to leave the school alone outside teaching hours. |
 | `sortida_esbarjo` | Authorization for underage post-compulsory students to leave during recess. |
+| `sortida_imprevistos` | Authorization for `major18`, `batx_menor18`, and `post_menor18` students to enter or leave the school during unforeseen timetable gaps caused by teacher absence or other eventualities. |
 | `comunicacio_academica` | Authorization to communicate academic/attendance data to a third person. |
 | `sortides_municipi` | Authorization for pedagogical trips inside the municipality. |
 | `imatge_intranet` | Consent to publish image/voice in restricted intranet spaces. |
@@ -660,7 +661,7 @@ Required authorization headers are the same fields rendered by the tutor panel f
 
 ```text
 id_student, resposta_id, data_hora_enviament, data_signatura, idioma_formulari,
-codi_document, tipus_alumne, sortida_sola, sortida_esbarjo, sortides_municipi,
+codi_document, tipus_alumne, sortida_sola, sortida_esbarjo, sortida_imprevistos, sortides_municipi,
 comunicacio_academica, comunicacio_salut, declaracio_plataformes,
 imatge_intranet, imatge_web, imatge_externa, obra_oberta, obra_centre,
 obra_biblioteca, obra_repositori, administracio_medicacio, paracetamol,

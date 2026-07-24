@@ -19,6 +19,7 @@ function doPost(e) {
     if (action === 'panel_invite') return handlePanelInvite_(payload);
     if (action === 'panel_print_link') return handlePanelPrintLink_(payload);
     if (action === 'verify_parent') return handleParentVerification_(payload);
+    if (action === 'verify_parent_student') return handleParentStudentPreSelection_(payload);
     if (action === 'verify_student') return handleStudentVerification_(payload);
     if (action === 'select_parent_student') return handleParentStudentSelection_(payload);
     if (action === 'forward_form') return handleForwardForm_(payload);
@@ -195,27 +196,142 @@ function handleParentVerification_(payload) {
   var email = normalizeEmail_(payload.email);
   if (!isValidEmail_(email)) return renderParentEntry_('Introdueix una adreca de correu electronic valida.');
 
-  var parent = findDinantiaAccountByEmail_(email);
-  if (!parent) return renderNotRegistered_();
+  var context = findParentContextByEmailFromCache_(email) || findParentContextByEmailFromDinantia_(email);
+  if (!context || !context.parent) return renderNotRegistered_();
 
-  var children = findStudentsForParent_(parent.id);
-  var availableChildren = children.map(function(child) {
-    return enrichStudentForLauncher_(child);
-  }).filter(function(child) {
-    return Number(child.age) < 18;
-  });
+  var availableChildren = (context.children || []).filter(isMinorStudent_);
+  if (!availableChildren.length) return renderNoMinorChildren_();
+  if (availableChildren.length > 1) return renderParentPreEmailStudentChoice_(email, availableChildren);
+
+  sendParentVerificationForChild_(email, context.parent, availableChildren[0]);
+  return renderCheckEmail_();
+}
+
+function handleParentStudentPreSelection_(payload) {
+  var email = normalizeEmail_(payload.email);
+  var studentId = stringValue_(payload.student_id);
+  if (!isValidEmail_(email)) return renderParentEntry_('Introdueix una adreca de correu electronic valida.');
+  if (!studentId) return renderParentEntry_('Selecciona l alumne/a.');
+
+  var context = findParentContextByEmailFromCache_(email) || findParentContextByEmailFromDinantia_(email);
+  if (!context || !context.parent) return renderNotRegistered_();
+
+  var availableChildren = (context.children || []).filter(isMinorStudent_);
   if (!availableChildren.length) return renderNoMinorChildren_();
 
+  var selected = availableChildren.filter(function(child) {
+    return codeKey_(child.id) === codeKey_(studentId);
+  })[0];
+  if (!selected) return renderMessagePage_('No s ha pogut continuar', 'L alumne seleccionat no correspon a aquesta adreca de correu.', true);
+
+  sendParentVerificationForChild_(email, context.parent, selected);
+  return renderCheckEmail_();
+}
+
+function sendParentVerificationForChild_(email, parent, child) {
   var token = createVerificationToken_({
     sender: 'parent',
     email: email,
     dinantia_account_id: parent.id,
-    student_id: '',
+    student_id: child.id,
     resposta_id: '',
-    metadata: { parent_name: parent.name || '', parent_phone: parent.phone || '', children: availableChildren }
+    metadata: { parent_name: parent.name || '', parent_phone: parent.phone || '', student: child }
   });
-  sendVerificationEmail_(email, 'parent', token.rawToken, availableChildren.length === 1 ? availableChildren[0] : null);
-  return renderCheckEmail_();
+  sendVerificationEmail_(email, 'parent', token.rawToken, child);
+}
+
+function findParentContextByEmailFromCache_(email) {
+  try {
+    var contactSheet = openTableSheet_('Dinantia', 'contacts_cache');
+    var studentSheet = openTableSheet_('Dinantia', 'students_cache');
+    var contactHeaders = headerMap_(contactSheet);
+    var studentHeaders = headerMap_(studentSheet);
+    var requiredContactHeaders = ['student_id', 'student_name', 'group_name', 'contact_id', 'contact_name', 'contact_email', 'contact_phone'];
+    var requiredStudentHeaders = ['student_id', 'student_name', 'student_email', 'group_name', 'age', 'document', 'study_type', 'is_adult', 'is_14_plus'];
+    if (!hasHeaders_(contactHeaders, requiredContactHeaders) || !hasHeaders_(studentHeaders, requiredStudentHeaders)) return null;
+
+    var studentsById = {};
+    var studentValues = studentSheet.getDataRange().getValues();
+    for (var s = 1; s < studentValues.length; s++) {
+      var studentRow = studentValues[s];
+      var studentId = stringValue_(studentRow[studentHeaders.student_id]);
+      if (!studentId) continue;
+      studentsById[studentId] = {
+        id: studentId,
+        name: stringValue_(studentRow[studentHeaders.student_name]),
+        email: normalizeEmail_(studentRow[studentHeaders.student_email]),
+        groupName: stringValue_(studentRow[studentHeaders.group_name]),
+        age: stringValue_(studentRow[studentHeaders.age]),
+        document: stringValue_(studentRow[studentHeaders.document]),
+        studyType: stringValue_(studentRow[studentHeaders.study_type]),
+        isAdult: stringValue_(studentRow[studentHeaders.is_adult]),
+        is14Plus: stringValue_(studentRow[studentHeaders.is_14_plus])
+      };
+    }
+
+    var contactValues = contactSheet.getDataRange().getValues();
+    var parent = null;
+    var childrenById = {};
+    for (var i = 1; i < contactValues.length; i++) {
+      var row = contactValues[i];
+      if (normalizeEmail_(row[contactHeaders.contact_email]) !== email) continue;
+      if (!parent) {
+        parent = {
+          id: stringValue_(row[contactHeaders.contact_id]),
+          name: stringValue_(row[contactHeaders.contact_name]),
+          phone: stringValue_(row[contactHeaders.contact_phone])
+        };
+      }
+      var id = stringValue_(row[contactHeaders.student_id]);
+      if (!id || childrenById[id]) continue;
+      var cachedStudent = studentsById[id] || {};
+      childrenById[id] = {
+        id: id,
+        name: cachedStudent.name || stringValue_(row[contactHeaders.student_name]),
+        email: cachedStudent.email || '',
+        groupName: cachedStudent.groupName || stringValue_(row[contactHeaders.group_name]),
+        age: cachedStudent.age || '',
+        document: cachedStudent.document || '',
+        studyType: cachedStudent.studyType || inferStudyType_(cachedStudent.groupName || row[contactHeaders.group_name]),
+        isAdult: cachedStudent.isAdult || '',
+        is14Plus: cachedStudent.is14Plus || ''
+      };
+    }
+
+    if (!parent) return null;
+    return {
+      parent: parent,
+      children: Object.keys(childrenById).map(function(id) { return childrenById[id]; })
+    };
+  } catch (error) {
+    console.warn('Parent cache lookup failed: ' + safeErrorMessage_(error));
+    return null;
+  }
+}
+
+function findParentContextByEmailFromDinantia_(email) {
+  var parent = findDinantiaAccountByEmail_(email);
+  if (!parent) return null;
+  var children = findStudentsForParent_(parent.id).map(function(child) {
+    try {
+      return enrichStudentForLauncher_(child);
+    } catch (error) {
+      console.warn('Student enrichment failed for ' + stringValue_(child && child.id) + ': ' + safeErrorMessage_(error));
+      return {
+        id: stringValue_(child && child.id),
+        name: stringValue_(child && child.name),
+        age: '',
+        studyType: inferStudyType_(child && child.name)
+      };
+    }
+  });
+  return { parent: parent, children: children };
+}
+
+function isMinorStudent_(student) {
+  var age = stringValue_(student && student.age);
+  if (!age) return false;
+  return Number(age) < 18;
 }
 
 function handleStudentVerification_(payload) {
@@ -385,6 +501,22 @@ function renderStudentEntry_(error) {
 function renderParentStudentChoice_(token, children) {
   var options = children.map(function(child) { return '<option value="' + escapeHtml_(child.id) + '">' + escapeHtml_(child.name || child.id) + '</option>'; }).join('');
   var body = '<h1>Selecciona l alumne/a</h1><p>Hem trobat mes d un alumne/a associat a aquesta adreca. Selecciona per a qui vols accedir al formulari.</p><form method="post" action="' + escapeHtml_(LAUNCHER_CONFIG.launcherUrl) + '"><input type="hidden" name="action" value="select_parent_student"><input type="hidden" name="token" value="' + escapeHtml_(token) + '"><label>Alumne/a<select name="student_id" required>' + options + '</select></label><button class="button" type="submit">Continuar</button></form>';
+  return htmlPage_('Selecciona l alumne/a', body);
+}
+
+function renderParentPreEmailStudentChoice_(email, children) {
+  var options = children.map(function(child) {
+    var label = child.name || child.id;
+    return '<option value="' + escapeHtml_(child.id) + '">' + escapeHtml_(label) + '</option>';
+  }).join('');
+  var body = '<h1>Selecciona l alumne/a</h1>' +
+    '<p>Hem trobat mes d un alumne/a menor d edat associat a aquesta adreca. Selecciona per a qui vols iniciar el formulari.</p>' +
+    '<form method="post" action="' + escapeHtml_(LAUNCHER_CONFIG.launcherUrl) + '">' +
+    '<input type="hidden" name="action" value="verify_parent_student">' +
+    '<input type="hidden" name="email" value="' + escapeHtml_(email) + '">' +
+    '<label>Alumne/a<select name="student_id" required>' + options + '</select></label>' +
+    '<button class="button" type="submit">Enviar correu de verificacio</button>' +
+    '</form>';
   return htmlPage_('Selecciona l alumne/a', body);
 }
 
@@ -593,6 +725,12 @@ function headerMap_(sheet) {
   var map = {};
   headers.forEach(function(header, index) { var key = stringValue_(header); if (key) map[key] = index; });
   return map;
+}
+
+function hasHeaders_(headers, requiredHeaders) {
+  return (requiredHeaders || []).every(function(header) {
+    return headers[header] !== undefined;
+  });
 }
 
 function getClassGroups_() {

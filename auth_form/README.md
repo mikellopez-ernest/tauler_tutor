@@ -55,6 +55,8 @@ clasp deploy -i AKfycbyZpqmW-iGRN6xr_GdpCpeQxstvcYjZTM8CcqI657YFPfuTCU7Il3Zp2gJR
 
 Protected modes require a valid launcher token. The public endpoint must not trust a naked `resposta_id`.
 
+Adult-student submissions (`new_student_adult` / `major18`) skip the respondent-identification page and do not show the parent/legal guardian name or document fields, because the student is the respondent.
+
 ## User Experience
 
 The form renders a fast client shell first when protected data needs to be resolved. The shell shows a centered loading indicator while token validation and initial data loading happen asynchronously.

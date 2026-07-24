@@ -420,7 +420,7 @@
         appendAuthorizationStatusCell(row, student, auth, status);
         appendCell(row, auth ? formatAuthorizationDate(auth.data_hora_enviament || auth.data_signatura) : '');
         appendAuthorizationDetailCell(row, student, auth, latestInvitations[String(student.id || '').trim()] || null);
-        ['sortida_sola','sortida_esbarjo','sortides_municipi','comunicacio_academica','comunicacio_salut','declaracio_plataformes','imatge_intranet','imatge_web','imatge_externa','obra_oberta','obra_centre','obra_biblioteca','obra_repositori','administracio_medicacio','paracetamol'].forEach(function(field) {
+        ['sortida_sola','sortida_esbarjo','sortida_imprevistos','sortides_municipi','comunicacio_academica','comunicacio_salut','declaracio_plataformes','imatge_intranet','imatge_web','imatge_externa','obra_oberta','obra_centre','obra_biblioteca','obra_repositori','administracio_medicacio','paracetamol'].forEach(function(field) {
           appendIconCell(row, auth ? auth[field] : '');
         });
         appendIconCell(row, auth && (textValue(auth.problemes_salut) || textValue(auth.altres_salut)) ? true : '');
@@ -909,6 +909,7 @@
         }
         closeAuthorizationDetail();
         request.contacts = selected;
+        request.contactsSelectedManually = true;
         sendInvitationRequests([request]);
       });
       actions.appendChild(cancel);
@@ -993,7 +994,10 @@
     function hydrateParentInvitationContacts(requests) {
       return (requests || []).map(function(request) {
         if (request.target !== 'parents') return request;
-        request.contacts = contactsForStudent(request.student && request.student.id);
+        if (request.contactsSelectedManually) return request;
+        if (!request.contacts || !request.contacts.length) {
+          request.contacts = contactsForStudent(request.student && request.student.id);
+        }
         return request;
       });
     }

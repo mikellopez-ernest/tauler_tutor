@@ -72,9 +72,9 @@ Rules:
 2. Parent enters email.
 3. Launcher searches the email in Dinantia.
 4. If not found, show a safe Catalan not-registered message.
-5. If found, resolve associated students through Dinantia parent-child relations.
-6. If more than one eligible minor student exists, the verified flow asks which student to open.
-7. Launcher sends a personal verification email.
+5. If found, resolve associated students from `Dinantia -> contacts_cache` joined to `Dinantia -> students_cache`, falling back to live Dinantia lookup only if the cache cannot answer.
+6. If more than one eligible minor student exists, show a student selector before sending the email.
+7. Launcher sends a personal verification email tied to the selected student.
 8. Parent opens token link.
 9. Launcher resolves the token and forwards trusted context to `auth_form`.
 

@@ -105,6 +105,7 @@
 <input id="hiddenRespondentPhone" name="responent_telefon" type="hidden"/>
 <input id="languageField" name="idioma_formulari" type="hidden"/>
 <input id="documentCode" name="codi_document" type="hidden"/>
+<div class="alert alert-danger validation-summary is-hidden" id="validationSummary" tabindex="-1" role="alert"></div>
 <div class="accordion" id="formAccordion">
 <section class="accordion-item section-card mb-3">
 <h2 class="accordion-header"><button class="accordion-button" data-bs-target="#identificacio" data-bs-toggle="collapse" type="button">1. Identificació</button></h2>
@@ -142,17 +143,24 @@
 </div></div>
 </section>
 <section class="accordion-item section-card mb-3" id="estadaSection">
-<h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-target="#estada" data-bs-toggle="collapse" type="button">2. Estada, sortides i comunicacions</button></h2>
+<h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-target="#estada" data-bs-toggle="collapse" type="button">2. Autoritzacions per a l’estada de l’alumnat al centre</button></h2>
 <div class="accordion-collapse collapse" data-bs-parent="#formAccordion" id="estada"><div class="accordion-body">
-<div class="legal-box p-3 rounded mb-3"><strong>Protecció de dades.</strong> Responsable: direcció del centre educatiu. Finalitat: funció educativa, gestió de la permanència i sortida de l'alumnat i, quan correspongui, comunicació de dades acadèmiques i d'assistència.</div>
+<div class="legal-box p-3 rounded mb-3">
+<p class="fw-semibold mb-2">Informació bàsica sobre protecció de dades personals</p>
+<p class="mb-1">Responsable: direcció del centre educatiu, de titularitat del Departament d’Educació i Formació Professional.</p>
+<p class="mb-1">Finalitat: la funció educativa i la gestió de la permanència i la sortida de l’alumnat del centre. L’atenció de les necessitats sanitàries de l’alumnat.</p>
+<p class="mb-1">Drets: es poden exercir els drets d’accés, rectificació, supressió, limitació del tractament, oposició i la resta de drets previstos per la normativa vigent davant la direcció del centre educatiu. També es pot presentar una reclamació davant l’Autoritat Catalana de Protecció de Dades.</p>
+<p class="mb-0">Podeu consultar informació addicional sobre aquest tractament al web del Departament (educacio.gencat.cat), a l’apartat Departament &gt; Protecció de dades &gt; Registre d’activitats de tractament &gt; Llista alfabètica &gt; Alumnes de centres educatius de titularitat del Departament d’Educació i Formació Professional.</p>
+</div>
+<p class="fw-semibold">Autoritzo, com a responsable legal de l’alumne/a:</p>
 <div id="esoExitBlock">
 <div class="question mb-3">
-<h3 class="h6">Sortida del centre fora de l'horari lectiu</h3>
+<h3 class="h6">Sortida amb/sense acompanyament del centre fora de l’horari lectiu (d’acord amb les normes d’organització i funcionament del centre, NOFC, aprovades pel consell escolar del centre)</h3>
 <p>Que l'alumne/a surti sol/a fora de l'horari lectiu.</p>
 <div class="d-flex gap-4 flex-wrap"><div class="form-check"><input class="form-check-input" id="sortidaSolaSi" name="sortida_sola" type="radio" value="si"/><label class="form-check-label" for="sortidaSolaSi">Sí, ho autoritzo</label></div><div class="form-check"><input class="form-check-input" id="sortidaSolaNo" name="sortida_sola" type="radio" value="no"/><label class="form-check-label" for="sortidaSolaNo">No, no ho autoritzo</label></div></div>
 </div>
 <div class="question mb-3 is-hidden" id="authorizedPeopleBlock">
-<h3 class="h6">Persones autoritzades per recollir l'alumne/a</h3>
+<h3 class="h6">Que l’alumne/a marxi del centre fora de l’horari lectiu acompanyat/ada per les persones següents (un cop s’hagin acreditat documentalment):</h3>
 <div class="vstack gap-2" id="authorizedPeople"></div>
 <button class="btn btn-outline-secondary btn-sm mt-2 no-print" id="addPerson" type="button">Afegir persona</button>
 </div>
@@ -161,6 +169,11 @@
 <h3 class="h6">Sortida del centre en hores d'esbarjo</h3>
 <p>Que l'alumne/a, menor d'edat i matriculat/ada en ensenyaments no obligatoris, surti del centre en hores d'esbarjo.</p>
 <div class="d-flex gap-4 flex-wrap"><div class="form-check"><input class="form-check-input" id="esbarjoSi" name="sortida_esbarjo" type="radio" value="si"/><label class="form-check-label" for="esbarjoSi">Sí, ho autoritzo</label></div><div class="form-check"><input class="form-check-input" id="esbarjoNo" name="sortida_esbarjo" type="radio" value="no"/><label class="form-check-label" for="esbarjoNo">No, no ho autoritzo</label></div></div>
+</div>
+<div class="question mb-3 is-hidden" id="unforeseenExitBlock">
+<h3 class="h6">Entrada o sortida del centre en situacions imprevistes</h3>
+<p>Autoritzo l'entrada o sortida del centre educatiu en aquelles franges horàries en què, per absència imprevista del professorat o d'altres eventualitats, no es pugui garantir l’activitat lectiva prevista.</p>
+<div class="d-flex gap-4 flex-wrap"><div class="form-check"><input class="form-check-input" id="imprevistosSi" name="sortida_imprevistos" type="radio" value="si"/><label class="form-check-label" for="imprevistosSi">Sí, ho autoritzo</label></div><div class="form-check"><input class="form-check-input" id="imprevistosNo" name="sortida_imprevistos" type="radio" value="no"/><label class="form-check-label" for="imprevistosNo">No, no ho autoritzo</label></div></div>
 </div>
 <div class="question mb-3 is-hidden" id="academicCommunicationBlock">
 <h3 class="h6">Comunicació de dades acadèmiques i d'assistència</h3>
@@ -174,50 +187,97 @@
 </div>
 <div class="question" id="municipalTripsBlock">
 <h3 class="h6">Sortides pedagògiques dins del terme municipal</h3>
-<p>Participació en activitats programades dins del municipi i en horari lectiu, ús de les dades necessàries i representació de l'alumne/a per una persona responsable del centre.</p>
+<p>Que l’alumne/a participi en activitats programades dins del municipi i en horari lectiu, amb ús de les dades necessàries i representació de l'alumne/a per una persona responsable del centre.</p>
 <div class="d-flex gap-4 flex-wrap"><div class="form-check"><input class="form-check-input" id="sortidesMunicipiSi" name="sortides_municipi" type="radio" value="si"/><label class="form-check-label" for="sortidesMunicipiSi">Sí, ho autoritzo</label></div><div class="form-check"><input class="form-check-input" id="sortidesMunicipiNo" name="sortides_municipi" type="radio" value="no"/><label class="form-check-label" for="sortidesMunicipiNo">No, no ho autoritzo</label></div></div>
 <div class="alert alert-secondary mt-3 mb-0 small">Les sortides fora del municipi, els desplaçaments llargs o les activitats amb cost econòmic requeriran una autorització específica.</div>
 </div>
 </div></div>
 </section>
 <section class="accordion-item section-card mb-3">
-<h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-target="#publicacions" data-bs-toggle="collapse" type="button">3. Imatges, veu, dades i obres</button></h2>
+<h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-target="#publicacions" data-bs-toggle="collapse" type="button">3. Publicacions: protecció de dades i propietat intel·lectual</button></h2>
 <div class="accordion-collapse collapse" data-bs-parent="#formAccordion" id="publicacions"><div class="accordion-body">
-<div class="legal-box p-3 rounded mb-3"><strong>Consentiment.</strong> La publicació d'imatges, veu i material elaborat és opcional, no condiciona l'activitat lectiva i es pot revocar sense efectes retroactius.</div>
-<h3 class="h5 section-title">Consentiment per a la publicació d'imatges, veu, dades de caràcter personal i material elaborat</h3>
+<p class="text-secondary">La publicació d’imatges/veu i del material elaborat és opcional i no condiciona l’activitat lectiva. El consentiment és revocable i sense efectes retroactius.</p>
+<div class="legal-box p-3 rounded mb-3">
+<p class="fw-semibold mb-2">Informació bàsica sobre protecció de dades personals</p>
+<p class="mb-1">Responsable: direcció del centre educatiu, de titularitat del Departament d’Educació i Formació Professional.</p>
+<p class="mb-1">Finalitat: la gestió de la difusió i conservació del material elaborat per l’alumnat, i l’ús de la imatge i veu en espais de comunicació digitals.</p>
+<p class="mb-1">Drets: es poden exercir els drets d’accés, rectificació, supressió, limitació del tractament, oposició i la resta de drets previstos per la normativa vigent davant la direcció del centre educatiu. També es pot presentar una reclamació davant l’Autoritat Catalana de Protecció de Dades.</p>
+<p class="mb-0">Podeu consultar informació addicional sobre aquest tractament al web del Departament (educacio.gencat.cat), a l’apartat Departament &gt; Protecció de dades &gt; Registre d’activitats de tractament &gt; Llista alfabètica &gt; Publicació d’imatges i veu en els espais de comunicació i difusió dels serveis educatius.</p>
+</div>
+<h3 class="h5 section-title">Ús d’imatges, publicació de dades de caràcter personal i material elaborat</h3>
 <p>Marqueu les opcions següents segons correspongui:</p>
 <div class="question mb-3">
-<h4 class="h6">Publicació d'imatges i/o de la veu en activitats del centre</h4>
-<div class="row g-3">
-<div class="col-md-8">Intranet amb accés restringit (Moodle, Google Workspace, etc.)</div><div class="col-md-4"><div class="d-flex gap-3"><div class="form-check"><input class="form-check-input" id="imatgeIntranetSi" name="imatge_intranet" type="radio" value="si"/><label class="form-check-label" for="imatgeIntranetSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="imatgeIntranetNo" name="imatge_intranet" type="radio" value="no"/><label class="form-check-label" for="imatgeIntranetNo">No</label></div></div></div>
-<div class="col-md-8">Internet amb accés obert (web o blogs del centre)</div><div class="col-md-4"><div class="d-flex gap-3"><div class="form-check"><input class="form-check-input" id="imatgeWebSi" name="imatge_web" type="radio" value="si"/><label class="form-check-label" for="imatgeWebSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="imatgeWebNo" name="imatge_web" type="radio" value="no"/><label class="form-check-label" for="imatgeWebNo">No</label></div></div></div>
-<div class="col-md-8">Plataformes no administrades pel centre</div><div class="col-md-4"><div class="d-flex gap-3"><div class="form-check"><input class="form-check-input" id="imatgeExternaSi" name="imatge_externa" type="radio" value="si"/><label class="form-check-label" for="imatgeExternaSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="imatgeExternaNo" name="imatge_externa" type="radio" value="no"/><label class="form-check-label" for="imatgeExternaNo">No</label></div></div></div>
-<div class="col-12 dependent-field is-hidden" id="externalPlatformsDetail"><label class="form-label" for="plataformesExternes">Plataformes o accés</label><input class="form-control" id="plataformesExternes" name="plataformes_externes" placeholder="YouTube, Instagram, altres..." disabled=""/></div>
+<h4 class="h6">Autoritzo, com a responsable legal de l’alumne/a:</h4>
+<p class="mb-3 required-question">1. La publicació de la imatge/veu de l’alumne/a en activitats del centre:</p>
+<div class="option-grid">
+<div class="option-row option-row-child"><div class="option-label">— Intranet amb accés restringit (plataformes del centre: Moodle/Àgora, Google Workspace, etc.):</div><div class="option-controls"><div class="form-check"><input class="form-check-input" id="imatgeIntranetSi" name="imatge_intranet" type="radio" value="si"/><label class="form-check-label" for="imatgeIntranetSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="imatgeIntranetNo" name="imatge_intranet" type="radio" value="no"/><label class="form-check-label" for="imatgeIntranetNo">No</label></div></div></div>
+<div class="option-row option-row-child"><div class="option-label">— Internet amb accés obert (web, blogs del centre):</div><div class="option-controls"><div class="form-check"><input class="form-check-input" id="imatgeWebSi" name="imatge_web" type="radio" value="si"/><label class="form-check-label" for="imatgeWebSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="imatgeWebNo" name="imatge_web" type="radio" value="no"/><label class="form-check-label" for="imatgeWebNo">No</label></div></div></div>
+<div class="option-row option-row-child"><div class="option-label">— Plataformes no administrades pel centre (YouTube, Instagram, altres especifiqueu-les):</div><div class="option-controls"><div class="form-check"><input class="form-check-input" id="imatgeExternaSi" name="imatge_externa" type="radio" value="si"/><label class="form-check-label" for="imatgeExternaSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="imatgeExternaNo" name="imatge_externa" type="radio" value="no"/><label class="form-check-label" for="imatgeExternaNo">No</label></div></div></div>
+<div class="col-12 dependent-field is-hidden" id="externalPlatformsDetail"><label class="form-label" for="plataformesExternes">Plataformes/Accés:</label><input class="form-control" id="plataformesExternes" name="plataformes_externes" placeholder="YouTube, Instagram, altres..." disabled=""/></div>
+<div class="option-row option-row-root"><div class="option-label">2. La publicació de les inicials de l’alumne/a i del centre:</div><div class="option-controls"><div class="form-check"><input class="form-check-input" id="publicacioInicialsSi" name="publicacio_inicials" type="radio" value="si"/><label class="form-check-label" for="publicacioInicialsSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="publicacioInicialsNo" name="publicacio_inicials" type="radio" value="no"/><label class="form-check-label" for="publicacioInicialsNo">No</label></div></div></div>
 </div>
 </div>
 
 <div class="question">
-<h4 class="h6">Publicació i preservació d'obres i creacions</h4>
-<div class="row g-3">
-<div class="col-md-8">Publicació del material elaborat en plataformes d'accés obert</div><div class="col-md-4"><div class="d-flex gap-3"><div class="form-check"><input class="form-check-input" id="obraObertaSi" name="obra_oberta" type="radio" value="si"/><label class="form-check-label" for="obraObertaSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="obraObertaNo" name="obra_oberta" type="radio" value="no"/><label class="form-check-label" for="obraObertaNo">No</label></div></div></div>
-<div class="col-md-8">Publicació en espais de comunicació del centre</div><div class="col-md-4"><div class="d-flex gap-3"><div class="form-check"><input class="form-check-input" id="obraCentreSi" name="obra_centre" type="radio" value="si"/><label class="form-check-label" for="obraCentreSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="obraCentreNo" name="obra_centre" type="radio" value="no"/><label class="form-check-label" for="obraCentreNo">No</label></div></div></div>
-<div class="col-md-8">Preservació a la biblioteca física o digital del centre</div><div class="col-md-4"><div class="d-flex gap-3"><div class="form-check"><input class="form-check-input" id="obraBibliotecaSi" name="obra_biblioteca" type="radio" value="si"/><label class="form-check-label" for="obraBibliotecaSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="obraBibliotecaNo" name="obra_biblioteca" type="radio" value="no"/><label class="form-check-label" for="obraBibliotecaNo">No</label></div></div></div>
-<div class="col-md-8">Preservació al repositori del Departament</div><div class="col-md-4"><div class="d-flex gap-3"><div class="form-check"><input class="form-check-input" id="obraRepositoriSi" name="obra_repositori" type="radio" value="si"/><label class="form-check-label" for="obraRepositoriSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="obraRepositoriNo" name="obra_repositori" type="radio" value="no"/><label class="form-check-label" for="obraRepositoriNo">No</label></div></div></div>
+<h4 class="h6">Publicació i preservació d’obres i creacions</h4>
+<p class="mb-3">Autoritzo, com a responsable legal de l’alumne/a:</p>
+<div class="option-grid">
+<div class="option-row option-row-child"><div class="option-label">1. La publicació del material que elabori l’alumne/a (treball de síntesi, projecte de recerca, obra final, etc.) a plataformes d’accés obert:</div><div class="option-controls"><div class="form-check"><input class="form-check-input" id="obraObertaSi" name="obra_oberta" type="radio" value="si"/><label class="form-check-label" for="obraObertaSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="obraObertaNo" name="obra_oberta" type="radio" value="no"/><label class="form-check-label" for="obraObertaNo">No</label></div></div></div>
+<div class="option-row option-row-child"><div class="option-label">2. La publicació de l’obra que elabori l’alumne/a en espais de comunicació del centre (web, blogs, revistes, xarxes gestionades pel centre):</div><div class="option-controls"><div class="form-check"><input class="form-check-input" id="obraCentreSi" name="obra_centre" type="radio" value="si"/><label class="form-check-label" for="obraCentreSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="obraCentreNo" name="obra_centre" type="radio" value="no"/><label class="form-check-label" for="obraCentreNo">No</label></div></div></div>
+<div class="option-heading option-heading-child">3. La preservació/desament de l’obra:</div>
+<div class="option-row option-row-grandchild"><div class="option-label">— A la biblioteca física o digital del centre:</div><div class="option-controls"><div class="form-check"><input class="form-check-input" id="obraBibliotecaSi" name="obra_biblioteca" type="radio" value="si"/><label class="form-check-label" for="obraBibliotecaSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="obraBibliotecaNo" name="obra_biblioteca" type="radio" value="no"/><label class="form-check-label" for="obraBibliotecaNo">No</label></div></div></div>
+<div class="option-row option-row-grandchild"><div class="option-label">— Al repositori del Departament:</div><div class="option-controls"><div class="form-check"><input class="form-check-input" id="obraRepositoriSi" name="obra_repositori" type="radio" value="si"/><label class="form-check-label" for="obraRepositoriSi">Sí</label></div><div class="form-check"><input class="form-check-input" id="obraRepositoriNo" name="obra_repositori" type="radio" value="no"/><label class="form-check-label" for="obraRepositoriNo">No</label></div></div></div>
+</div>
+<div class="legal-box p-3 rounded mt-3 small">
+<p class="fw-semibold mb-2">Actuacions necessàries per a la publicació i el desament (si escau):</p>
+<p class="mb-1">La publicació i el desament d’obres originals es regeixen pel Reial decret legislatiu 1/1996 (Llei de propietat intel·lectual). El consentiment és revocable i la revocació no té efectes retroactius.</p>
+<p class="mb-0">Les autoritzacions de consentiment (imatges/obres) són vàlides fins a la seva modificació o revocació. Les comunicacions i autoritzacions organitzatives s’apliquen durant l’escolarització, amb possibilitat de modificar-les si canvien les circumstàncies familiars.</p>
 </div>
 </div>
 </div></div>
 </section>
 <section class="accordion-item section-card mb-3">
-<h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-target="#plataformes" data-bs-toggle="collapse" type="button">4. Plataformes i eines digitals</button></h2>
+<h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-target="#plataformes" data-bs-toggle="collapse" type="button">4. Autoritzacions per utilitzar plataformes i eines digitals</button></h2>
 <div class="accordion-collapse collapse" data-bs-parent="#formAccordion" id="plataformes"><div class="accordion-body">
-<div class="legal-box p-3 rounded mb-3"><strong>Informació.</strong> El centre pot utilitzar Google Workspace for Education, Microsoft 365 Educació, Moodle i altres eines autoritzades amb finalitats educatives, docents i organitzatives, aplicant mesures de control, seguretat i minimització de dades.</div>
-<div class="form-check question"><input class="form-check-input" id="declaracioPlataformes" name="declaracio_plataformes" type="checkbox" value="acceptada"/><label class="form-check-label" for="declaracioPlataformes">Declaro que he rebut informació sobre l'ús de plataformes i eines digitals, les seves finalitats pedagògiques i educatives i el tractament de dades personals associat.</label></div>
+<div class="legal-box p-3 rounded mb-3">
+<p class="fw-semibold mb-2">Informació bàsica sobre protecció de dades personals</p>
+<p class="mb-1">Responsable: direcció del centre educatiu, de titularitat del Departament d’Educació i Formació Professional.</p>
+<p class="mb-1">Finalitat: gestionar l’activitat educativa mitjançant les plataformes digitals que el Departament habilita per a l’alumnat. Entre d’altres, crear i gestionar comptes d’usuari per accedir a les eines de cada plataforma amb l’objectiu de facilitar l’aprenentatge digital i l’adquisició de competències digitals, seguint el currículum educatiu.</p>
+<p class="mb-1">Drets: es poden exercir els drets d’accés, rectificació, supressió, limitació del tractament, oposició i la resta de drets previstos per la normativa vigent davant la direcció del centre educatiu. També es pot presentar una reclamació davant l’Autoritat Catalana de Protecció de Dades.</p>
+<p class="mb-0">Podeu consultar informació addicional sobre aquest tractament al web del Departament (educacio.gencat.cat), a l’apartat Departament &gt; Protecció de dades &gt; Registre d’activitats de tractament &gt; Llista alfabètica &gt;Plataformes i eines digitals educatives dels centres educatius</p>
+</div>
+<div class="legal-document mb-4">
+<h3 class="h5 section-title">Comunicació sobre l’ús de plataformes i eines digitals en l’àmbit educatiu</h3>
+<h4 class="h6 mt-3">1. Informació sobre les plataformes digitals</h4>
+<p>El centre educatiu utilitza plataformes i eines digitals habilitades pel Departament d’Educació i Formació Professional, o autoritzades institucionalment per a finalitats educatives i professionals, per facilitar el desenvolupament de l’activitat educativa, docent i organitzativa del centre i contribuir a l’assoliment de les competències digitals incloses en el currículum educatiu vigent, tant en l’escolarització obligatòria com en la postobligatòria, d’acord amb la normativa vigent.</p>
+<p>Les eines i plataformes que es poden utilitzar són:</p>
+<ul><li>Google Workspace for Education</li><li>Microsoft 365 Educació</li><li>Moodle</li><li>Altres eines i serveis digitals amb finalitats educatives autoritzats pel Departament d’Educació i Formació Professional o pel centre educatiu</li></ul>
+<p>Aquestes plataformes ofereixen entorns virtuals d’aprenentatge, eines de comunicació, treball col·laboratiu, videoconferència, emmagatzematge i gestió acadèmica que donen suport a les activitats docents, educatives i organitzatives del centre.</p>
+<p>L’ús d’aquestes eines comporta la creació i gestió de comptes corporatius del professorat dins dels entorns digitals educatius institucionals.</p>
+<p>Els serveis digitals associats tenen una finalitat estrictament educativa, docent, professional i organitzativa, i s’utilitzen en el marc de les funcions pròpies del sistema educatiu.</p>
+<h4 class="h6 mt-3">1.1. Finalitat i ús educatiu de les plataformes digitals</h4>
+<p>Les plataformes i eines digitals s’utilitzen per:</p>
+<ul><li>desenvolupar activitats educatives i acadèmiques;</li><li>facilitar la comunicació i el treball col·laboratiu entre els membres de la comunitat educativa;</li><li>gestionar activitats docents i organitzatives del centre;</li><li>elaborar, compartir i gestionar continguts i recursos educatius digitals;</li><li>participar en entorns virtuals d’aprenentatge, i</li><li>contribuir al desenvolupament de les competències digitals de l’alumnat i del professorat.</li></ul>
+<h4 class="h6 mt-3">1.2. Mesures de control i seguretat</h4>
+<p>El centre educatiu i el Departament d’Educació i Formació Professional adopten mesures tècniques i organitzatives per garantir un ús segur, adequat i proporcional de les plataformes i eines digitals utilitzades en l’àmbit educatiu. Les principals són:</p>
+<ul><li>Els comptes del professorat es gestionen dins d’un entorn institucional controlat i configurat amb mesures de seguretat adequades a les finalitats educatives i professionals del servei.</li><li>Amb caràcter general, els serveis digitals s’utilitzen en entorns restringits a la comunitat educativa i amb controls d’accés que limiten la comunicació i la compartició de continguts a les persones autoritzades.</li><li>El Departament i els centres educatius adopten igualment mesures de minimització de dades, una configuració segura dels serveis digitals i la limitació de funcionalitats no necessàries per a l’activitat educativa, amb la finalitat de protegir la privacitat dels usuaris i garantir un ús adequat de les tecnologies digitals.</li><li>Els serveis o productes addicionals que no siguin necessaris per al desenvolupament ordinari de l’activitat educativa es poden mantenir desactivats o subjectes a condicions específiques d’ús.</li></ul>
+<h4 class="h6 mt-3">2. Compromisos i responsabilitats</h4>
+<p>Els principals compromisos i responsabilitats associats a l’ús de les plataformes i eines digitals són:</p>
+<ul><li>Les plataformes i eines digitals de l’àmbit educatiu s’utilitzen exclusivament per a finalitats educatives, pedagògiques, orientadores i professionals vinculades a l’activitat docent i organitzativa del centre educatiu.</li><li>Els serveis, funcionalitats o productes addicionals vinculats a aquestes plataformes digitals que no siguin necessaris per a l’activitat educativa habitual es poden mantenir desactivats o subjectes a condicions específiques d’ús establertes pel Departament o pel centre educatiu. En aquests casos, no s’hi poden utilitzar dades personals de l’alumnat ni permetre que l’alumnat hi accedeixi directament amb el seu compte o interactuï amb continguts no verificats.</li><li>El professorat es compromet a utilitzar els comptes i les eines digitals de manera diligent i confidencial, d’acord amb la normativa vigent, i a adoptar les mesures necessàries per protegir les dades personals i evitar accessos no autoritzats, usos indeguts o comunicacions no autoritzades de la informació.</li><li>Al web del centre educatiu es pot consultar informació addicional sobre les normes d’ús, seguretat i funcionament de les eines digitals utilitzades en el desenvolupament de l’activitat educativa.</li><li>L’usuari és responsable de qualsevol ús de plataformes, aplicacions o serveis digitals diferents dels habilitats o autoritzats pel Departament d’Educació i Formació Professional o pel centre educatiu, així com de qualsevol ús diferent del previst en aquest document, i ha de garantir en tot moment el compliment de la normativa vigent en matèria de protecció de dades, seguretat de la informació i ús adequat de les tecnologies digitals.</li></ul>
+</div>
+<div class="form-check question"><input class="form-check-input" id="declaracioPlataformes" name="declaracio_plataformes" type="checkbox" value="acceptada"/><label class="form-check-label" for="declaracioPlataformes"><span class="fw-semibold d-block">Declaro</span>Que he rebut informació sobre l’ús de les plataformes i eines digitals en l’àmbit educatiu, sobre les seves finalitats pedagògiques i educatives, així com la informació sobre el tractament de dades personals associat al seu ús.</label></div>
 </div></div>
 </section>
 <section class="accordion-item section-card mb-3">
-<h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-target="#salut" data-bs-toggle="collapse" type="button">5. Salut i medicació</button></h2>
+<h2 class="accordion-header"><button class="accordion-button collapsed" data-bs-target="#salut" data-bs-toggle="collapse" type="button">5. Autoritzacions de salut</button></h2>
 <div class="accordion-collapse collapse" data-bs-parent="#formAccordion" id="salut"><div class="accordion-body">
-<div class="legal-box p-3 rounded mb-3"><strong>Protecció de dades de salut.</strong> Les dades es tracten per atendre les necessitats de salut de l'alumnat al centre educatiu.</div>
+<div class="legal-box p-3 rounded mb-3">
+<p class="fw-semibold mb-2">Informació bàsica sobre protecció de dades personals</p>
+<p class="mb-1">Responsable: direcció del centre educatiu de titularitat del Departament.</p>
+<p class="mb-1">Finalitat: l’atenció de les necessitats de salut de l’alumnat al centre educatiu.</p>
+<p class="mb-1">Drets: es poden exercir els drets d’accés, rectificació, supressió, limitació del tractament, oposició i la resta de drets previstos per la normativa vigent davant la direcció del centre educatiu. També es pot presentar una reclamació davant l’Autoritat Catalana de Protecció de Dades.</p>
+<p class="mb-0">Podeu consultar informació addicional sobre aquest tractament al web del Departament (educacio.gencat.cat), a l’apartat Departament &gt; Protecció de dades &gt; Registre d’activitats de tractament &gt; Llista alfabètica &gt; Alumnes de centres educatius de titularitat del Departament d’Educació i Formació Professional.</p>
+</div>
 <h3 class="h5 section-title">Fitxa de salut</h3>
 <div class="row g-3 mb-3">
 <div class="col-md-8"><label class="form-label" for="emergenciaNom">Nom i cognoms del contacte d'emergència</label><input class="form-control" id="emergenciaNom" name="emergencia_nom"/></div>
@@ -229,12 +289,13 @@
 <p>Autoritzo el centre educatiu a comunicar, si es considera necessari, qualsevol situació relacionada amb la salut de l'alumne/a al contacte d'emergència indicat.</p>
 <div class="d-flex gap-4 flex-wrap"><div class="form-check"><input class="form-check-input" id="comSalutSi" name="comunicacio_salut" type="radio" value="si"/><label class="form-check-label" for="comSalutSi">Sí, ho autoritzo</label></div><div class="form-check"><input class="form-check-input" id="comSalutNo" name="comunicacio_salut" type="radio" value="no"/><label class="form-check-label" for="comSalutNo">No, no ho autoritzo</label></div></div>
 </div>
-<div class="row g-3 mb-3">
-<div class="col-12"><label class="form-label" for="problemesSalut">Problemes de salut diagnosticats, tipus de contacte i reaccions</label><textarea class="form-control" id="problemesSalut" name="problemes_salut" rows="4"></textarea></div>
+<div class="row g-3 mb-3 optional-question">
+<div class="col-12"><label class="form-label" for="problemesSalut">L’alumne/a té diagnosticat/s el/s problema/es de salut següent/s (indiqueu si es produeix per contacte, ingestió o inhalació, i les reaccions que pot presentar):</label><textarea class="form-control" id="problemesSalut" name="problemes_salut" rows="4"></textarea></div>
 <div class="col-12"><label class="form-label" for="altresSalut">Altres aspectes de salut per destacar</label><textarea class="form-control" id="altresSalut" name="altres_salut" rows="3"></textarea></div>
 </div>
-<div class="question mb-3"><h3 class="h6">Medicació en horari lectiu</h3><div class="row g-3"><div class="col-md-6"><label class="form-label" for="medicacio">Medicació</label><input class="form-control" id="medicacio" name="medicacio"/></div><div class="col-md-4"><label class="form-label" for="posologia">Posologia</label><input class="form-control" id="posologia" name="posologia"/></div><div class="col-md-2"><label class="form-label" for="dosi">Dosi</label><input class="form-control" id="dosi" name="dosi"/></div></div><div class="d-flex gap-4 flex-wrap mt-3"><div class="form-check"><input class="form-check-input" id="adminMedSi" name="administracio_medicacio" type="radio" value="si"/><label class="form-check-label" for="adminMedSi">Sí, autoritzo l'administració</label></div><div class="form-check"><input class="form-check-input" id="adminMedNo" name="administracio_medicacio" type="radio" value="no"/><label class="form-check-label" for="adminMedNo">No, no ho autoritzo</label></div></div><div class="alert alert-warning small mt-3 mb-0">L'autorització només tindrà efectes si s'aporta l'informe mèdic i el pla de medicació corresponents.</div></div>
-<div class="question" id="paracetamolBlock"><h3 class="h6">Administració de paracetamol</h3><p>En cas de febre superior a 38 °C mentre s'espera l'arribada d'un familiar, incloses les sortides escolars i colònies considerades activitats lectives.</p><div class="d-flex gap-4 flex-wrap"><div class="form-check"><input class="form-check-input" id="paracetamolSi" name="paracetamol" type="radio" value="si"/><label class="form-check-label" for="paracetamolSi">Sí, ho autoritzo</label></div><div class="form-check"><input class="form-check-input" id="paracetamolNo" name="paracetamol" type="radio" value="no"/><label class="form-check-label" for="paracetamolNo">No, no ho autoritzo</label></div></div></div>
+<div class="question mb-3 optional-question"><h3 class="h6">Declaro que és imprescindible que l’alumne/a prengui medicació en horari lectiu, com consta en el pla de medicació adjunt (el qual ha d’incloure del nom de l’alumne/a, el nom del medicament i la pauta d’administració).</h3><div class="row g-3"><div class="col-md-6"><label class="form-label" for="medicacio">Medicació</label><input class="form-control" id="medicacio" name="medicacio"/></div><div class="col-md-4"><label class="form-label" for="posologia">Posologia</label><input class="form-control" id="posologia" name="posologia"/></div><div class="col-md-2"><label class="form-label" for="dosi">Dosi</label><input class="form-control" id="dosi" name="dosi"/></div></div><div class="d-flex gap-4 flex-wrap mt-3"><div class="form-check"><input class="form-check-input" id="adminMedSi" name="administracio_medicacio" type="radio" value="si"/><label class="form-check-label" for="adminMedSi">Sí, autoritzo la direcció del centre educatiu i el personal del centre perquè administri a l’alumne/a la medicació prescrita, d’acord amb les pautes que constin en el pla de medicació esmentat anteriorment.<span class="d-block small text-secondary mt-1">Aquesta autorització no tindrà efectes pràctics si no es presenta amb l’informe mèdic
+corresponent.</span></label></div><div class="form-check"><input class="form-check-input" id="adminMedNo" name="administracio_medicacio" type="radio" value="no"/><label class="form-check-label" for="adminMedNo">No, no ho autoritzo</label></div></div></div>
+<div class="question" id="paracetamolBlock"><h3 class="h6">Administració de paracetamol</h3><p>Autoritzo que el centre educatiu pugui administrar paracetamol a l’alumne/a en cas que presenti febre superior a 38 °C de temperatura corporal mentre s’espera l’arribada d’algun familiar que el pugui portar a casa (també en sortides escolars i colònies programades considerades activitats lectives).</p><div class="d-flex gap-4 flex-wrap"><div class="form-check"><input class="form-check-input" id="paracetamolSi" name="paracetamol" type="radio" value="si"/><label class="form-check-label" for="paracetamolSi">Sí, ho autoritzo</label></div><div class="form-check"><input class="form-check-input" id="paracetamolNo" name="paracetamol" type="radio" value="no"/><label class="form-check-label" for="paracetamolNo">No, no ho autoritzo</label></div></div></div>
 </div></div>
 </section>
 <section class="accordion-item section-card mb-3">

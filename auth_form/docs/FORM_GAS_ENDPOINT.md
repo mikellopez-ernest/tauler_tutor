@@ -140,11 +140,28 @@ Each model controls:
 - Whether student signature status is required.
 - Whether ESO exit authorization is shown.
 - Whether recess exit authorization is shown.
+- Whether unforeseen schedule-change entry/exit authorization is shown.
 - Whether academic communication authorization is shown.
 - Whether municipal trips authorization is shown.
 - Whether health communication consent is shown.
 - Whether paracetamol authorization is shown.
 - Whether TIS is included in the student document label.
+
+The field `sortida_imprevistos` stores the authorization for entry/exit in unforeseen situations. It is shown only for these models:
+
+- `major18`
+- `batx_menor18`
+- `post_menor18`
+
+It appears immediately after the recess-exit question in the form structure. The visible text is:
+
+```text
+Entrada o sortida del centre en situacions imprevistes
+
+Autoritzo l'entrada o sortida del centre educatiu en aquelles franges horàries en què, per absència imprevista del professorat o d'altres eventualitats, no es pugui garantir l’activitat lectiva prevista.
+Sí, ho autoritzo
+No, no ho autoritzo
+```
 
 
 
@@ -169,6 +186,7 @@ Mode-specific exceptions:
 | `readonly` | Skip Step 1 and render the existing form filled and disabled. |
 | `readonly_print` | Skip Step 1 and render the existing form filled, disabled, expanded, and printable. |
 | `student_confirm` | Skip Step 1 and render the existing form filled and disabled with only the student confirmation action. |
+| `new_student_adult` / `major18` | Skip Step 1 because the adult student is the respondent and signs their own form. |
 
 ### Step 1: Respondent Identification
 
@@ -190,6 +208,8 @@ Prefill rules:
 - Parent/contact flows should prefill `responent_nom_sencer` from the verified Dinantia contact name.
 - Parent/contact flows should prefill `responent_telefon` from the verified Dinantia contact phone.
 - Step 2 `responsable_nom` should be prefilled from the same verified contact full name when the form model requires responsible-person data.
+- Adult-student flows (`form_mode = new_student_adult` or model `major18`) must not show Step 1. The app may store the student full name as the respondent context, but it must not ask for a separate respondent name or phone.
+- Adult-student flows (`major18`) must not show `Nom i cognoms del pare, mare o tutor/a legal` or `DNI/NIE/Passaport` for a responsible adult, because no parent/legal-responsible section applies.
 
 Validation rules:
 
@@ -309,6 +329,7 @@ The endpoint should accept canonical form field names in POST data:
 | `studyType` | Initial setup study type. |
 | `isAdult` | Initial setup adult status. |
 | `is14Plus` | Initial setup 14-plus status, optional. |
+| `tipus_alumne` | Resolved authorization model when the caller already knows it. |
 | `alumne_nom` | Student full name. |
 | `alumne_document` | Student identity document. |
 | `id_student` | Internal student identifier from the school database. |
@@ -342,6 +363,8 @@ Supported request formats:
 If both are present, JSON body values should take precedence over `e.parameter` values.
 
 Unknown POST fields should be ignored by the prefill layer unless later specs define them.
+
+If `form_mode = new_student_adult`, the prefill layer must derive `tipus_alumne = major18`, `isAdult = si`, and `is14Plus = si` even when those values are not explicitly sent. This prevents the adult-student form from temporarily rendering parent/legal-responsible controls.
 
 ### POST Flow Mode Fields
 
@@ -741,14 +764,43 @@ Rules:
 
 ## Validation
 
-The endpoint currently relies on browser-side HTML validation and custom checks in `App.html`.
+The endpoint must combine browser-side HTML validation with custom client-side validation in `App.html`.
 
 Validation rules:
 
 - A model must be selected through the initial setup.
-- Required visible fields must be completed.
+- Every visible, enabled question/control in the active form model is mandatory.
+- Every visible question/control must show a red `*` marker so users know it is mandatory.
+- Health descriptive fields are optional and must not show a mandatory marker:
+  - `problemes_salut`
+  - `altres_salut`
+- The medication declaration block is optional and must not show mandatory markers or block validation:
+  - `medicacio`
+  - `posologia`
+  - `dosi`
+  - `administracio_medicacio`
+- Conditional fields are mandatory only when their parent condition makes them visible and enabled.
+- Hidden model-specific fields must be disabled and must not block validation.
+- Hidden dependent fields must be cleared or ignored and must not block validation.
+- Phone fields must be validated before submit using the same client-side phone rules used in the respondent-identification step.
+- Email fields must be validated before submit using browser email validation.
+- On failed validation, the user must see a clear Catalan message explaining what is missing or invalid.
+- On failed validation, a summary must appear near the top of the form listing the affected sections/questions.
+- On failed validation, the first accordion section containing an invalid field must be opened automatically.
 - Hidden model-specific fields must be disabled so they do not block validation.
 - On failed validation, focus the first invalid field when available.
+
+### Current Layout Corrections
+
+Section 3 publication options must be laid out as aligned option rows:
+
+- Each option label must align with its own `Sí` / `No` radio buttons.
+- The three image/voice publication options must be indented consistently under question `1. La publicació de la imatge/veu de l’alumne/a en activitats del centre:`.
+- Question `2. La publicació de les inicials de l’alumne/a i del centre` must align with question `1. La publicació de la imatge/veu de l’alumne/a en activitats del centre`.
+- The dependent `Plataformes/Accés` input must remain visually indented under `Plataformes no administrades pel centre`.
+- The text `altres —especifiqueu-les—` must be changed to `altres especifiqueu-les`, removing the dash signs around `especifiqueu-les`.
+- In question `3. La preservació/desament de l’obra`, the `Sí` / `No` answers for the library option must align with `A la biblioteca física o digital del centre`, not with the parent question title.
+- Questions `1`, `2`, and `3` in `Publicació i preservació d’obres i creacions` must share the same visual indentation level, and the two child rows under question `3` must be indented one level further.
 
 ## Print Behavior
 

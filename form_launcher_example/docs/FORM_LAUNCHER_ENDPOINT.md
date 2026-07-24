@@ -53,17 +53,20 @@ The submitted email is searched in Dinantia using the Dinantia API.
 
 If the email is not found, show the not-registered error page already specified for parent users.
 
-If the email is found, the launcher must identify the students/children associated with that parent/contact account. Parent-child associations from Dinantia are considered reliable and do not need to be cross-checked with `Dades alumnes` unless a lookup fails.
+If the email is found, the launcher must identify the students/children associated with that parent/contact account. The preferred path is `Dinantia` -> `contacts_cache`, joined to `Dinantia` -> `students_cache` for age/model data. Live Dinantia parent-child lookup is only a fallback when the cache cannot answer.
+
+Parent-child associations from Dinantia and the generated cache are considered reliable and do not need to be cross-checked with `Dades alumnes` unless a lookup fails.
 
 ### Parent With Multiple Children
 
-If the parent has more than one associated son/daughter under 18, the first authenticated step must let them choose which student they want to access the form for.
+If the parent has more than one associated son/daughter under 18, the launcher must let them choose which student they want to access the form for before sending the verification email.
 
 Rules:
 
 - The parent must not be asked to type the student name manually if the system already knows the associated students.
 - Show only students associated with the verified parent/contact account and younger than 18.
-- After selection, continue using the selected student context.
+- After selection, re-check the email and selected student against Dinantia parent-child relations before creating any token.
+- After selection, send the verification email using the selected student context.
 - The secure token must be tied to both the verified parent/contact and the selected student.
 
 If the parent has exactly one associated under-18 student, the selection step may be skipped.

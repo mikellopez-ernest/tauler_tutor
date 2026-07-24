@@ -35,7 +35,7 @@ function readAuthorizationRows_() {
   var sheet = openTableSheet_(registry, TABLES.authorizations, SHEETS.authorizations);
   var required = [
     'id_student','resposta_id','data_hora_enviament','data_signatura','idioma_formulari','codi_document','tipus_alumne',
-    'sortida_sola','sortida_esbarjo','sortides_municipi','comunicacio_academica','comunicacio_salut','declaracio_plataformes',
+    'sortida_sola','sortida_esbarjo','sortida_imprevistos','sortides_municipi','comunicacio_academica','comunicacio_salut','declaracio_plataformes',
     'imatge_intranet','imatge_web','imatge_externa','publicacio_inicials','obra_oberta','obra_centre','obra_biblioteca','obra_repositori',
     'administracio_medicacio','paracetamol','carta_compromis_acceptada','consentiment_mobil','problemes_salut','altres_salut','signatura_responsable','signatura_alumne',
     'invalidated','invalidated_at','invalidated_by_email','invalidated_reason'

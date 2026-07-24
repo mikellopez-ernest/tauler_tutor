@@ -21,11 +21,11 @@ const SUCCESS_REDIRECT_URL = 'https://agora.xtec.cat/sesernestlluch-cunit/';
 let currentFormMode = '';
 let personCounter = 0;
 const typeConfig = {
-  eso_menor14: {code:'A1746-V01-26', subtitle:"Escolarització de l'alumnat menor de catorze anys", responsible:true, studentSignature:false, esoExit:true, recess:false, academic:false, municipal:true, healthConsent:false, paracetamol:true, tis:true},
-  eso_14_17: {code:'A1747-V01-26', subtitle:"Escolarització de l'alumnat de catorze a disset anys", responsible:true, studentSignature:true, esoExit:true, recess:false, academic:false, municipal:true, healthConsent:false, paracetamol:true, tis:false},
-  batx_menor18: {code:'A1749-V01-26', subtitle:"Escolarització de l'alumnat de batxillerat menor de divuit anys", responsible:true, studentSignature:true, esoExit:false, recess:true, academic:false, municipal:true, healthConsent:true, paracetamol:false, tis:false},
-  post_menor18: {code:'A1748-V01-26', subtitle:"Escolarització de l'alumnat d'ensenyaments postobligatoris menor de divuit anys", responsible:true, studentSignature:true, esoExit:false, recess:true, academic:false, municipal:true, healthConsent:true, paracetamol:false, tis:false},
-  major18: {code:'A1750-V01-26', subtitle:"Escolarització de l'alumnat major de divuit anys", responsible:false, studentSignature:true, esoExit:false, recess:false, academic:true, municipal:false, healthConsent:true, paracetamol:false, tis:false}
+  eso_menor14: {code:'A1746-V01-26', subtitle:"Escolarització de l'alumnat menor de catorze anys", responsible:true, studentSignature:false, esoExit:true, recess:false, unforeseenExit:false, academic:false, municipal:true, healthConsent:false, paracetamol:true, tis:true},
+  eso_14_17: {code:'A1747-V01-26', subtitle:"Escolarització de l'alumnat de catorze a disset anys", responsible:true, studentSignature:true, esoExit:true, recess:false, unforeseenExit:false, academic:false, municipal:true, healthConsent:false, paracetamol:true, tis:false},
+  batx_menor18: {code:'A1749-V01-26', subtitle:"Escolarització de l'alumnat de batxillerat menor de divuit anys", responsible:true, studentSignature:true, esoExit:false, recess:true, unforeseenExit:true, academic:false, municipal:true, healthConsent:true, paracetamol:false, tis:false},
+  post_menor18: {code:'A1748-V01-26', subtitle:"Escolarització de l'alumnat d'ensenyaments postobligatoris menor de divuit anys", responsible:true, studentSignature:true, esoExit:false, recess:true, unforeseenExit:true, academic:false, municipal:true, healthConsent:true, paracetamol:false, tis:false},
+  major18: {code:'A1750-V01-26', subtitle:"Escolarització de l'alumnat major de divuit anys", responsible:false, studentSignature:true, esoExit:false, recess:false, unforeseenExit:true, academic:true, municipal:false, healthConsent:true, paracetamol:false, tis:false}
 };
 
 const modelLabels = {
@@ -152,6 +152,7 @@ function applyType() {
   document.getElementById('responsableNom').required=cfg.responsible;
   setBlock('esoExitBlock',cfg.esoExit);
   setBlock('recessExitBlock',cfg.recess);
+  setBlock('unforeseenExitBlock',cfg.unforeseenExit);
   setBlock('academicCommunicationBlock',cfg.academic);
   setAcademicContactVisible(cfg.academic && document.getElementById('comAcadSi').checked);
   setBlock('municipalTripsBlock',cfg.municipal);
@@ -191,6 +192,31 @@ function loadResolvedInitialData(payload) {
 }
 
 function formToObject(){ updateSignatureFields(); const out={}; for(const [k,v] of new FormData(form).entries()) out[k]=v; out.curs_inici=document.getElementById('cursInici').value; out.curs_fi=document.getElementById('cursFi').value; out.idioma_formulari=I18n.currentLanguage||'ca'; out.form_mode=currentFormMode||document.getElementById('formMode').value||''; out.isAdult=document.getElementById('isAdult').value; out.is14Plus=document.getElementById('is14Plus').value; if(out.verified_actor_type==='student'&&out.isAdult==='si') out.signatura_alumne='true'; return out; }
+function forceStudentModel(model) {
+  if (!model || !typeConfig[model]) return;
+  document.querySelectorAll('[name="tipus_alumne"]').forEach(r => r.checked = r.value === model);
+  setSetupFromModel(model);
+  applyType();
+}
+
+function isAdultStudentSubmission(data) {
+  const payload = data || {};
+  const mode = String(payload.form_mode || payload.mode || currentFormMode || document.getElementById('formMode').value || '').trim();
+  const model = String(payload.tipus_alumne || form.querySelector('[name="tipus_alumne"]:checked')?.value || '').trim();
+  const actor = String(payload.verified_actor_type || document.getElementById('verifiedActorType').value || '').trim();
+  const adult = String(payload.isAdult || document.getElementById('isAdult').value || '').trim();
+  return mode === 'new_student_adult' || model === 'major18' || (actor === 'student' && adult === 'si');
+}
+
+function syncAdultStudentRespondent(data) {
+  if (!isAdultStudentSubmission(data)) return;
+  forceStudentModel('major18');
+  const studentName = document.getElementById('alumneNom').value.trim();
+  if (studentName && !document.getElementById('hiddenRespondentName').value.trim()) {
+    document.getElementById('hiddenRespondentName').value = studentName;
+  }
+}
+
 function normalizeStoredChoice(value) {
   if (value === true) return 'si';
   if (value === false) return 'no';
@@ -242,6 +268,7 @@ function fillForm(data){
   setAcademicContactVisible(document.getElementById('comAcadSi').checked);
   setExternalPlatformsVisible(document.getElementById('imatgeExternaSi').checked);
   updateStudentBanner();
+  syncAdultStudentRespondent(data);
 }
 
 function updateStudentBanner() {
@@ -253,7 +280,160 @@ function updateStudentBanner() {
 document.getElementById('saveLocal')?.addEventListener('click',()=>{localStorage.setItem('autoritzacionsForm5Models',JSON.stringify(formToObject()));alert('Formulari desat en aquest navegador.');});
 document.getElementById('loadLocal')?.addEventListener('click',()=>{const raw=localStorage.getItem('autoritzacionsForm5Models');if(!raw)return alert('No hi ha cap còpia desada.');fillForm(JSON.parse(raw));});
 document.getElementById('downloadJson')?.addEventListener('click',()=>{const blob=new Blob([JSON.stringify(formToObject(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`autoritzacions_${document.getElementById('alumneNom').value.trim().replace(/\s+/g,'_')||'formulari'}.json`;a.click();URL.revokeObjectURL(a.href);});
-form.addEventListener('submit',e=>{e.preventDefault();e.stopPropagation();form.classList.add('was-validated');if(!form.querySelector('[name="tipus_alumne"]:checked')){alert('Completa la configuració inicial per seleccionar el model aplicable.');return;}if(!form.checkValidity()){document.querySelector(':invalid')?.focus();return;}submitForm();});
+form.addEventListener('submit',e=>{
+  e.preventDefault();
+  e.stopPropagation();
+  form.classList.add('was-validated');
+  if(!validateInitialSetup()) return;
+  syncRequiredFields();
+  clearValidationUi();
+  if(!form.checkValidity()){
+    showValidationErrors();
+    return;
+  }
+  submitForm();
+});
+
+form.addEventListener('input', () => {
+  if (!form.classList.contains('was-validated')) return;
+  syncRequiredFields();
+  clearValidationUi();
+});
+
+form.addEventListener('change', () => {
+  if (!form.classList.contains('was-validated')) return;
+  syncRequiredFields();
+  clearValidationUi();
+});
+
+function validateInitialSetup() {
+  const selectedModel = form.querySelector('[name="tipus_alumne"]:checked');
+  if (document.getElementById('initialSetup').classList.contains('is-hidden') && selectedModel) return true;
+  const fields = ['studyType', 'isAdult'];
+  if (!document.getElementById('age14Wrapper').classList.contains('is-hidden')) fields.push('is14Plus');
+  const invalid = fields.map(id => document.getElementById(id)).filter(field => !field.value);
+  if (!invalid.length && selectedModel) return true;
+  showValidationSummary([{
+    section: I18n.t('Configuració inicial'),
+    label: I18n.t('Completa la configuració inicial per seleccionar el model aplicable.'),
+    field: invalid[0] || document.getElementById('studyType')
+  }]);
+  (invalid[0] || document.getElementById('studyType')).focus();
+  return false;
+}
+
+function isFormFieldRequired(field) {
+  if (!field || field.disabled) return false;
+  if (field.type === 'hidden' || field.type === 'button' || field.type === 'submit' || field.type === 'reset') return false;
+  if (field.closest('.is-hidden')) return false;
+  if (field.closest('.optional-question')) return false;
+  return Boolean(field.closest('#authorizationForm'));
+}
+
+function syncRequiredFields() {
+  const fields = [...form.querySelectorAll('input,select,textarea')];
+  fields.forEach(field => {
+    field.setCustomValidity('');
+    field.required = isFormFieldRequired(field);
+    if (!field.required) return;
+    const value = String(field.value || '').trim();
+    if (field.type === 'tel' && value && !isValidPhone(value)) {
+      field.setCustomValidity(I18n.t('Introdueix un telèfon vàlid.'));
+    }
+  });
+}
+
+function clearValidationUi() {
+  document.getElementById('validationSummary')?.classList.add('is-hidden');
+  document.querySelectorAll('.field-validation-message').forEach(node => node.remove());
+  document.querySelectorAll('.has-validation-error').forEach(node => node.classList.remove('has-validation-error'));
+}
+
+function showValidationErrors() {
+  const invalidFields = getInvalidFields();
+  const items = invalidFields.map(field => ({
+    section: getFieldSectionTitle(field),
+    label: getFieldLabel(field),
+    message: getFieldValidationMessage(field),
+    field
+  }));
+  items.forEach(item => showFieldValidationMessage(item));
+  showValidationSummary(items);
+  openAccordionForField(items[0]?.field);
+  setTimeout(() => {
+    const first = items[0]?.field;
+    if (first) first.focus({preventScroll:true});
+    items[0]?.field?.scrollIntoView({behavior:'smooth', block:'center'});
+  }, 160);
+}
+
+function getInvalidFields() {
+  const fields = [...form.querySelectorAll('input,select,textarea')].filter(field => !field.disabled && !field.checkValidity());
+  const seen = new Set();
+  return fields.filter(field => {
+    const key = field.type === 'radio' ? 'radio:' + field.name : field.name || field.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getFieldSectionTitle(field) {
+  return field.closest('.accordion-item')?.querySelector('.accordion-button')?.textContent.trim() || I18n.t('Formulari');
+}
+
+function getFieldLabel(field) {
+  const explicit = field.id ? document.querySelector(`label[for="${CSS.escape(field.id)}"]`) : null;
+  if (explicit) return explicit.textContent.trim();
+  if (field.type === 'radio') {
+    const groupLabel = field.closest('.question')?.querySelector('.form-label, h3, h4, p, .option-label');
+    if (groupLabel) return groupLabel.textContent.trim();
+  }
+  const parentLabel = field.closest('label');
+  if (parentLabel) return parentLabel.textContent.trim();
+  return field.name || I18n.t('Camp del formulari');
+}
+
+function getFieldValidationMessage(field) {
+  if (field.validity.valueMissing) return field.type === 'radio' ? I18n.t('Selecciona una opció.') : I18n.t('Camp obligatori.');
+  if (field.type === 'email' && field.validity.typeMismatch) return I18n.t('Introdueix un correu electrònic vàlid.');
+  if (field.type === 'tel' && field.validity.customError) return I18n.t('Introdueix un telèfon vàlid.');
+  return field.validationMessage || I18n.t('Completa aquest camp correctament.');
+}
+
+function getValidationContainer(field) {
+  if (field.type === 'radio') return field.closest('.option-row, .question, .col-12, .col-md-4, .col-md-6') || field.parentElement;
+  return field.closest('.col-12, .col-md-8, .col-md-6, .col-md-4, .col-md-2, .dependent-field, .question') || field.parentElement;
+}
+
+function showFieldValidationMessage(item) {
+  const question = item.field.closest('.question');
+  question?.classList.add('has-validation-error');
+  const container = getValidationContainer(item.field);
+  const message = document.createElement('div');
+  message.className = 'field-validation-message';
+  message.textContent = item.message;
+  container.appendChild(message);
+}
+
+function showValidationSummary(items) {
+  const summary = document.getElementById('validationSummary');
+  if (!summary) return;
+  const visibleItems = items.length ? items : [{section:I18n.t('Formulari'), label:I18n.t('Completa aquest camp correctament.')}];
+  summary.innerHTML = `<strong>${escapeHtml(I18n.t('Revisa el formulari'))}</strong><div>${escapeHtml(I18n.t('Hi ha preguntes obligatòries pendents o amb un format incorrecte.'))}</div><ul>${visibleItems.map(item => `<li>${escapeHtml(item.section)}: ${escapeHtml(item.label)}</li>`).join('')}</ul>`;
+  summary.classList.remove('is-hidden');
+  summary.focus();
+}
+
+function openAccordionForField(field) {
+  const collapse = field?.closest('.accordion-collapse');
+  if (!collapse) return;
+  if (window.bootstrap?.Collapse) {
+    window.bootstrap.Collapse.getOrCreateInstance(collapse, {toggle:false}).show();
+  } else {
+    collapse.classList.add('show');
+  }
+}
 
 function setupRespondentStep(){
   document.getElementById('respondentNext').addEventListener('click',()=>{
@@ -276,11 +456,12 @@ function setupRespondentStep(){
 
 function applyFormMode(data) {
   currentFormMode = data.form_mode || data.mode || currentFormMode || '';
-  const skipRespondent = ['edit_owner','readonly','readonly_print','student_confirm'].includes(currentFormMode);
+  const skipRespondent = ['edit_owner','readonly','readonly_print','student_confirm'].includes(currentFormMode) || isAdultStudentSubmission(data);
   if (skipRespondent) {
     document.getElementById('respondentStep').classList.add('is-hidden');
     document.getElementById('initialSetup').classList.add('is-hidden');
     form.classList.remove('is-hidden');
+    syncAdultStudentRespondent(data);
   }
   if (currentFormMode === 'edit_owner') {
     document.getElementById('submitForm').textContent = 'Desa els canvis';
