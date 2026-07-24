@@ -89,10 +89,24 @@ Missing properties must fail with clear configuration errors.
 
 - Canonical writes go to the source table first.
 - Cache tables are read models and may be overwritten.
+- `Dinantia -> students_cache` and `Dinantia -> contacts_cache` must be rebuilt from the same source snapshot. A contact row for a student whose student row is missing or has blank age/model data can make launcher and panel filtering incomplete.
 - After a canonical authorization write, refresh `Dinantia -> authorizations_cache` immediately.
 - After contact edits, write Dinantia first, then update `Dinantia -> contacts_cache`.
 - Nightly cache rebuild function: `rebuildTutorPanelCache()` in `tauler_tutor`.
 - Manual authorization/scope helper: `authorizeServices()`.
+
+## V1.0 Release Checklist
+
+Before pushing or tagging a release:
+
+1. Confirm `.clasp.json` files are ignored and not staged.
+2. Run `rebuildTutorPanelCache()` manually after structural changes in Dinantia, `Dades alumnes`, or authorization tables.
+3. Verify `Dinantia -> cache_runs` has a latest `ok` row and plausible `students_count`, `contacts_count`, and `authorizations_count`.
+4. Spot-check that every student shown in `contacts_cache` also has a matching `students_cache` row with `age`, `study_type`, `is_adult`, and `is_14_plus`.
+5. Test the three public launcher paths: role choice, `?sender=parent`, and `?sender=student`.
+6. Test the tutor panel with a single-group tutor and a multi-group responsibility.
+7. Test one minor parent form, one 14+ student confirmation, and one `major18` adult-student submission.
+8. Push from each Apps Script folder only when deployment is intentionally requested.
 
 ## Development
 

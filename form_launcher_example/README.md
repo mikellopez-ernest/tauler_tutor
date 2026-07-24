@@ -85,6 +85,12 @@ If an active response already exists:
 
 If the student is 18 or older, the parent flow must not open the form; the student must fill it themselves.
 
+Parent selectors depend on complete cache data:
+
+- `contacts_cache` identifies which students are linked to a contact email.
+- `students_cache` provides the age/model data required to decide whether each linked student may appear in the family flow.
+- If a linked student is missing from `students_cache`, or the row has blank age/model fields, the launcher should not show that student to the parent until the cache is rebuilt or enriched.
+
 ## Student Flow
 
 1. Student opens `?sender=student`.

@@ -57,6 +57,14 @@ If the email is found, the launcher must identify the students/children associat
 
 Parent-child associations from Dinantia and the generated cache are considered reliable and do not need to be cross-checked with `Dades alumnes` unless a lookup fails.
 
+Cache completeness matters for the parent selector:
+
+- `contacts_cache` provides the contact-email-to-student relation.
+- `students_cache` provides age and authorization-model fields.
+- A student linked in `contacts_cache` but missing from `students_cache`, or present with blank `age`, `study_type`, `is_adult`, or `is_14_plus`, must be treated as unresolved.
+- Unresolved students must not be shown as parent-selectable minors, because the launcher must not expose adult-student forms to parents.
+- Operationally, run `rebuildTutorPanelCache()` after changes in Dinantia groups, Dinantia parent relations, or `Dades alumnes` before validating the parent launcher flow.
+
 ### Parent With Multiple Children
 
 If the parent has more than one associated son/daughter under 18, the launcher must let them choose which student they want to access the form for before sending the verification email.

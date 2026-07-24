@@ -610,6 +610,18 @@ The rebuild process must:
 
 Only `cache_runs` keeps history. The other cache sheets are fully replaced on every successful rebuild.
 
+### Cache Integrity Rules
+
+`students_cache` and `contacts_cache` are coupled read models and must describe the same Dinantia/student snapshot.
+
+Required invariants:
+
+- Every `contacts_cache.student_id` must have a matching `students_cache.student_id`.
+- Every `students_cache` row used by the panel or launcher must include `age`, `study_type`, `is_adult`, and `is_14_plus`.
+- Parent launcher flows may only show under-18 students when the system can prove the student is under 18 from `students_cache.age` or an equivalent trusted enrichment path.
+- If `contacts_cache` contains a sibling/contact relationship but `students_cache` is missing the student or has blank age/model fields, the parent selector can be incomplete by design, because adult students must not be exposed to the parent flow.
+- After adding, removing, or moving students in `Dades alumnes`, run `rebuildTutorPanelCache()` before validating launcher or panel behavior.
+
 ### `Dinantia` -> `students_cache`
 
 This sheet stores one cached row per student per Dinantia group.

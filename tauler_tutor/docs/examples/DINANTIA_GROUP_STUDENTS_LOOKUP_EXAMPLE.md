@@ -4,7 +4,7 @@ This example shows the full lookup path between the registry-backed spreadsheet 
 
 It is a temporary/manual test function, not production architecture.
 
-> Historical note: this example was written for the former `Dinantia -> class_groups` table. The current production model uses `Dinantia -> teachers_2_dinantia` and `Dinantia -> dinantia_2_dades_alumnes`; see `docs/DB_STRUCTURE.md` for the authoritative structure.
+> V1.0 warning: this example is preserved only as historical debugging material. It was written for the former `Dinantia -> class_groups` table and must not be copied into production code. The current production model uses `Dinantia -> teachers_2_dinantia`, `Dinantia -> dinantia_2_dades_alumnes`, and cache tables (`students_cache`, `contacts_cache`, `authorizations_cache`). See `docs/DB_STRUCTURE.md` for the authoritative structure.
 
 ## Purpose
 

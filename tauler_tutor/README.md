@@ -91,6 +91,8 @@ rebuildTutorPanelCache()
 
 Cache tables are read models. Canonical writes must happen first in the origin system, then the affected cache is refreshed.
 
+Operational invariant: every student referenced by `contacts_cache.student_id` should also exist in `students_cache` with age and model fields filled. If this is not true, the tutor panel and launcher can intentionally hide or misclassify rows to avoid exposing adult-student data through the parent flow.
+
 ## Authorization Workflows
 
 The panel does not create verification tokens directly. It calls the launcher server-side using `launcher_internal_secret`.
