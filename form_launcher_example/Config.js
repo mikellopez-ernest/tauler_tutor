@@ -9,5 +9,6 @@ var LAUNCHER_CONFIG = {
   internalSecretProperty: 'launcher_internal_secret',
   registrySheet: 'tables',
   timezone: 'Europe/Madrid',
-  tokenMinutes: 1440
+  tokenMinutes: 1440,
+  formSessionMinutes: 180
 };

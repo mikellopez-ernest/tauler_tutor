@@ -3,6 +3,7 @@ var APP_CONFIG = {
   timezone: 'Europe/Madrid',
   dinantiaBaseUrl: 'https://app.dinantia.com/api/web',
   formLauncherUrl: 'https://script.google.com/macros/s/AKfycbwOgYsVCf-MdEEbpGFFmWyjMB__MrgDowQuo7W6Ky8ymZwkY_-c7gUPm9QGTGUxiYGrYg/exec',
+  adminPrivilegeResponsibility: 'ADMIN_PRIVILEGES',
   userTutorErrorMessage: "Sembla que el teu correu no correspon a cap tutoria. En cas que hi hagi un error, contacta amb el cap d'estudis",
   genericErrorTitle: "S'ha produït un error"
 };

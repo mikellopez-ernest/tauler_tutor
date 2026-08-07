@@ -39,8 +39,27 @@ function loadAuthorizationDataJson() {
  * Client-callable authorization cache refresh endpoint.
  */
 function refreshAuthorizationDataJson() {
+  var email = getCurrentUserEmail_();
+  var tutorGroup = resolveTutorGroupForEmail_(email);
+  if (tutorGroup.isAdmin === true) {
+    rebuildTutorPanelCache_();
+  }
   refreshAuthorizationsCache_();
-  return JSON.stringify(loadAuthorizationData_());
+  var authorizationData = loadAuthorizationData_();
+  if (tutorGroup.isAdmin === true && authorizationData.ok === true) {
+    var students = loadStudentsForTutorGroupsCached_(tutorGroup.groups);
+    students.sort(function(a, b) {
+      var groupCompare = String(a.groupName || '').localeCompare(String(b.groupName || ''), 'ca', { sensitivity: 'base' });
+      if (tutorGroup.hasMultipleGroups && groupCompare !== 0) return groupCompare;
+      return String(a.name || '').localeCompare(String(b.name || ''), 'ca', { sensitivity: 'base' });
+    });
+    authorizationData.fullCacheRebuilt = true;
+    authorizationData.tutorGroup = tutorGroup;
+    authorizationData.groups = tutorGroup.groups;
+    authorizationData.students = students;
+    authorizationData.isAdmin = true;
+  }
+  return JSON.stringify(authorizationData);
 }
 
 /**

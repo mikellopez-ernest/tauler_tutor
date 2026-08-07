@@ -8,6 +8,7 @@ window.addEventListener('DOMContentLoaded', () => {
   setupAcademicContactDependency();
   setupExternalPlatformsDependency();
   fillForm(initialData);
+  renderDebugContext(initialData);
   applyFormMode(initialData);
   if (initialData.__async_initial_payload) {
     loadResolvedInitialData(initialData.__async_initial_payload);
@@ -18,7 +19,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
 const form = document.getElementById('authorizationForm');
 const SUCCESS_REDIRECT_URL = 'https://agora.xtec.cat/sesernestlluch-cunit/';
+const DEFAULT_EXTERNAL_PLATFORMS = 'YouTube, Instagram, altres...';
 let currentFormMode = '';
+let verifiedLaunchContext = {};
 let personCounter = 0;
 const typeConfig = {
   eso_menor14: {code:'A1746-V01-26', subtitle:"Escolarització de l'alumnat menor de catorze anys", responsible:true, studentSignature:false, esoExit:true, recess:false, unforeseenExit:false, academic:false, municipal:true, healthConsent:false, paracetamol:true, tis:true},
@@ -74,6 +77,13 @@ function setSetupFromModel(model) {
 
 
 function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+function renderDebugContext(data) {
+  if (!data || !data.__debug_context) return;
+  const box = document.createElement('pre');
+  box.style.cssText = 'position:relative;z-index:10000;margin:12px auto;padding:12px;border:1px solid #f59e0b;background:#fff7ed;color:#7c2d12;white-space:pre-wrap;width:min(920px,calc(100% - 24px));font:12px/1.4 monospace;';
+  box.textContent = 'DEBUG FORM CONTEXT\\n' + JSON.stringify(data.__debug_context, null, 2);
+  document.body.insertBefore(box, document.body.firstChild);
+}
 function setBlock(id, show) { const el=document.getElementById(id); el.classList.toggle('is-hidden', !show); el.querySelectorAll('input,select,textarea').forEach(x=>x.disabled=!show); }
 
 function addAuthorizedPerson(data={}) {
@@ -130,6 +140,7 @@ function setExternalPlatformsVisible(show) {
   const input = document.getElementById('plataformesExternes');
   block.classList.toggle('is-hidden', !show);
   input.disabled = !show;
+  if (show && !input.value.trim()) input.value = DEFAULT_EXTERNAL_PLATFORMS;
   if (!show) input.value = '';
 }
 
@@ -191,7 +202,25 @@ function loadResolvedInitialData(payload) {
     .resolveInitialFormData(payload);
 }
 
-function formToObject(){ updateSignatureFields(); const out={}; for(const [k,v] of new FormData(form).entries()) out[k]=v; out.curs_inici=document.getElementById('cursInici').value; out.curs_fi=document.getElementById('cursFi').value; out.idioma_formulari=I18n.currentLanguage||'ca'; out.form_mode=currentFormMode||document.getElementById('formMode').value||''; out.isAdult=document.getElementById('isAdult').value; out.is14Plus=document.getElementById('is14Plus').value; if(out.verified_actor_type==='student'&&out.isAdult==='si') out.signatura_alumne='true'; return out; }
+function rememberLaunchContext(data) {
+  const source = data || {};
+  const keys = ['form_mode','mode','launcher_token','form_session','verified_actor_type','verified_dinantia_account_id','verified_email','resposta_id','id_student'];
+  keys.forEach(key => {
+    const value = source[key];
+    if (value !== undefined && value !== null && String(value).trim() !== '') verifiedLaunchContext[key] = String(value).trim();
+  });
+  if (!verifiedLaunchContext.form_mode && verifiedLaunchContext.mode) verifiedLaunchContext.form_mode = verifiedLaunchContext.mode;
+}
+
+function ensureLaunchContextPayload(out) {
+  rememberLaunchContext(window.INITIAL_FORM_DATA || {});
+  if (!out.form_mode) out.form_mode = verifiedLaunchContext.form_mode || verifiedLaunchContext.mode || '';
+  ['launcher_token','form_session','verified_actor_type','verified_dinantia_account_id','verified_email','resposta_id','id_student'].forEach(key => {
+    if (!out[key] && verifiedLaunchContext[key]) out[key] = verifiedLaunchContext[key];
+  });
+}
+
+function formToObject(){ updateSignatureFields(); if(document.getElementById('imatgeExternaSi').checked&&!document.getElementById('plataformesExternes').value.trim()) document.getElementById('plataformesExternes').value=DEFAULT_EXTERNAL_PLATFORMS; const out={}; for(const [k,v] of new FormData(form).entries()) out[k]=v; out.curs_inici=document.getElementById('cursInici').value; out.curs_fi=document.getElementById('cursFi').value; out.idioma_formulari=I18n.currentLanguage||'ca'; out.form_mode=currentFormMode||document.getElementById('formMode').value||''; out.isAdult=document.getElementById('isAdult').value; out.is14Plus=document.getElementById('is14Plus').value; ensureLaunchContextPayload(out); if(out.verified_actor_type==='student'&&out.isAdult==='si') out.signatura_alumne='true'; return out; }
 function forceStudentModel(model) {
   if (!model || !typeConfig[model]) return;
   document.querySelectorAll('[name="tipus_alumne"]').forEach(r => r.checked = r.value === model);
@@ -238,6 +267,7 @@ function normalizeDateInputValue(value) {
 }
 
 function fillForm(data){
+  rememberLaunchContext(data);
   Object.keys(data||{}).filter(key=>/^persona_autoritzada_nom_\d+$/.test(key)).sort((a,b)=>Number(a.match(/\d+$/)[0])-Number(b.match(/\d+$/)[0])).forEach(key=>{
     const index=key.match(/\d+$/)[0];
     addAuthorizedPerson({nom:data[key]||'', qualitat:data['persona_autoritzada_qualitat_'+index]||''});
@@ -252,6 +282,7 @@ function fillForm(data){
     if(key==='verified_dinantia_account_id'){document.getElementById('verifiedDinantiaAccountId').value=value;return;}
     if(key==='verified_email'){document.getElementById('verifiedEmail').value=value;return;}
     if(key==='launcher_token'){document.getElementById('launcherToken').value=value;return;}
+    if(key==='form_session'){document.getElementById('formSession').value=value;return;}
     if(key==='responent_nom_sencer'){document.getElementById('responentNomSencer').value=value;document.getElementById('hiddenRespondentName').value=value;}
     if(key==='responent_telefon'){document.getElementById('responentTelefon').value=value;document.getElementById('hiddenRespondentPhone').value=value;}
     if(/^persona_autoritzada_/.test(key)) return;
@@ -523,6 +554,11 @@ function confirmStudentAuthorization() {
 function isValidPhone(value){const compact=String(value||'').trim().replace(/[\s().-]/g,'');return /^\+?\d{8,15}$/.test(compact)||/^00\d{8,15}$/.test(compact)||/^[6789]\d{8}$/.test(compact);}
 
 function submitForm(){
+  const payload = formToObject();
+  if (!payload.form_mode || (!payload.launcher_token && !payload.form_session)) {
+    alert('No s ha pogut enviar el formulari: no s ha pogut verificar la sessió. Torna a obrir l’enllaç del correu i prova-ho de nou.');
+    return;
+  }
   const button=document.getElementById('submitForm');
   button.disabled=true;
   button.textContent='Enviant...';
@@ -532,8 +568,22 @@ function submitForm(){
   }).withFailureHandler(error=>{
     button.disabled=false;
     button.textContent=currentFormMode==='edit_owner'?'Desa els canvis':'Envia el formulari';
-    alert('No s ha pogut enviar el formulari: '+(error&&error.message?error.message:error));
-  }).submitAuthorizationResponse(formToObject());
+    alert('No s ha pogut enviar el formulari: '+friendlySubmitErrorMessage_(error));
+  }).submitAuthorizationResponse(payload);
+}
+
+function friendlySubmitErrorMessage_(error) {
+  const message = String(error && error.message ? error.message : error || '');
+  if (/verified launcher|launcher verification|launcher token|opened through/i.test(message)) {
+    return 'no s ha pogut verificar la sessió. Torna a obrir l’enllaç del correu i prova-ho de nou.';
+  }
+  if (/already used/i.test(message)) {
+    return 'aquest enllaç ja s ha utilitzat. Torna a iniciar el procés o demana un nou enllaç al centre.';
+  }
+  if (/expired/i.test(message)) {
+    return 'aquest enllaç ha caducat. Torna a iniciar el procés per rebre un nou enllaç.';
+  }
+  return message;
 }
 
 function showSubmissionSuccess(result) {

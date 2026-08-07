@@ -19,6 +19,7 @@ The form lets the user:
 - Submit the completed response to the school authorization database.
 - Update the verified Dinantia contact name/phone when the respondent-identification values change.
 - See a friendly confirmation page after a successful submission.
+- Receive an email copy of the submitted answers after a successful submission.
 - Download the filled data as JSON.
 - Print or save the rendered form as PDF through the browser.
 
@@ -26,7 +27,18 @@ The endpoint must persist submitted responses to the registry-backed `Autoritzac
 
 After a successful submission, the endpoint must refresh `Dinantia` -> `authorizations_cache` so the tutor panel can show the new authorization without waiting for the nightly cache rebuild.
 
-After the cache refresh succeeds and the client receives the success response, the form must hide the editable form and show a confirmation page instead of a browser alert. The confirmation page must use this Catalan copy:
+After the cache refresh succeeds, the endpoint must send a confirmation email to the verified respondent address. The email must:
+
+- Use `Institut Ernest Lluch i Martín` as the sender display name.
+- Include the student full name in the subject when available.
+- Include the generated `resposta_id` as a reference code.
+- Include a structured HTML summary of the saved answers.
+- Include authorized pickup people from `Autoritzacions` -> `persones_autoritzades`.
+- Exclude launcher tokens, script properties, API credentials, and other internal metadata.
+- Be sent only after the canonical database write, cache refresh, and editable-token finalization have succeeded.
+- Be non-blocking for persistence: if email delivery fails, the response must remain saved and the server may return diagnostic email status without rolling back the form submission.
+
+After the client receives the success response, the form must hide the editable form and show a confirmation page instead of a browser alert. The confirmation page must use this Catalan copy:
 
 - Title: `Resposta enregistrada`
 - Body: `La teva resposta ha estat correctament enregistrada.`
@@ -57,16 +69,18 @@ Current deployment ID:
 
 `AKfycbyZpqmW-iGRN6xr_GdpCpeQxstvcYjZTM8CcqI657YFPfuTCU7Il3Zp2gJRkBykbHjjzg`
 
-The form URL is not intended to be shared directly. During the current flow, families access it through `form_launcher_example`, which submits a POST request with the required prefill data. The endpoint must still be accessible to anonymous users because the launcher deployment is public and family contacts may not have school-domain Google accounts.
+The form URL is not intended to be shared directly. During the current flow, families access it through `form_launcher_example`, which creates a short-lived server-side form session and opens this endpoint with `GET ?form_session=...`. The endpoint must still be accessible to anonymous users because the launcher deployment is public and family contacts may not have school-domain Google accounts.
 
 The endpoint entry points are:
 
 ```javascript
-function doGet()
+function doGet(e)
 function doPost(e)
 ```
 
-`doGet()` must render `Index.html` as a template using only configured default values.
+`doGet(e)` must render `Index.html` as a template using configured default values and supported query parameters.
+
+When `doGet(e)` receives `form_session`, the endpoint must resolve the verified payload server-side from `Autoritzacions` -> `verification_tokens.metadata_json.form_session` before rendering the form. This keeps the page reload-safe on Android/Gmail/Chrome because the verified context is recoverable from the URL and server-side session.
 
 `doPost(e)` must accept request-provided prefill data, merge it with configured default values, and render the same `Index.html` template.
 
@@ -378,13 +392,19 @@ The launcher may send operational mode/context fields to control how the form re
 | `verified_dinantia_account_id` | Dinantia account ID verified by the launcher. |
 | `verified_email` | Normalized verified email from the launcher token. |
 | `launcher_token` | Raw launcher token only when the form must POST a student confirmation back to the launcher. It must never be persisted in `autoritzacions`. |
+| `form_session` | Raw short-lived form session id created by the launcher after token verification. It replaces `launcher_token` for editable form submissions in the mobile-safe flow. |
 
 Rules:
 
 - `readonly`, `readonly_print`, and `student_confirm` must reuse the exact `auth_form` UI with controls disabled, not a separate simplified table.
 - Token-protected form openings may render a fast client shell first and resolve the protected initial data asynchronously. The shell must show a loading indicator immediately and must not allow saving until token validation and initial data resolution have completed.
-- Protected modes must require a valid short-lived launcher token before loading an existing response or accepting an editable save. The public form endpoint must not trust a naked `resposta_id`.
-- All persisted saves must require a verified launcher mode/token. A direct public `doGet()` page may render for compatibility or smoke testing, but it must not be able to write data to the database.
+- Protected modes must require a valid short-lived launcher token or a valid launcher-created form session before loading an existing response or accepting an editable save. The public form endpoint must not trust a naked `resposta_id`.
+- All persisted saves must require a verified launcher mode plus either `launcher_token` or `form_session`. A direct public `doGet()` page may render for compatibility or smoke testing, but it must not be able to write data to the database.
+- The browser must preserve verified launcher context (`form_mode`, `launcher_token`, verified actor fields, student ID, and response ID when present) independently from visible form fields so long mobile sessions cannot submit a payload that has lost hidden verification values.
+- In the mobile-safe flow, `form_session` may replace `launcher_token` in the browser payload. The server must resolve it back to the original verification-token row, validate status and expiry, and then apply the same student/response/sender checks as the raw-token flow.
+- The raw `launcher_token` should not be required in `auth_form` URLs created through the launcher form-session flow.
+- `form_session` URLs may support a safe diagnostic `debug=1` flag during development. Diagnostics must expose only presence flags or masked values; they must not expose raw tokens, raw sessions, hashes, script properties, API credentials, or full private payloads.
+- If verification context is missing at submit time, show a Catalan user-facing message asking the user to reopen the email link instead of exposing internal launcher/token wording.
 - Read-only modes must translate stored sheet booleans into the form control values before filling the UI. Real boolean `TRUE` / string `TRUE` / `si` select the affirmative radio or checkbox state; real boolean `FALSE` / string `FALSE` / `no` select the negative radio state.
 - Existing `data_signatura` must be preserved when rendering a submitted response. The form may default to today's date only for a new response that does not already have `data_signatura`.
 - Date inputs must receive normalized `yyyy-mm-dd` values. When a stored sheet date arrives as an Apps Script date, ISO datetime, or local `dd/mm/yyyy` string, the renderer must convert it before assigning it to the `<input type="date">`.
@@ -527,7 +547,9 @@ The server-side function must:
 8. Extract all authorized pickup people from the submitted form data.
 9. For each non-empty authorized person, generate a new `id` and append one row to `Autoritzacions` -> `persones_autoritzades` using the same `resposta_id`.
 10. Refresh `Dinantia` -> `authorizations_cache` from `Autoritzacions` -> `autoritzacions` and `Autoritzacions` -> `verification_tokens`.
-11. Return a success response containing at least the generated `resposta_id`.
+11. Mark the launcher token as used for editable flows.
+12. Send a confirmation email with a structured HTML copy of the saved answers to the verified respondent email address.
+13. Return a success response containing at least the generated `resposta_id`.
 
 A submitted response can have zero authorized pickup people. In that case, the app must still create the parent `autoritzacions` row and create no rows in `persones_autoritzades`.
 
@@ -624,6 +646,7 @@ Required behavior:
 - The server response must not expose credentials or sensitive implementation details.
 - The client must show a clear user-facing success or failure message.
 - After the user accepts the success dialog, the page must redirect automatically to `https://agora.xtec.cat/sesernestlluch-cunit/`.
+- Confirmation-email failure must be logged server-side and reported only as non-sensitive status; it must not delete, roll back, or hide a successfully saved response.
 
 Google Sheets does not provide full database transactions, so implementation must be careful with write order, error reporting, and idempotency.
 
@@ -691,6 +714,8 @@ Rules:
 Rules:
 
 - `Plataformes o accés` is enabled only when `Plataformes no administrades pel centre` is answered/checked as `yes`.
+- When `Plataformes no administrades pel centre` is answered `yes`, `Plataformes o accés` must default to `YouTube, Instagram, altres...`.
+- If the user leaves the dependent field blank after answering `yes`, submit and persist `YouTube, Instagram, altres...`.
 - When the parent answer is not `yes`, the dependent field must be disabled and cleared or ignored on submit.
 - The dependent field must be visually indented to the right to show that it depends on the previous question.
 - The field `Publicació de les inicials de l'alumne/a i del centre` must be removed from the current form UI.
@@ -820,7 +845,6 @@ The current form endpoint does not:
 - Authenticate a specific student or tutor.
 - Read teacher, tutor group, or student data from `tauler_tutor` feature tables.
 - Save generated PDFs to Drive.
-- Send emails.
 - Call Dinantia except for the verified parent/contact name and phone write-through explicitly specified above.
 - Register changelog entries in `Dinantia` -> `changelog`.
 

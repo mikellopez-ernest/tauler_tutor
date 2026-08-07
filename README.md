@@ -9,7 +9,7 @@ This repository contains three coordinated GAS web apps. They share a registry-b
 | Folder | App | Audience | Access | Purpose |
 | --- | --- | --- | --- | --- |
 | `tauler_tutor/` | Tutor panel | Teachers | Domain users only | Resolve the logged-in teacher, show their students, edit contacts, and manage authorization workflows. |
-| `form_launcher_example/` | Form launcher | Families, students, tutor panel | Public endpoint | Verify identity, create secure tokens, send invitation emails, and forward verified users to the form. |
+| `form_launcher_example/` | Form launcher | Families, students, tutor panel | Public endpoint | Verify identity, create secure tokens, send invitation emails, create mobile-safe form sessions, and forward verified users to the form. |
 | `auth_form/` | Authorization form | Families and students | Public endpoint | Render the multilingual form, persist submissions, and refresh authorization cache data. |
 
 ## Current URLs

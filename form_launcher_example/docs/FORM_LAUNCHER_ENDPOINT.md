@@ -138,7 +138,18 @@ No submit/edit button may be shown in parent read-only mode.
 
 If the selected student is under 18 and there is no existing row in `Autoritzacions` -> `autoritzacions`, the verified parent flow may continue to the editable authorization form.
 
-The final verified launcher page renders the family message and the `EMPLENAR EL FORMULARI` POST button to `auth_form` using server-generated hidden fields from verified metadata.
+The final verified launcher page renders the family message and the `EMPLENAR EL FORMULARI` button using server-generated context from verified metadata.
+
+For mobile reliability, this button must not POST the full form payload directly to `auth_form` as the primary transport. Instead:
+
+1. The button submits back to the launcher with `action = forward_form`.
+2. The launcher validates the original email-verification token.
+3. The launcher creates a short-lived form session attached to the same `Autoritzacions` -> `verification_tokens` row.
+4. The launcher stores only the form-session hash, expiry, and verified form payload in `metadata_json.form_session`.
+5. The launcher opens `auth_form` using `GET ?form_session=...`.
+6. `auth_form` resolves the verified payload from the server-side session.
+
+This avoids Android/Gmail/Chrome reloads reopening the public form endpoint as a plain GET without verification context.
 
 ## Student Flow
 
@@ -348,7 +359,9 @@ Behavior:
 - Do not send an email for `panel_print_link`.
 - The token must not expose `token_hash`, secret values, or full metadata to the browser.
 
-When the tutor opens the returned launcher URL, the launcher validates the token and POST-forwards to `auth_form` with:
+When the tutor opens the returned launcher URL, the launcher validates the token, creates a form session, and opens `auth_form` with `GET ?form_session=...`.
+
+The stored `metadata_json.form_session.payload` must include:
 
 | Field | Value |
 | --- | --- |
@@ -453,7 +466,7 @@ When the parent opens the token, the launcher must continue to the existing pare
 
 - If the student is adult, block parent access.
 - If an authorization row already exists, show the read-only version.
-- If no row exists and the student is under 18, show the family message and POST-forward button to `auth_form`.
+- If no row exists and the student is under 18, show the family message and the `EMPLENAR EL FORMULARI` button that creates a form session.
 
 ### Student Target
 
@@ -692,7 +705,7 @@ Required approach for this project: use the registry-backed sheet `Autoritzacion
 - Store creation datetime, expiry datetime, used/revoked state, and safe audit fields.
 - Mark token as used after successful verification if the selected policy is one-time use.
 - Mark expired pending tokens as `expired` opportunistically during token creation, scheduled maintenance, or explicit admin/cache jobs.
-- Do not run full expired-token cleanup during `GET ?token=...`, token validation, or form-forwarding POSTs. Those paths must only validate the current token row and, if the current token itself is expired, mark that row as expired.
+- Do not run full expired-token cleanup during `GET ?token=...`, token validation, form-session creation, or form-forwarding actions. Those paths must only validate the current token row and, if the current token itself is expired, mark that row as expired.
 
 A stateless signed token may be used only as an additional integrity layer, not as the primary persistence strategy. The authoritative token state is `Autoritzacions` -> `verification_tokens`.
 
@@ -737,7 +750,7 @@ When the email is found and the token is generated, the launcher sends an email 
 
 The email must contain the same family message already used in the launcher, with the same tone and same `EMPLENAR EL FORMULARI` call to action.
 
-In production, the call to action should first open the launcher verification link containing the secure token. After the token is validated, the launcher renders the final page with the POST button to `auth_form`.
+In production, the call to action first opens the launcher verification link containing the secure token. After the token is validated, the launcher renders the final page with a button that posts back to the launcher using `action = forward_form`. The launcher then creates a mobile-safe form session and opens `auth_form?form_session=...`.
 
 Do not place the raw form POST payload directly in the email.
 
@@ -754,14 +767,30 @@ After token validation, the launcher renders the existing family message:
 
 - Same text as the current testing launcher message.
 - Same `EMPLENAR EL FORMULARI` button.
-- The button sends a POST request to `auth_form`.
+- The button sends a POST request back to the launcher with `action = forward_form`.
 - Hidden inputs are generated server-side from the verified token metadata, not from editable browser-provided fields.
+- Visible launcher pages and email bodies must use proper Catalan accents and apostrophes. Do not intentionally downgrade user-facing Catalan text to ASCII.
 
 For panel-created invitations, the token metadata should already contain normalized student context from the tutor-panel cache. In that case, the launcher must reuse that metadata instead of re-opening `Dades alumnes` only to enrich the same student again. `Dades alumnes` lookup is a fallback for older/manual tokens or incomplete metadata.
 
-The final POST-forwarding page is a transport layer, not a user-facing step. It should render minimal HTML and submit to `auth_form` immediately, with no visible content during the normal path. If the browser does not navigate quickly, reveal a small fallback page with `Obrint el formulari...` and a manual `Obrir formulari` button.
+The final forwarding page is a transport layer, not a user-facing step. It should render minimal HTML and open `auth_form?form_session=...` immediately, with no visible content during the normal path. If the browser does not navigate quickly, reveal a small fallback page with `Obrint el formulari...` and a manual `Obrir formulari` button.
 
-Forwarded fields remain:
+### Form Session
+
+The form session is a mobile-safe continuation handle created only after the email-verification token has been validated.
+
+Rules:
+
+- Generate a random raw session id.
+- Store only `session_hash` in `metadata_json.form_session`; never store the raw session id.
+- Store the verified form payload in `metadata_json.form_session.payload`.
+- Remove `launcher_token` from the stored payload.
+- For parent flows, ensure the session payload contains `responent_nom_sencer`, `responent_telefon`, and `responsable_nom` from verified parent/contact metadata when available.
+- Set `metadata_json.form_session.expires_at` to the earlier of the original token expiry and the configured form-session lifetime.
+- Open `auth_form` with `?form_session=<raw session id>`.
+- The session is not a separate authentication source; it is tied to the original verification-token row and inherits its status, student, email, sender, and expiry constraints.
+
+The form-session payload keeps the same canonical form fields:
 
 | Forwarded field | Meaning |
 | --- | --- |
@@ -780,7 +809,7 @@ Forwarded fields remain:
 - Tokens must expire. Current lifetime is 24 hours.
 - Tokens should be one-time use unless a temporary testing exception is documented.
 - Expired or already-used tokens must be shown as friendly Catalan link-status messages.
-- Hidden POST fields to `auth_form` must be produced only after token validation.
+- Hidden POST fields or form-session payloads for `auth_form` must be produced only after token validation.
 - The launcher must not trust student/form fields submitted by an unauthenticated browser request.
 - All rendered values must be HTML-escaped.
 - Script properties and API secrets must never be rendered or logged.
@@ -794,34 +823,35 @@ It receives a POST request from the tutor panel for one student, renders the mes
 
 When clicked, that button submits a POST request to the real authorization form endpoint with hidden inputs.
 
-This legacy tunnel is superseded by the secure token flows above. It may remain as a reference for the final verified POST-forwarding page, but production invitation behavior must use verification tokens.
+This legacy tunnel is superseded by the secure token and form-session flows above. It may remain as historical reference only; production invitation behavior must use verification tokens and `auth_form?form_session=...`.
 
 ## Legacy Testing Behavior
 
-In the current development/testing phase, the launcher must:
+This behavior is obsolete and must not be used for production flows. Historically, the launcher:
 
 1. Receive a POST request from `tauler_tutor`.
 2. Read student, first-contact, and form-prefill fields from the POST body.
 3. Render a page showing the family message.
 4. Render `EMPLENAR EL FORMULARI` as a button.
-5. When clicked, submit a POST request to the `auth_form` endpoint.
-6. Forward the relevant student/form-prefill values to `auth_form` as hidden fields.
+5. When clicked, submitted a POST request to the `auth_form` endpoint.
+6. Forwarded the relevant student/form-prefill values to `auth_form` as hidden fields.
 
-This behavior is no longer the preferred production path.
+The current production path creates a `form_session` and opens `auth_form?form_session=...` instead.
 
 ## Previous Future Production Note
 
-The production behavior is now specified above in `Production Identity-Verification Flow`. The older testing tunnel remains useful as a reference for the final verified page that POST-forwards to `auth_form`.
+The production behavior is now specified above in `Production Identity-Verification Flow`. The older testing tunnel remains useful only as historical context; it must not be used to bypass email verification or form-session creation.
 
 ## Entry Point
 
 The endpoint must support:
 
 ```javascript
+function doGet(e)
 function doPost(e)
 ```
 
-`doGet()` may show a simple diagnostic or unsupported-method page, but launch behavior is POST-only.
+`doGet(e)` handles public role choice, parent/student entry, and verified `?token=...` links. `doPost(e)` handles panel actions, identity verification forms, student selection, `forward_form`, and student confirmation.
 
 ## Incoming POST Payload
 
@@ -862,7 +892,7 @@ Rules:
 
 - `student_id` must be forwarded to `auth_form` as `id_student`.
 - `alumne_nom`, `alumne_document`, `studyType`, `isAdult`, and `is14Plus` must be forwarded unchanged after basic trimming/normalization.
-- Contact fields are used by the launcher message context and testing, but are not part of the `auth_form` prefill contract unless later specified.
+- Contact fields are used by the launcher message context. For verified parent flows, `contact_name` and `contact_phone` or equivalent metadata must be carried into `metadata_json.form_session.payload` as `responent_nom_sencer`, `responent_telefon`, and `responsable_nom` when available.
 - Unknown incoming fields should be ignored unless later specs define them.
 
 ## Rendered Message
@@ -911,7 +941,20 @@ The button may include the visual arrow/hand cue near the button text, but the P
 
 ## Forwarding Button
 
-The button must be implemented as an HTML form submit action:
+In the current production flow, the button must post back to the launcher:
+
+```html
+<form method="post" action="LAUNCHER_ENDPOINT_URL">
+  <input type="hidden" name="action" value="forward_form">
+  <input type="hidden" name="token" value="...">
+  <input type="hidden" name="form_payload_json" value="...">
+  <button type="submit">EMPLENAR EL FORMULARI</button>
+</form>
+```
+
+The launcher validates the token, stores `metadata_json.form_session`, and opens `auth_form?form_session=...`.
+
+Historical direct POST forwarding looked like this and must not be used as the production flow:
 
 ```html
 <form method="post" action="FORM_ENDPOINT_URL">
@@ -941,7 +984,13 @@ In the legacy tunnel, because the launcher is only a tunnel, it should not save 
 | `isAdult` | `isAdult` |
 | `is14Plus` | `is14Plus` |
 
-Contact fields are not forwarded to `auth_form` in the current version.
+Verified parent/contact fields are included in the form-session payload when available:
+
+| Launcher/contact context | Form-session field |
+| --- | --- |
+| `contact_name` / verified `parent_name` | `responent_nom_sencer` |
+| `contact_phone` / verified `parent_phone` | `responent_telefon` |
+| `contact_name` / verified `parent_name` | `responsable_nom` |
 
 ## Validation
 

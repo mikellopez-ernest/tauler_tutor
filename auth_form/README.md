@@ -21,7 +21,7 @@ Apps Script settings:
 | Runtime | V8 |
 | Time zone | `Europe/Madrid` |
 
-The endpoint is public because families may access it from outside the school domain. Public access is protected by launcher-issued tokens and server-side validation.
+The endpoint is public because families may access it from outside the school domain. Public access is protected by launcher-issued tokens, mobile-safe form sessions, and server-side validation.
 
 Redeploy with the existing deployment ID unless a new URL is explicitly requested.
 
@@ -33,12 +33,14 @@ clasp deploy -i AKfycbyZpqmW-iGRN6xr_GdpCpeQxstvcYjZTM8CcqI657YFPfuTCU7Il3Zp2gJR
 ## Core Responsibilities
 
 - Render the authorization form in multiple languages.
-- Accept verified POST context from `form_launcher_example`.
-- Validate launcher tokens before loading protected existing responses or saving.
+- Accept verified context from `form_launcher_example`, preferably through `GET ?form_session=...`.
+- Resolve server-side form sessions before rendering protected form data.
+- Validate launcher tokens or form sessions before loading protected existing responses or saving.
 - Pre-fill school constants, student data, and verified respondent/contact data.
 - Persist form submissions to canonical `Autoritzacions` sheets.
 - Update the verified Dinantia contact when respondent contact data changes.
 - Refresh `Dinantia -> authorizations_cache` after canonical writes.
+- Send a confirmation email copy of saved answers to the verified respondent address.
 - Render read-only/printable form views using the same UI as the editable form.
 - Allow 14+ student confirmation and adult-student self-submission flows.
 
@@ -53,13 +55,15 @@ clasp deploy -i AKfycbyZpqmW-iGRN6xr_GdpCpeQxstvcYjZTM8CcqI657YFPfuTCU7Il3Zp2gJR
 | `readonly_print` | Tutor opens a printable read-only version from the panel. |
 | `student_confirm` | 14+ student reviews a submitted form and confirms conformity. |
 
-Protected modes require a valid launcher token. The public endpoint must not trust a naked `resposta_id`.
+Protected modes require either a valid launcher token or a valid launcher-created `form_session`. The public endpoint must not trust a naked `resposta_id`.
 
 Adult-student submissions (`new_student_adult` / `major18`) skip the respondent-identification page and do not show the parent/legal guardian name or document fields, because the student is the respondent.
 
 ## User Experience
 
-The form renders a fast client shell first when protected data needs to be resolved. The shell shows a centered loading indicator while token validation and initial data loading happen asynchronously.
+The form may render a fast client shell when protected data needs to be resolved asynchronously. For the current mobile-safe launcher flow, `GET ?form_session=...` is resolved server-side before the first form HTML is rendered, so Android/Gmail/Chrome reloads can preserve verified context.
+
+When `Plataformes no administrades pel centre` is answered `Sí`, the dependent `Plataformes/Accés` field defaults to `YouTube, Instagram, altres...`. If the respondent leaves that dependent field blank, the same default is submitted and persisted.
 
 After successful submission, the user sees the success message and is redirected to:
 
@@ -97,7 +101,7 @@ Canonical tables:
 | --- | --- | --- |
 | `Autoritzacions` | `autoritzacions` | One row per submitted form response. |
 | `Autoritzacions` | `persones_autoritzades` | Authorized pickup people linked by `resposta_id`. |
-| `Autoritzacions` | `verification_tokens` | Launcher token metadata used for protected access. |
+| `Autoritzacions` | `verification_tokens` | Launcher token metadata and hashed form-session metadata used for protected access. |
 
 Read-through/write-through cache:
 
@@ -162,7 +166,8 @@ Related specs:
 ## Security
 
 - Do not persist raw launcher tokens.
+- Do not persist raw form session ids.
 - Do not expose token hashes or script properties to the browser.
-- Validate the launcher token again on save, not only on initial render.
+- Validate the launcher token or form session again on save, not only on initial render.
 - Keep Dinantia credentials in Apps Script properties only.
 - Treat health, identity, contact, and authorization answers as sensitive student data.

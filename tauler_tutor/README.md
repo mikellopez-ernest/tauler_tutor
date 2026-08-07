@@ -93,6 +93,8 @@ Cache tables are read models. Canonical writes must happen first in the origin s
 
 Operational invariant: every student referenced by `contacts_cache.student_id` should also exist in `students_cache` with age and model fields filled. If this is not true, the tutor panel and launcher can intentionally hide or misclassify rows to avoid exposing adult-student data through the parent flow.
 
+Admin users are identified through the special marker `ADMIN_PRIVILEGES`, either as a direct `Càrrega lectiva -> carrecs` responsibility or inside `teachers_2_dinantia.dinantia_group_names` for one of the user's mapped responsibilities. This flag does not grant group visibility by itself, but users who also have mapped visible groups get `isAdmin = true`. For admins, the `Autoritzacions` sync button runs `rebuildTutorPanelCache()` before the normal authorization refresh.
+
 ## Authorization Workflows
 
 The panel does not create verification tokens directly. It calls the launcher server-side using `launcher_internal_secret`.

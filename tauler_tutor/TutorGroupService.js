@@ -14,11 +14,13 @@ function resolveTutorGroupForEmail_(email) {
     resolvedFromSubstitute: !!teacher.resolvedFromSubstitute
   });
   var responsibilities = findResponsibilitiesByTeacherFullName_(responsibilitiesSheet, teacher.fullName);
+  var isAdmin = hasAdminPrivilege_(responsibilities) || hasAdminPrivilegeInTeacherGroupMappings_(teacherGroupsSheet, responsibilities);
   var responsibility = combineResponsibilities_(responsibilities);
   logInfo_('resolver_responsibilities_found', {
     teacherFullName: teacher.fullName,
     responsibilityCount: responsibilities.length,
-    responsibilities: responsibilities.map(function(item) { return item.name; })
+    responsibilities: responsibilities.map(function(item) { return item.name; }),
+    isAdmin: isAdmin
   });
   var groups = findDinantiaGroupsByResponsibilities_(teacherGroupsSheet, groupStudentSheetsSheet, responsibilities);
   logInfo_('resolver_groups_found', {
@@ -36,8 +38,40 @@ function resolveTutorGroupForEmail_(email) {
     studentDataSheetName: groups.length === 1 ? groups[0].studentDataSheetName : '',
     groups: groups,
     hasMultipleGroups: groups.length > 1,
+    isAdmin: isAdmin,
     teacherLabel: buildTeacherLabel_(teacher)
   };
+}
+
+function hasAdminPrivilege_(responsibilities) {
+  var target = textKey_(APP_CONFIG.adminPrivilegeResponsibility);
+  return (responsibilities || []).some(function(responsibility) {
+    return textKey_(responsibility && responsibility.name) === target;
+  });
+}
+
+function hasAdminPrivilegeInTeacherGroupMappings_(teacherGroupsSheet, responsibilities) {
+  var teacherGroupHeaderMap = requireHeaders_(teacherGroupsSheet, [
+    HEADERS.classGroupTeacherResponsibility,
+    HEADERS.classGroupDinantiaNames
+  ], TABLES.dinantia + ' -> ' + SHEETS.teacherGroups);
+  var targets = {};
+  (responsibilities || []).forEach(function(responsibility) {
+    if (responsibility && responsibility.name) targets[textKey_(responsibility.name)] = true;
+  });
+  var adminPrivilegeKey = textKey_(APP_CONFIG.adminPrivilegeResponsibility);
+  var values = teacherGroupsSheet.getDataRange().getValues();
+
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    var carrec = String(row[teacherGroupHeaderMap[HEADERS.classGroupTeacherResponsibility]] || '').trim();
+    if (!targets[textKey_(carrec)]) continue;
+    var rawNames = String(row[teacherGroupHeaderMap[HEADERS.classGroupDinantiaNames]] || '').split(',');
+    for (var j = 0; j < rawNames.length; j++) {
+      if (textKey_(rawNames[j]) === adminPrivilegeKey) return true;
+    }
+  }
+  return false;
 }
 
 function findResponsibilitiesByTeacherFullName_(responsibilitiesSheet, fullName) {
@@ -151,11 +185,13 @@ function findDinantiaGroupsByResponsibility_(teacherGroupsSheet, groupStudentShe
 
 function parseDinantiaGroupNames_(value) {
   var seen = {};
+  var adminPrivilegeKey = textKey_(APP_CONFIG.adminPrivilegeResponsibility);
   return String(value || '').split(',').map(function(part) {
     return String(part || '').trim();
   }).filter(function(groupName) {
-    if (!groupName || seen[groupName]) return false;
-    seen[groupName] = true;
+    var key = textKey_(groupName);
+    if (!groupName || key === adminPrivilegeKey || seen[key]) return false;
+    seen[key] = true;
     return true;
   });
 }

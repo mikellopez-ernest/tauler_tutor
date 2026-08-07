@@ -2,7 +2,7 @@
 
 Public Google Apps Script launcher and verification gateway for the authorization form.
 
-The launcher is the security bridge between public users, the tutor panel, and `auth_form`. It verifies email ownership, creates short-lived server-side tokens, sends invitation emails, and forwards verified users to the form with trusted POST data.
+The launcher is the security bridge between public users, the tutor panel, and `auth_form`. It verifies email ownership, creates short-lived server-side tokens, sends invitation emails, and forwards verified users to the form with a mobile-safe server-side form session.
 
 ## Deployment
 
@@ -76,7 +76,7 @@ Rules:
 6. If more than one eligible minor student exists, show a student selector before sending the email.
 7. Launcher sends a personal verification email tied to the selected student.
 8. Parent opens token link.
-9. Launcher resolves the token and forwards trusted context to `auth_form`.
+9. Launcher resolves the token, creates a temporary form session, and opens `auth_form?form_session=...`.
 
 If an active response already exists:
 
@@ -114,10 +114,12 @@ Current approach:
 - Do not rebuild caches during token opening.
 - Panel-created tokens should already contain normalized student context from the tutor-panel cache. Reuse it instead of reopening `Dades alumnes`.
 
-The final POST bridge to `auth_form` is a transport layer, not a user-facing step:
+The final bridge to `auth_form` is a transport layer, not a user-facing step:
 
 - It renders minimal HTML.
-- It submits to `auth_form` immediately.
+- It creates a hashed form session in `verification_tokens.metadata_json`.
+- It opens `auth_form?form_session=...` immediately.
+- The raw form session id is never stored; only its hash is stored.
 - It shows no visible content in the normal path.
 - It reveals an `Obrint el formulari...` fallback with a manual button only if navigation does not happen quickly.
 

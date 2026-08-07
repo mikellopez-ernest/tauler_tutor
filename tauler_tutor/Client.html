@@ -13,6 +13,7 @@
       contactsLoading: false,
       authorizationsLoaded: false,
       inviting: false,
+      isAdmin: false,
       formLauncherUrl: '',
       contactSort: { key: 'name', direction: 'asc' }
     };
@@ -24,6 +25,7 @@
     var refreshAuthButton = document.querySelector('.refresh-auth-button');
     var saveLoading = document.querySelector('.save-loading');
     var initialLoading = document.querySelector('.initial-loading');
+    var initialLoadingMessage = document.getElementById('initial-loading-message');
     var authorizationFloatingScroll = document.getElementById('authorization-floating-scroll');
     var authorizationTableWrap = document.getElementById('authorizations-table-wrap');
     var groupFilter = document.getElementById('group-filter');
@@ -95,6 +97,7 @@
       state.groups = data.groups || (data.tutorGroup && data.tutorGroup.groups) || [];
       state.hasMultipleGroups = state.groups.length > 1;
       state.selectedGroup = state.hasMultipleGroups ? '__all' : (state.groups[0] ? state.groups[0].dinantiaGroupId : '__all');
+      state.isAdmin = data.isAdmin === true || (data.tutorGroup && data.tutorGroup.isAdmin === true);
       state.formLauncherUrl = data.formLauncherUrl || '';
 
       document.getElementById('group-title').textContent = data.tutorGroup.dinantiaGroupId || '';
@@ -354,6 +357,9 @@
             renderAuthorizations();
             return;
           }
+          if (parsed.fullCacheRebuilt) {
+            applyAdminCacheRefreshResult(parsed);
+          }
           state.authorizations = parsed.authorizations || [];
           state.invitations = parsed.invitations || [];
           renderAuthorizations();
@@ -370,7 +376,7 @@
     function refreshAuthorizations() {
       if (state.inviting) return;
       state.inviting = true;
-      setInitialLoading(true);
+      setInitialLoading(true, state.isAdmin ? 'Actualitzant totes les dades...' : 'Actualitzant autoritzacions...');
       updateInvitationControls();
       google.script.run
         .withSuccessHandler(function(result) {
@@ -394,6 +400,25 @@
           updateInvitationControls();
         })
         .refreshAuthorizationDataJson();
+    }
+
+    function applyAdminCacheRefreshResult(parsed) {
+      if (Array.isArray(parsed.groups)) {
+        state.groups = parsed.groups;
+        state.hasMultipleGroups = state.groups.length > 1;
+        if (state.selectedGroup !== '__all' && !state.groups.some(function(group) { return group.dinantiaGroupId === state.selectedGroup; })) {
+          state.selectedGroup = state.hasMultipleGroups ? '__all' : (state.groups[0] ? state.groups[0].dinantiaGroupId : '__all');
+        }
+        renderGroupFilter();
+      }
+      if (Array.isArray(parsed.students)) {
+        state.students = parsed.students;
+        renderStudents(filteredStudents());
+        state.contacts = [];
+        state.contactsLoadedScopes = {};
+        renderContacts([]);
+      }
+      state.isAdmin = parsed.isAdmin === true || state.isAdmin === true;
     }
 
     function renderAuthorizations() {
@@ -1399,8 +1424,9 @@
         .saveContactChanges(changes);
     }
 
-    function setInitialLoading(isLoading) {
+    function setInitialLoading(isLoading, message) {
       if (!initialLoading) return;
+      if (initialLoadingMessage) initialLoadingMessage.textContent = message || 'Carregant';
       initialLoading.classList.toggle('is-hidden', !isLoading);
     }
 

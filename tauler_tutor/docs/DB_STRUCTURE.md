@@ -487,12 +487,13 @@ Row 1 contains headers. Data starts in row 2.
 - Preferred behavior is one-time use.
 - When a token is consumed successfully, set `used_at` and `status` to `used`.
 - Expired tokens should be treated as invalid even if `status` still says `pending`.
-- Full expired-token cleanup must not run during user-facing token navigation. `GET ?token=...`, token validation, and form-forwarding POSTs must only inspect the current token row and, when that current row is expired, update only that row. Sheet-wide cleanup belongs in token creation, scheduled maintenance, or explicit admin/cache jobs.
+- Full expired-token cleanup must not run during user-facing token navigation. `GET ?token=...`, token validation, form-session creation, form-session validation, and form-forwarding actions must only inspect the current token row and, when that current row is expired, update only that row. Sheet-wide cleanup belongs in token creation, scheduled maintenance, or explicit admin/cache jobs.
 - Expired or already-used token errors must be shown with friendly Catalan messages that do not mention internal token terminology.
 - `status = revoked` must always block token use.
 - `sender` must be `parent`, `student`, or `tutor_print`.
 - `email` must be normalized by trimming and lowercasing before storage.
-- `metadata_json` may include context such as `alumne_nom`, `alumne_document`, `studyType`, `isAdult`, `is14Plus`, selected group name, `dades_alumnes_sheet`, read-only-mode flags, or short-lived tutor print payloads.
+- `metadata_json` may include context such as `alumne_nom`, `alumne_document`, `studyType`, `isAdult`, `is14Plus`, selected group name, `dades_alumnes_sheet`, read-only-mode flags, short-lived tutor print payloads, or `form_session` metadata.
+- `metadata_json.form_session` stores a mobile-safe continuation created after token validation. It contains only the form-session hash, expiry, and verified form payload; it must never contain the raw form-session id.
 - The token record must contain enough context to render the verified next step without trusting editable browser-submitted student data.
 - Panel-created invitation tokens should include normalized student context from the tutor-panel cache. The launcher should reuse that trusted metadata and avoid reopening `Dades alumnes` during token opening unless the metadata is incomplete.
 - This table is operational security data. The tutor panel may show only non-sensitive invitation summaries such as latest `created_at`, `email`, `sender`, and `status`.
@@ -568,6 +569,11 @@ Row 1 contains headers. Data starts in row 2.
 - Ignore empty chunks.
 - Preserve the listed order unless a UI sort explicitly changes display order.
 - Each parsed group must exist in `Dinantia` -> `dinantia_2_dades_alumnes`.
+- Special marker `ADMIN_PRIVILEGES` grants panel admin capabilities.
+- It may be assigned as a direct `Càrrega lectiva` -> `carrecs`.`carrec`, or included in `teachers_2_dinantia.dinantia_group_names` for one of the user's mapped responsibilities.
+- `ADMIN_PRIVILEGES` does not grant student visibility by itself.
+- If present inside `dinantia_group_names`, resolver logic must use it only as an admin marker and ignore it as a visible group.
+- A user with `ADMIN_PRIVILEGES` plus normal mapped responsibilities receives `isAdmin = true` in the tutor panel.
 
 ## Cache Tables
 
@@ -810,11 +816,12 @@ Resolution process:
 3. Read `carrecs`.`carrec` from every matching row.
 4. Match each `carrecs`.`carrec` to `Dinantia` -> `teachers_2_dinantia`.`carrec` when such a row exists.
 5. Ignore matched responsibilities that do not have a `teachers_2_dinantia` row.
-6. Fail only if none of the teacher's responsibilities has a Dinantia mapping.
-7. Parse each matched `teachers_2_dinantia`.`dinantia_group_names` into one or more Dinantia group names.
-8. Merge groups from all mapped responsibilities, removing duplicates while preserving first-seen order.
-9. For each group name, match `Dinantia` -> `dinantia_2_dades_alumnes`.`dinantia_group_name`.
-10. Read `dinantia_2_dades_alumnes`.`dades_alumnes_sheet` for the group.
+6. If any matched responsibility is `ADMIN_PRIVILEGES`, set `isAdmin = true`; this does not add visible groups.
+7. Fail only if none of the teacher's responsibilities has a Dinantia group mapping.
+8. Parse each matched `teachers_2_dinantia`.`dinantia_group_names` into one or more Dinantia group names.
+9. Merge groups from all mapped responsibilities, removing duplicates while preserving first-seen order.
+10. For each group name, match `Dinantia` -> `dinantia_2_dades_alumnes`.`dinantia_group_name`.
+11. Read `dinantia_2_dades_alumnes`.`dades_alumnes_sheet` for the group.
 
 String comparisons for `teachers_2_dinantia`.`carrec` to `carrecs`.`carrec`, and `carrecs`.`asignado?` to teacher full name, should trim surrounding whitespace.
 

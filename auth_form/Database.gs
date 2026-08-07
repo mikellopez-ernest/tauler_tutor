@@ -64,8 +64,206 @@ function saveAuthorizationResponse_(payload) {
 
   refreshAuthorizationsCache_();
   markLauncherTokenUsedForEditableSave_(payload || {}, tokenRecord);
+  var confirmationEmail = sendSubmissionConfirmationEmailSafely_(normalized, people, tokenRecord, updateExisting);
 
-  return { ok: true, resposta_id: respostaId, persones_autoritzades: people.length, updated: updateExisting };
+  return {
+    ok: true,
+    resposta_id: respostaId,
+    persones_autoritzades: people.length,
+    updated: updateExisting,
+    confirmation_email_sent: confirmationEmail.sent,
+    confirmation_email_error: confirmationEmail.error
+  };
+}
+
+function sendSubmissionConfirmationEmailSafely_(response, people, tokenRecord, updateExisting) {
+  try {
+    return { sent: sendSubmissionConfirmationEmail_(response, people, tokenRecord, updateExisting), error: '' };
+  } catch (error) {
+    console.error('Submission confirmation email failed: ' + (error && error.stack ? error.stack : error));
+    return { sent: false, error: String(error && error.message ? error.message : error || '') };
+  }
+}
+
+function sendSubmissionConfirmationEmail_(response, people, tokenRecord, updateExisting) {
+  var recipient = normalizeEmail_((tokenRecord && tokenRecord.email) || response.updated_by_email || response.submitted_by_email);
+  if (!recipient) return false;
+  var studentName = String(response.alumne_nom || '').trim();
+  var subject = FORM_CONFIG.confirmationEmailSubjectPrefix + (studentName ? ' - ' + studentName : '');
+  var body = buildSubmissionConfirmationPlainText_(response, people, updateExisting);
+  var htmlBody = buildSubmissionConfirmationHtml_(response, people, updateExisting);
+  MailApp.sendEmail({
+    to: recipient,
+    subject: subject,
+    body: body,
+    htmlBody: htmlBody,
+    name: FORM_CONFIG.confirmationEmailFromName
+  });
+  return true;
+}
+
+function buildSubmissionConfirmationPlainText_(response, people, updateExisting) {
+  var lines = [
+    'Benvolgut/da,',
+    '',
+    updateExisting
+      ? 'La teva resposta del formulari d’autoritzacions ha estat actualitzada correctament.'
+      : 'La teva resposta del formulari d’autoritzacions ha estat enregistrada correctament.',
+    '',
+    'Alumne/a: ' + displayValue_(response.alumne_nom),
+    'Referència: ' + displayValue_(response.resposta_id),
+    'Data: ' + displayValue_(response.data_hora_enviament || response.updated_at),
+    '',
+    'Resum de respostes:'
+  ];
+  submissionEmailSections_(response, people).forEach(function(section) {
+    lines.push('');
+    lines.push(section.title);
+    section.items.forEach(function(item) {
+      lines.push('- ' + item.label + ': ' + item.value);
+    });
+  });
+  lines.push('');
+  lines.push('Si detectes alguna errada o tens qualsevol dubte, posa’t en contacte amb el centre: ' + FORM_DEFAULTS.centre_email);
+  lines.push('');
+  lines.push('Institut Ernest Lluch i Martín');
+  return lines.join('\n');
+}
+
+function buildSubmissionConfirmationHtml_(response, people, updateExisting) {
+  var title = updateExisting ? 'Resposta actualitzada' : 'Resposta enregistrada';
+  var sectionsHtml = submissionEmailSections_(response, people).map(function(section) {
+    var items = section.items.map(function(item) {
+      return '<tr><th style="width:44%;text-align:left;vertical-align:top;padding:8px;border-bottom:1px solid #e5e7eb;color:#374151;font-weight:600;">'
+        + escapeHtml_(item.label)
+        + '</th><td style="vertical-align:top;padding:8px;border-bottom:1px solid #e5e7eb;">'
+        + escapeHtml_(item.value)
+        + '</td></tr>';
+    }).join('');
+    return '<h2 style="font-size:18px;margin:28px 0 8px;color:#111827;">' + escapeHtml_(section.title) + '</h2>'
+      + '<table role="presentation" style="width:100%;border-collapse:collapse;font-size:14px;">' + items + '</table>';
+  }).join('');
+  return '<!doctype html><html lang="ca"><body style="margin:0;background:#f5f7fb;color:#17202a;font-family:Arial,sans-serif;line-height:1.5;">'
+    + '<div style="max-width:820px;margin:0 auto;padding:24px;">'
+    + '<div style="background:#fff;border:1px solid #d9e0e8;border-radius:8px;padding:26px;">'
+    + '<h1 style="font-size:24px;margin:0 0 12px;color:#111827;">' + escapeHtml_(title) + '</h1>'
+    + '<p style="margin:0 0 18px;">' + escapeHtml_(updateExisting ? 'La teva resposta del formulari d’autoritzacions ha estat actualitzada correctament.' : 'La teva resposta del formulari d’autoritzacions ha estat enregistrada correctament.') + '</p>'
+    + '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:14px;margin-bottom:20px;">'
+    + '<div><strong>Alumne/a:</strong> ' + escapeHtml_(displayValue_(response.alumne_nom)) + '</div>'
+    + '<div><strong>Referència:</strong> ' + escapeHtml_(displayValue_(response.resposta_id)) + '</div>'
+    + '<div><strong>Data:</strong> ' + escapeHtml_(displayValue_(response.data_hora_enviament || response.updated_at)) + '</div>'
+    + '</div>'
+    + sectionsHtml
+    + '<p style="margin-top:24px;">Si detectes alguna errada o tens qualsevol dubte, posa’t en contacte amb el centre: <a href="mailto:' + escapeHtml_(FORM_DEFAULTS.centre_email) + '">' + escapeHtml_(FORM_DEFAULTS.centre_email) + '</a>.</p>'
+    + '<p style="margin:22px 0 0;">Institut Ernest Lluch i Martín</p>'
+    + '</div></div></body></html>';
+}
+
+function submissionEmailSections_(response, people) {
+  return [
+    {
+      title: 'Identificació',
+      items: [
+        emailItem_('Idioma del formulari', response.idioma_formulari),
+        emailItem_('Tipus d’alumne/a', response.tipus_alumne),
+        emailItem_('Curs', [response.curs_inici, response.curs_fi].filter(Boolean).join('-')),
+        emailItem_('Centre', response.centre_nom),
+        emailItem_('Codi del centre', response.centre_codi),
+        emailItem_('Municipi', response.municipi),
+        emailItem_('Nom i cognoms de l’alumne/a', response.alumne_nom),
+        emailItem_('DNI/NIE/Passaport de l’alumne/a', response.alumne_document),
+        emailItem_('Nom i cognoms de la persona que respon', response.responent_nom_sencer),
+        emailItem_('Telèfon de la persona que respon', response.responent_telefon),
+        emailItem_('Nom i cognoms del pare, mare o tutor/a legal', response.responsable_nom),
+        emailItem_('DNI/NIE/Passaport del pare, mare o tutor/a legal', response.responsable_document)
+      ]
+    },
+    {
+      title: 'Autoritzacions per a l’estada de l’alumnat al centre',
+      items: [
+        emailItem_('Sortida del centre fora de l’horari lectiu', response.sortida_sola),
+        emailItem_('Sortida del centre en hores d’esbarjo', response.sortida_esbarjo),
+        emailItem_('Entrada o sortida en situacions imprevistes', response.sortida_imprevistos),
+        emailItem_('Persones autoritzades per recollir l’alumne/a', formatAuthorizedPeopleForEmail_(people)),
+        emailItem_('Comunicació acadèmica a una tercera persona', response.comunicacio_academica),
+        emailItem_('Persona de contacte acadèmic', response.acad_contacte_nom),
+        emailItem_('Email de contacte acadèmic', response.acad_contacte_email),
+        emailItem_('Relació del contacte acadèmic', response.acad_contacte_relacio),
+        emailItem_('Sortides pedagògiques dins del terme municipal', response.sortides_municipi)
+      ]
+    },
+    {
+      title: 'Publicacions: protecció de dades i propietat intel·lectual',
+      items: [
+        emailItem_('Imatge/veu en intranet amb accés restringit', response.imatge_intranet),
+        emailItem_('Imatge/veu a Internet amb accés obert', response.imatge_web),
+        emailItem_('Imatge/veu en plataformes no administrades pel centre', response.imatge_externa),
+        emailItem_('Plataformes o accés', response.plataformes_externes),
+        emailItem_('Publicació d’inicials de l’alumne/a i del centre', response.publicacio_inicials),
+        emailItem_('Material elaborat en plataformes d’accés obert', response.obra_oberta),
+        emailItem_('Obra elaborada en espais de comunicació del centre', response.obra_centre),
+        emailItem_('Preservació a la biblioteca física o digital del centre', response.obra_biblioteca),
+        emailItem_('Preservació al repositori del Departament', response.obra_repositori)
+      ]
+    },
+    {
+      title: 'Plataformes i eines digitals',
+      items: [
+        emailItem_('Declaració sobre plataformes i eines digitals', response.declaracio_plataformes)
+      ]
+    },
+    {
+      title: 'Autoritzacions de salut',
+      items: [
+        emailItem_('Persona de contacte en cas d’emergència', response.emergencia_nom),
+        emailItem_('Telèfon d’emergència', response.emergencia_telefon),
+        emailItem_('Relació de la persona d’emergència', response.emergencia_relacio),
+        emailItem_('Comunicació de dades de salut rellevants', response.comunicacio_salut),
+        emailItem_('Problemes de salut diagnosticats', response.problemes_salut),
+        emailItem_('Altres aspectes de salut', response.altres_salut),
+        emailItem_('Medicació en horari lectiu', response.medicacio),
+        emailItem_('Posologia', response.posologia),
+        emailItem_('Dosi', response.dosi),
+        emailItem_('Autorització d’administració de medicació', response.administracio_medicacio),
+        emailItem_('Autorització d’administració de paracetamol', response.paracetamol)
+      ]
+    },
+    {
+      title: 'Compromisos i signatures',
+      items: [
+        emailItem_('Carta de compromís educatiu acceptada', response.carta_compromis_acceptada),
+        emailItem_('Consentiment particular de telèfon mòbil', response.consentiment_mobil),
+        emailItem_('Lloc', response.lloc),
+        emailItem_('Data de signatura', response.data_signatura),
+        emailItem_('Signatura del responsable', response.signatura_responsable),
+        emailItem_('Signatura de l’alumne/a', response.signatura_alumne)
+      ]
+    }
+  ].map(function(section) {
+    section.items = section.items.filter(function(item) { return item.value !== '-'; });
+    if (!section.items.length) section.items = [emailItem_('Sense dades registrades', '')];
+    return section;
+  });
+}
+
+function emailItem_(label, value) {
+  return { label: label, value: displayValue_(value) };
+}
+
+function displayValue_(value) {
+  if (value === true) return 'Sí';
+  if (value === false) return 'No';
+  var text = String(value === null || value === undefined ? '' : value).trim();
+  return text || '-';
+}
+
+function formatAuthorizedPeopleForEmail_(people) {
+  if (!people || !people.length) return '';
+  return people.map(function(person) {
+    var name = String(person.nom_sencer || '').trim();
+    var relation = String(person.qualitat_de || '').trim();
+    return [name, relation].filter(Boolean).join(' - ');
+  }).filter(Boolean).join('; ');
 }
 
 function updateVerifiedRespondentContact_(payload, tokenRecord) {
@@ -190,6 +388,11 @@ function normalizeBooleanForSheet_(value) {
 function validateLauncherTokenForForm_(prefill) {
   var mode = String(prefill.form_mode || prefill.mode || '').trim();
   if (!mode) return null;
+  if (String(prefill.form_session || '').trim()) {
+    var sessionRecord = validateFormSession_(prefill.form_session);
+    assertTokenMatchesPayload_(sessionRecord, prefill);
+    return sessionRecord;
+  }
   var token = String(prefill.launcher_token || '').trim();
   if (!token) throw new Error('Missing launcher verification token.');
   var record = validateLauncherToken_(token);
@@ -201,14 +404,69 @@ function validateLauncherTokenForSave_(payload) {
   var mode = String(payload.form_mode || payload.mode || '').trim();
   if (!mode) throw new Error('The authorization form must be opened through the verified launcher before it can be submitted.');
   if (['new_parent', 'new_student_adult', 'edit_owner'].indexOf(mode) === -1) return null;
-  var token = String(payload.launcher_token || '').trim();
-  if (!token) throw new Error('Missing launcher verification token.');
-  var record = validateLauncherToken_(token);
+  var record;
+  if (String(payload.form_session || '').trim()) {
+    record = validateFormSession_(payload.form_session);
+  } else {
+    var token = String(payload.launcher_token || '').trim();
+    if (!token) throw new Error('Missing launcher verification token.');
+    record = validateLauncherToken_(token);
+  }
   assertTokenMatchesPayload_(record, payload);
   if (mode === 'edit_owner' && codeKey_(record.dinantia_account_id) !== codeKey_(payload.verified_dinantia_account_id)) {
     throw new Error('Launcher token does not match the original respondent.');
   }
   return record;
+}
+
+function resolveFormSessionPrefillIfPresent_(prefill) {
+  var rawSession = String(prefill && prefill.form_session || '').trim();
+  if (!rawSession) return prefill || {};
+  var record = validateFormSession_(rawSession);
+  var metadata = parseJsonSafe_(record.metadata_json);
+  var session = metadata.form_session || {};
+  var payload = Object.assign({}, session.payload || {});
+  payload.form_session = rawSession;
+  if (!payload.form_mode && payload.mode) payload.form_mode = payload.mode;
+  if (!payload.id_student && record.student_id) payload.id_student = record.student_id;
+  if (!payload.resposta_id && record.resposta_id) payload.resposta_id = record.resposta_id;
+  payload.verified_actor_type = record.sender === 'student' ? 'student' : 'parent';
+  payload.verified_dinantia_account_id = record.dinantia_account_id || '';
+  payload.verified_email = record.email || '';
+  if (record.sender === 'parent') {
+    if (!payload.responent_nom_sencer && metadata.parent_name) payload.responent_nom_sencer = metadata.parent_name;
+    if (!payload.responent_telefon && metadata.parent_phone) payload.responent_telefon = metadata.parent_phone;
+    if (!payload.responsable_nom && metadata.parent_name) payload.responsable_nom = metadata.parent_name;
+  }
+  return normalizePrefillAliases_(payload);
+}
+
+function validateFormSession_(rawSession) {
+  var record = findFormSessionRecord_(rawSession);
+  if (record.status === 'revoked') throw new Error('Launcher token revoked.');
+  if (record.status === 'used') throw new Error('Launcher token already used.');
+  var tokenExpires = new Date(record.expires_at).getTime();
+  if (tokenExpires < new Date().getTime()) throw new Error('Launcher token expired.');
+  var session = (parseJsonSafe_(record.metadata_json).form_session || {});
+  var sessionExpires = new Date(session.expires_at).getTime();
+  if (sessionExpires && sessionExpires < new Date().getTime()) throw new Error('Launcher token expired.');
+  return record;
+}
+
+function findFormSessionRecord_(rawSession) {
+  var hash = hashLauncherToken_(rawSession);
+  var sheet = openTableSheetFromRegistry_(FORM_CONFIG.tableAuthorizations, FORM_CONFIG.sheetVerificationTokens);
+  var h = getHeaderMap_(sheet);
+  requireHeaders_(h, ['token_hash', 'status', 'expires_at', 'sender', 'email', 'student_id', 'resposta_id', 'metadata_json'], FORM_CONFIG.sheetVerificationTokens);
+  var values = sheet.getDataRange().getValues();
+  for (var i = values.length - 1; i >= 1; i--) {
+    var record = objectFromRow_(values[i], h);
+    var session = (parseJsonSafe_(record.metadata_json).form_session || {});
+    if (String(session.session_hash || '').trim() !== hash) continue;
+    record._rowNumber = i + 1;
+    return record;
+  }
+  throw new Error('Launcher token not found.');
 }
 
 function validateLauncherToken_(rawToken) {
@@ -252,7 +510,12 @@ function assertTokenMatchesPayload_(record, payload) {
 function markLauncherTokenUsedForEditableSave_(payload, tokenRecord) {
   var mode = String(payload.form_mode || payload.mode || '').trim();
   if (['new_parent', 'new_student_adult', 'edit_owner'].indexOf(mode) === -1) return;
-  var record = tokenRecord || validateLauncherToken_(String(payload.launcher_token || '').trim());
+  var record = tokenRecord;
+  if (!record) {
+    record = String(payload.form_session || '').trim()
+      ? validateFormSession_(payload.form_session)
+      : validateLauncherToken_(String(payload.launcher_token || '').trim());
+  }
   var sheet = openTableSheetFromRegistry_(FORM_CONFIG.tableAuthorizations, FORM_CONFIG.sheetVerificationTokens);
   var h = getHeaderMap_(sheet);
   sheet.getRange(record._rowNumber, h.used_at + 1).setValue(Utilities.formatDate(new Date(), FORM_CONFIG.timezone, "yyyy-MM-dd'T'HH:mm:ssXXX"));
@@ -283,6 +546,14 @@ function openTableSheetFromRegistry_(tableName, sheetName) {
 function hashLauncherToken_(rawToken) {
   var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(rawToken));
   return Utilities.base64EncodeWebSafe(bytes);
+}
+
+function parseJsonSafe_(value) {
+  try {
+    return JSON.parse(String(value || '{}')) || {};
+  } catch (error) {
+    return {};
+  }
 }
 
 function extractAuthorizedPeople_(payload) {

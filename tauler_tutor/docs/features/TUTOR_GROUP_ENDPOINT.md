@@ -77,16 +77,17 @@ The endpoint must resolve the tutor group with this process:
 8. If no `carrec` row is found, render the error page.
 9. For each matched responsibility, find a row in `Dinantia` -> `teachers_2_dinantia` where `carrec` matches `carrecs.carrec`, when such a row exists.
 10. Ignore responsibilities that have no `teachers_2_dinantia` row.
-11. If none of the teacher's responsibilities has a Dinantia mapping, render the error page.
-12. Parse each mapped `teachers_2_dinantia.dinantia_group_names` as a comma-separated list.
-13. Trim spaces around each group and ignore empty chunks.
-14. Merge all groups from all mapped responsibilities, removing duplicates while preserving first-seen order.
-15. For each group, find a row in `Dinantia` -> `dinantia_2_dades_alumnes` where `dinantia_group_name` matches the group.
-16. If any referenced group is missing, render a clear configuration error page.
-17. Read `dinantia_2_dades_alumnes.dades_alumnes_sheet` as the sheet name inside the `Dades alumnes` spreadsheet for that group.
-18. Read students for the resolved groups from `Dinantia` -> `students_cache`.
-19. If the cache is empty or unavailable during transition, the app may temporarily fall back to the live Dinantia and `Dades alumnes` flow.
-20. Show the main page.
+11. If any matched responsibility is `ADMIN_PRIVILEGES`, or a matched `teachers_2_dinantia.dinantia_group_names` contains `ADMIN_PRIVILEGES`, return `isAdmin = true`; this does not grant visible groups by itself.
+12. If none of the teacher's responsibilities has a Dinantia group mapping, render the error page.
+13. Parse each mapped `teachers_2_dinantia.dinantia_group_names` as a comma-separated list. If `ADMIN_PRIVILEGES` appears here by mistake, ignore it as a visible group.
+14. Trim spaces around each group and ignore empty chunks.
+15. Merge all groups from all mapped responsibilities, removing duplicates while preserving first-seen order.
+16. For each group, find a row in `Dinantia` -> `dinantia_2_dades_alumnes` where `dinantia_group_name` matches the group.
+17. If any referenced group is missing, render a clear configuration error page.
+18. Read `dinantia_2_dades_alumnes.dades_alumnes_sheet` as the sheet name inside the `Dades alumnes` spreadsheet for that group.
+19. Read students for the resolved groups from `Dinantia` -> `students_cache`.
+20. If the cache is empty or unavailable during transition, the app may temporarily fall back to the live Dinantia and `Dades alumnes` flow.
+21. Show the main page.
 
 String comparisons should trim surrounding whitespace.
 

@@ -28,6 +28,7 @@ function loadInitialData_(debug) {
       students: students,
       contacts: [],
       showBirthdate: true,
+      isAdmin: tutorGroup.isAdmin === true,
       formLauncherUrl: APP_CONFIG.formLauncherUrl
     };
   } catch (error) {

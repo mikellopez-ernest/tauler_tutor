@@ -1,6 +1,6 @@
-function doGet() {
+function doGet(e) {
   try {
-    return renderForm_({});
+    return renderForm_(parsePrefillFromEvent_(e));
   } catch (error) {
     return renderFormError_(error);
   }
@@ -20,12 +20,31 @@ function include(filename) {
 
 function renderForm_(prefill) {
   var template = HtmlService.createTemplateFromFile('Index');
-  template.initialFormDataJson = JSON.stringify(buildFastInitialFormData_(prefill || {}));
+  var initial = buildFastInitialFormData_(prefill || {});
+  if (prefill && String(prefill.debug || '').trim() === '1') {
+    initial.__debug_context = {
+      has_form_session: !!initial.form_session,
+      has_form_mode: !!initial.form_mode,
+      has_verified_email: !!initial.verified_email,
+      has_parent_name: !!initial.responent_nom_sencer,
+      has_parent_phone: !!initial.responent_telefon,
+      parent_name_preview: maskDebugValue_(initial.responent_nom_sencer),
+      parent_phone_preview: maskDebugValue_(initial.responent_telefon),
+      mode: initial.form_mode || ''
+    };
+  }
+  template.initialFormDataJson = JSON.stringify(initial);
   return template
     .evaluate()
     .setTitle('Autoritzacions, declaracions i comunicacions')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function maskDebugValue_(value) {
+  var text = String(value === null || value === undefined ? '' : value).trim();
+  if (!text) return '';
+  return text.slice(0, 2) + '...' + text.slice(Math.max(2, text.length - 2));
 }
 
 function renderFormError_(error) {
@@ -74,12 +93,15 @@ function resolveInitialFormData(payload) {
 
 function buildFastInitialFormData_(prefill) {
   var normalized = normalizePrefillAliases_(prefill || {});
+  if (normalized.form_session) {
+    return resolveInitialFormData_(normalized);
+  }
   var initial = Object.assign({}, FORM_DEFAULTS);
   var accepted = [
     'studyType', 'isAdult', 'is14Plus', 'tipus_alumne', 'alumne_nom', 'alumne_document', 'id_student',
     'responent_nom_sencer', 'responent_telefon', 'responsable_nom',
     'form_mode', 'mode', 'resposta_id', 'verified_actor_type', 'verified_dinantia_account_id',
-    'verified_email', 'launcher_token'
+    'verified_email', 'launcher_token', 'form_session'
   ];
   accepted.forEach(function(key) {
     if (normalized[key] !== undefined && normalized[key] !== null && String(normalized[key]).trim() !== '') {
@@ -87,6 +109,7 @@ function buildFastInitialFormData_(prefill) {
     }
   });
   if (!initial.form_mode && initial.mode) initial.form_mode = initial.mode;
+  if (!initial.form_mode && initial.form_session) initial.__async_initial_payload = normalized;
   applyDerivedModelDefaults_(initial);
   if (!initial.data_signatura) {
     initial.data_signatura = Utilities.formatDate(new Date(), FORM_CONFIG.timezone, 'yyyy-MM-dd');
@@ -99,12 +122,13 @@ function buildFastInitialFormData_(prefill) {
 }
 
 function resolveInitialFormData_(prefill) {
+  prefill = resolveFormSessionPrefillIfPresent_(prefill || {});
   var initial = Object.assign({}, FORM_DEFAULTS);
   var accepted = [
     'studyType', 'isAdult', 'is14Plus', 'tipus_alumne', 'alumne_nom', 'alumne_document', 'id_student',
     'responent_nom_sencer', 'responent_telefon', 'responsable_nom',
     'form_mode', 'mode', 'resposta_id', 'verified_actor_type', 'verified_dinantia_account_id',
-    'verified_email', 'launcher_token'
+    'verified_email', 'launcher_token', 'form_session'
   ];
   accepted.forEach(function(key) {
     if (prefill[key] !== undefined && prefill[key] !== null && String(prefill[key]).trim() !== '') {
@@ -131,7 +155,7 @@ function resolveInitialFormData_(prefill) {
     if (initial.mode && !initial.form_mode) initial.form_mode = initial.mode;
     if (prefill.form_mode) initial.form_mode = prefill.form_mode;
     if (prefill.mode) initial.form_mode = prefill.mode;
-    ['verified_actor_type', 'verified_dinantia_account_id', 'verified_email', 'launcher_token'].forEach(function(key) {
+    ['verified_actor_type', 'verified_dinantia_account_id', 'verified_email', 'launcher_token', 'form_session'].forEach(function(key) {
       if (prefill[key] !== undefined && prefill[key] !== null) initial[key] = normalizePrefillValue_(key, prefill[key]);
     });
   }
@@ -221,5 +245,6 @@ function authorizeServices() {
   SpreadsheetApp.openById(requireRegistryEntry_(registry, FORM_CONFIG.tableDinantia)).getSheetByName(FORM_CONFIG.sheetAuthorizationsCache).getName();
   PropertiesService.getScriptProperties().getProperties();
   UrlFetchApp.fetch('https://www.google.com/generate_204', { muteHttpExceptions: true });
+  MailApp.getRemainingDailyQuota();
   return 'Authorization OK';
 }
