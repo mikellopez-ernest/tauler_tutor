@@ -32,8 +32,18 @@
 
       <main class="main">
         <div class="group-filter is-hidden" id="group-filter">
-          <label for="group-select">Grups</label>
-          <select id="group-select"></select>
+          <label class="group-filter-control" for="group-select">Grups</label>
+          <select class="group-filter-control" id="group-select"></select>
+          <div class="authorization-status-filter is-hidden" id="authorization-status-filter">
+            <label for="authorization-status-select">Estat</label>
+            <select id="authorization-status-select">
+              <option value="__all">Tots els estats</option>
+              <option value="pending_parents">Pendent</option>
+              <option value="pending_tutors">Pendent tutors</option>
+              <option value="pending_student">Pendent alumne</option>
+              <option value="complete">Complet</option>
+            </select>
+          </div>
         </div>
 
         <section class="view active" id="view-inici">

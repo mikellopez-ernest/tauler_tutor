@@ -8,6 +8,7 @@
       invitations: [],
       groups: [],
       selectedGroup: '__all',
+      selectedAuthorizationStatus: '__all',
       hasMultipleGroups: false,
       contactsLoadedScopes: {},
       contactsLoading: false,
@@ -30,10 +31,13 @@
     var authorizationTableWrap = document.getElementById('authorizations-table-wrap');
     var groupFilter = document.getElementById('group-filter');
     var groupSelect = document.getElementById('group-select');
+    var authorizationStatusFilter = document.getElementById('authorization-status-filter');
+    var authorizationStatusSelect = document.getElementById('authorization-status-select');
 
     bindNavigation();
     bindSorting();
     bindGroupFilter();
+    bindAuthorizationStatusFilter();
     bindSaveButton();
     bindBulkInviteButton();
     bindRefreshAuthButton();
@@ -155,22 +159,25 @@
         column.classList.toggle('is-hidden', !state.hasMultipleGroups);
       });
       if (!groupFilter || !groupSelect) return;
-      groupFilter.classList.toggle('is-hidden', !state.hasMultipleGroups);
-      groupSelect.textContent = '';
-      if (!state.hasMultipleGroups) return;
-
-      var all = document.createElement('option');
-      all.value = '__all';
-      all.textContent = 'Tots els grups';
-      groupSelect.appendChild(all);
-
-      state.groups.forEach(function(group) {
-        var option = document.createElement('option');
-        option.value = group.dinantiaGroupId || '';
-        option.textContent = group.dinantiaGroupId || '';
-        groupSelect.appendChild(option);
+      document.querySelectorAll('.group-filter-control').forEach(function(control) {
+        control.classList.toggle('is-hidden', !state.hasMultipleGroups);
       });
-      groupSelect.value = state.selectedGroup;
+      groupSelect.textContent = '';
+      if (state.hasMultipleGroups) {
+        var all = document.createElement('option');
+        all.value = '__all';
+        all.textContent = 'Tots els grups';
+        groupSelect.appendChild(all);
+
+        state.groups.forEach(function(group) {
+          var option = document.createElement('option');
+          option.value = group.dinantiaGroupId || '';
+          option.textContent = group.dinantiaGroupId || '';
+          groupSelect.appendChild(option);
+        });
+        groupSelect.value = state.selectedGroup;
+      }
+      updateTopFilterVisibility();
     }
 
     function bindGroupFilter() {
@@ -178,6 +185,14 @@
       groupSelect.addEventListener('change', function() {
         state.selectedGroup = groupSelect.value || '__all';
         rerenderCurrentData();
+      });
+    }
+
+    function bindAuthorizationStatusFilter() {
+      if (!authorizationStatusSelect) return;
+      authorizationStatusSelect.addEventListener('change', function() {
+        state.selectedAuthorizationStatus = authorizationStatusSelect.value || '__all';
+        renderAuthorizations();
       });
     }
 
@@ -425,9 +440,9 @@
       var tbody = document.getElementById('authorizations-table');
       if (!tbody) return;
       tbody.textContent = '';
-      var visibleStudents = filteredStudents();
-      document.getElementById('authorizations-count').textContent = visibleStudents.length + ' alumnes';
       var latestByStudent = latestAuthorizationsByStudent_();
+      var visibleStudents = filteredAuthorizationStudents_(latestByStudent);
+      document.getElementById('authorizations-count').textContent = visibleStudents.length + ' alumnes';
       var latestInvitations = latestInvitationsByStudent_();
       visibleStudents.forEach(function(student) {
         var auth = latestByStudent[String(student.id || '').trim()] || null;
@@ -509,16 +524,27 @@
 
     function authorizationStatus(student, auth) {
       var adult = isAdultStudent(student);
-      if (!auth) return adult ? { label: 'Pendent alumne', target: 'student', sortKey: '2' } : { label: 'Pendent', target: 'parents', sortKey: '0' };
+      if (!auth) return adult
+        ? { label: 'Pendent alumne', target: 'student', sortKey: '2', filterKey: 'pending_student' }
+        : { label: 'Pendent', target: 'parents', sortKey: '0', filterKey: 'pending_parents' };
       if (adult) {
-        if (String(auth.tipus_alumne || '').trim() === 'major18') return { label: 'Complet', target: '', sortKey: '3' };
-        if (parseBooleanValue(auth.signatura_alumne) !== true) return { label: 'Pendent alumne', target: 'student', sortKey: '2' };
-        return { label: 'Complet', target: '', sortKey: '3' };
+        if (String(auth.tipus_alumne || '').trim() === 'major18') return { label: 'Complet', target: '', sortKey: '3', filterKey: 'complete' };
+        if (parseBooleanValue(auth.signatura_alumne) !== true) return { label: 'Pendent alumne', target: 'student', sortKey: '2', filterKey: 'pending_student' };
+        return { label: 'Complet', target: '', sortKey: '3', filterKey: 'complete' };
       }
-      if (parseBooleanValue(auth.signatura_responsable) !== true) return { label: 'Pendent tutors', target: 'parents', sortKey: '1' };
-      if (String(auth.tipus_alumne || '').trim() === 'eso_menor14') return { label: 'Complet', target: '', sortKey: '3' };
-      if (parseBooleanValue(auth.signatura_alumne) !== true) return { label: 'Pendent alumne', target: 'student', sortKey: '2' };
-      return { label: 'Complet', target: '', sortKey: '3' };
+      if (parseBooleanValue(auth.signatura_responsable) !== true) return { label: 'Pendent tutors', target: 'parents', sortKey: '1', filterKey: 'pending_tutors' };
+      if (String(auth.tipus_alumne || '').trim() === 'eso_menor14') return { label: 'Complet', target: '', sortKey: '3', filterKey: 'complete' };
+      if (parseBooleanValue(auth.signatura_alumne) !== true) return { label: 'Pendent alumne', target: 'student', sortKey: '2', filterKey: 'pending_student' };
+      return { label: 'Complet', target: '', sortKey: '3', filterKey: 'complete' };
+    }
+
+    function filteredAuthorizationStudents_(latestByStudent) {
+      var selectedStatus = state.selectedAuthorizationStatus || '__all';
+      return filteredStudents().filter(function(student) {
+        if (selectedStatus === '__all') return true;
+        var auth = latestByStudent[String(student.id || '').trim()] || null;
+        return authorizationStatus(student, auth).filterKey === selectedStatus;
+      });
     }
 
     function isAdultStudent(student) {
@@ -966,7 +992,7 @@
 
     function pendingInvitationRequests() {
       var latestByStudent = latestAuthorizationsByStudent_();
-      return filteredStudents().map(function(student) {
+      return filteredAuthorizationStudents_(latestByStudent).map(function(student) {
         var auth = latestByStudent[String(student.id || '').trim()] || null;
         var status = authorizationStatus(student, auth);
         return status.target ? buildInvitationRequest(student, auth, status.target) : null;
@@ -1074,6 +1100,19 @@
         button.disabled = state.inviting;
       });
       updateAuthorizationFloatingScroll();
+      updateAuthorizationStatusFilterVisibility();
+    }
+
+    function updateAuthorizationStatusFilterVisibility() {
+      if (!authorizationStatusFilter) return;
+      authorizationStatusFilter.classList.toggle('is-hidden', !isViewActive('autoritzacions'));
+      if (authorizationStatusSelect) authorizationStatusSelect.value = state.selectedAuthorizationStatus || '__all';
+      updateTopFilterVisibility();
+    }
+
+    function updateTopFilterVisibility() {
+      if (!groupFilter) return;
+      groupFilter.classList.toggle('is-hidden', !state.hasMultipleGroups && !isViewActive('autoritzacions'));
     }
 
     function showAuthorizationsError(message) {
@@ -1156,6 +1195,7 @@
           });
 
           updateSaveButton();
+          updateAuthorizationStatusFilterVisibility();
         });
       });
     }

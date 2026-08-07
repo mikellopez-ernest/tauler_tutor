@@ -103,16 +103,19 @@
   .group-filter {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
+    flex-wrap: wrap;
     margin: 0 0 22px;
   }
 
-  .group-filter label {
+  .group-filter label,
+  .authorization-status-filter label {
     color: var(--muted);
     font-weight: 800;
   }
 
-  .group-filter select {
+  .group-filter select,
+  .authorization-status-filter select {
     min-width: 220px;
     border: 1px solid var(--line);
     border-radius: 6px;
@@ -121,6 +124,12 @@
     font: inherit;
     font-weight: 700;
     padding: 9px 10px;
+  }
+
+  .authorization-status-filter {
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
 
   .eyebrow {

@@ -22,6 +22,20 @@ The page must reuse the students already loaded in memory by the tutor endpoint.
 
 If the tutor endpoint resolved more than one Dinantia group, the shared `Grups` selector filters this page too. The authorization matrix must show only students in the selected group, or all loaded students when `Tots els grups` is selected.
 
+The page must also show an `Estat` selector beside the filter area. This selector is specific to the `Autoritzacions` page and filters the already loaded rows client-side.
+
+Status options:
+
+| Value | Label | Meaning |
+| --- | --- | --- |
+| `__all` | `Tots els estats` | Show every authorization state. |
+| `pending_parents` | `Pendent` | No active authorization row exists and the next action is parent/tutor invitation. |
+| `pending_tutors` | `Pendent tutors` | A row exists but the responsible adult signature is missing. |
+| `pending_student` | `Pendent alumne` | Student confirmation or adult-student submission is pending. |
+| `complete` | `Complet` | The authorization flow is complete for the student. |
+
+The authorization counter must count students after both the group filter and the status filter are applied. The bulk invitation button must also act only on rows visible after both filters are applied.
+
 ## Data Source
 
 The section reads the registry-backed table:
@@ -288,7 +302,7 @@ After confirmation, it sends invitations for every visible pending row:
 - Parent pending rows use `Enviar a tutors`.
 - Student pending rows use `Enviar a alumne`.
 - Complete rows are ignored.
-- If a group filter is active, only the currently visible group rows are included.
+- If a group or status filter is active, only the currently visible rows are included.
 
 The UI must show a concise Catalan summary of sent, skipped, and failed invitations.
 
