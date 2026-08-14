@@ -1,6 +1,6 @@
 # Dinantia Group Students Lookup Example
 
-This example shows the full lookup path between the registry-backed spreadsheet database and the Dinantia API.
+This example shows an old manual lookup path between the registry-backed spreadsheet database and the Dinantia API.
 
 It is a temporary/manual test function, not production architecture.
 
@@ -14,7 +14,7 @@ Given a teacher email:
 2. If the teacher has `SUBST?` true, resolve the main teacher through `Dades de professors` -> `leave_absence`.
 3. Build the resolved teacher full name from `NOM COGNOM1 COGNOM2`.
 4. Find the teacher's `carrec` through `Càrrega lectiva` -> `carrecs`.`asignado?`.
-5. Find the Dinantia group ID through `Dinantia` -> `class_groups`.`tutor_carrec`.
+5. Historical-only behavior: find the Dinantia group ID through the former `Dinantia` -> `class_groups`.`tutor_carrec` mapping. Current production code must use `teachers_2_dinantia`, `dinantia_2_dades_alumnes`, and cache tables instead.
 6. Call Dinantia `GET /v1.2/accounts/index` and return students whose `groups.member` includes that Dinantia group ID.
 
 ## Required Script Properties

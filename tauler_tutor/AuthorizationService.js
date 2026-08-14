@@ -38,6 +38,7 @@ function readAuthorizationRows_() {
     'sortida_sola','sortida_esbarjo','sortida_imprevistos','sortides_municipi','comunicacio_academica','comunicacio_salut','declaracio_plataformes',
     'imatge_intranet','imatge_web','imatge_externa','publicacio_inicials','obra_oberta','obra_centre','obra_biblioteca','obra_repositori',
     'administracio_medicacio','paracetamol','carta_compromis_acceptada','consentiment_mobil','problemes_salut','altres_salut','signatura_responsable','signatura_alumne',
+    'emergencia_nom','emergencia_telefon','emergencia_relacio',
     'invalidated','invalidated_at','invalidated_by_email','invalidated_reason'
   ];
   var headers = requireHeaders_(sheet, required, TABLES.authorizations + ' -> ' + SHEETS.authorizations);
@@ -138,7 +139,7 @@ function invalidateAuthorizationResponse_(request) {
   var registry = loadTableRegistry_();
   var sheet = openTableSheet_(registry, TABLES.authorizations, SHEETS.authorizations);
   var headers = requireHeaders_(sheet, [
-    'resposta_id', 'invalidated', 'invalidated_at', 'invalidated_by_email', 'invalidated_reason'
+    'resposta_id', 'id_student', 'invalidated', 'invalidated_at', 'invalidated_by_email', 'invalidated_reason'
   ], TABLES.authorizations + ' -> ' + SHEETS.authorizations);
   var values = sheet.getDataRange().getValues();
   for (var i = 1; i < values.length; i++) {
@@ -149,6 +150,7 @@ function invalidateAuthorizationResponse_(request) {
     sheet.getRange(rowNumber, headers.invalidated_by_email + 1).setValue(getCurrentUserEmail_());
     sheet.getRange(rowNumber, headers.invalidated_reason + 1).setValue(reason);
     refreshAuthorizationsCache_();
+    removeEmergencyContactCacheForStudent_(String(values[i][headers.id_student] || '').trim());
     return { ok: true, resposta_id: respostaId };
   }
   throw new AppError('No es pot invalidar el formulari: no s ha trobat la resposta.', { code: 'AUTH_INVALIDATE_NOT_FOUND' });

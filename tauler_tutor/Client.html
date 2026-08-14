@@ -285,6 +285,7 @@
           row.className = bandClass;
           row.setAttribute('data-contact-row', '');
           row.setAttribute('data-student-id', student.id || '');
+          row.setAttribute('data-contact-source', contact.source || 'dinantia');
 
           if (contactIndex === 0) {
             if (state.hasMultipleGroups) {
@@ -1141,6 +1142,23 @@
         return;
       }
 
+      if ((contact.source || 'dinantia') !== 'dinantia') {
+        var value = contact[suffix.toLowerCase()] || '';
+        if (suffix === 'Email' && !value) value = '-';
+        var text = document.createElement('span');
+        text.textContent = value || '-';
+        if (text.textContent === '-') text.className = 'missing';
+        cell.appendChild(text);
+        if (suffix === 'Name') {
+          var badge = document.createElement('span');
+          badge.className = 'source-badge';
+          badge.textContent = 'Emergència';
+          cell.appendChild(badge);
+        }
+        row.appendChild(cell);
+        return;
+      }
+
       var input = document.createElement('input');
       var value = contact[suffix.toLowerCase()] || '';
       input.className = 'contact-input';
@@ -1149,6 +1167,7 @@
       input.setAttribute('data-contact-id', contact.id);
       input.setAttribute('data-field', 'Contact' + (contact.position || 1) + suffix);
       input.setAttribute('data-original', value);
+      input.setAttribute('data-contact-source', contact.source || 'dinantia');
       cell.appendChild(input);
       row.appendChild(cell);
     }
@@ -1344,6 +1363,7 @@
 
       getDirtyRows().forEach(function(row) {
         var studentId = row.getAttribute('data-student-id');
+        var contactSource = row.getAttribute('data-contact-source') || 'dinantia';
 
         row.querySelectorAll('.contact-input').forEach(function(input) {
           var oldValue = input.getAttribute('data-original');
@@ -1353,6 +1373,7 @@
             changes.push({
               studentId: studentId,
               contactId: input.getAttribute('data-contact-id'),
+              contactSource: contactSource,
               fieldChanged: input.getAttribute('data-field'),
               oldValue: oldValue,
               newValue: newValue,
@@ -1415,6 +1436,7 @@
         return {
           studentId: change.studentId,
           contactId: change.contactId,
+          contactSource: change.contactSource,
           fieldChanged: change.fieldChanged,
           oldValue: change.oldValue,
           newValue: change.newValue

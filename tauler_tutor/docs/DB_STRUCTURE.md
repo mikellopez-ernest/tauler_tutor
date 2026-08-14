@@ -610,9 +610,10 @@ The rebuild process must:
 3. Build all cached student rows by matching Dinantia student group membership to each mapped group.
 4. Enrich students from the mapped `Dades alumnes` sheet using `ID`.
 5. Build all cached contact rows from each student's Dinantia parent account IDs.
-6. Build the authorization cache from `Autoritzacions` -> `autoritzacions` and latest token summaries from `Autoritzacions` -> `verification_tokens`.
-7. Completely overwrite the current cache tables, preserving row 1 headers.
-8. Append one historical run row to `Dinantia` -> `cache_runs`.
+6. Append emergency-contact rows from the latest active authorization response for each student when `emergencia_nom` or `emergencia_telefon` is present.
+7. Build the authorization cache from `Autoritzacions` -> `autoritzacions` and latest token summaries from `Autoritzacions` -> `verification_tokens`.
+8. Completely overwrite the current cache tables, preserving row 1 headers.
+9. Append one historical run row to `Dinantia` -> `cache_runs`.
 
 Only `cache_runs` keeps history. The other cache sheets are fully replaced on every successful rebuild.
 
@@ -666,10 +667,37 @@ Required headers:
 | `contact_name` | Contact display name. |
 | `contact_email` | Contact email. |
 | `contact_phone` | Contact phone. |
+| `contact_source` | Contact origin. Current values are `dinantia` and `authorization_emergency`. Blank legacy values must be treated as `dinantia`. |
 
-Contact edits must be written to Dinantia first. After a successful Dinantia update, update every `contacts_cache` row with the same `contact_id`.
+Dinantia contact rows:
+
+- `contact_source = dinantia`.
+- `contact_id` is the Dinantia parent/contact account ID.
+- `contact_position` is the 1-based position in the student's Dinantia parent list.
+- These rows are editable in the tutor panel.
+- Contact edits must be written to Dinantia first. After a successful Dinantia update, update every `contacts_cache` row with the same `contact_id`.
 
 Reason: the same Dinantia parent/contact account can appear in multiple rows when siblings are loaded. `contacts_cache` is a denormalized read model, so updates must fan out by `contact_id` and must not be limited to the student row where the edit happened.
+
+Authorization emergency contact rows:
+
+- `contact_source = authorization_emergency`.
+- `student_id` comes from `Autoritzacions` -> `autoritzacions`.`id_student`.
+- `student_name` and `group_name` come from `students_cache` or an existing cached contact row for the same student.
+- `contact_id` is generated as `AUTH-EMERGENCY-{resposta_id}`.
+- `contact_position` is `99`, so emergency rows appear after Dinantia contacts for the student.
+- `contact_name` comes from `autoritzacions.emergencia_nom`.
+- `contact_email` is blank.
+- `contact_phone` comes from `autoritzacions.emergencia_telefon`.
+- These rows are read-only in tutor-facing contact UIs and must show an emergency badge/icon.
+- The tutor panel must reject edit payloads for any row where `contact_source` is not `dinantia`.
+
+Emergency-contact cache update rules:
+
+- Full `rebuildTutorPanelCache()` appends emergency rows from the latest non-invalidated authorization per student.
+- When the authorization form writes or edits a response, update only that student's emergency row in `contacts_cache`.
+- When a tutor invalidates an authorization response, remove only that student's `authorization_emergency` row from `contacts_cache`.
+- `contacts_cache` remains a read model. The canonical emergency-contact values are `Autoritzacions` -> `autoritzacions`.`emergencia_nom` and `emergencia_telefon`.
 
 ### `Dinantia` -> `authorizations_cache`
 
@@ -847,7 +875,7 @@ When a teacher found by `CORREU INSTIT` has `SUBST?` true:
 4. The current date is evaluated in the Apps Script timezone `Europe/Madrid`.
 5. If an active substitution row is found, use `teacher_code` from that row to find the main teacher in `Llista` by `REDUÏT`.
 6. Use the main teacher's information for the app query.
-7. If no active substitution row is found, or if the main teacher cannot be resolved, keep using the substitute teacher row that matched `CORREU INSTIT`.
+7. If no active substitution row is found, or if the main teacher cannot be resolved, stop with a clear tutor-resolution error. Do not silently keep the substitute teacher row, because substitute panel visibility must come from the active `leave_absence` relationship.
 
 All teacher code comparisons in this process must use `codeKey_`.
 

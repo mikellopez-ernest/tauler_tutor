@@ -136,7 +136,7 @@
 
   table {
     width: 100%;
-    min-width: 920px;
+    min-width: 1040px;
     border-collapse: separate;
     border-spacing: 0;
   }
@@ -161,6 +161,13 @@
     text-transform: uppercase;
   }
 
+  .contacts-table th:first-child,
+  .contacts-table td:first-child {
+    width: 170px;
+    min-width: 170px;
+    white-space: nowrap;
+  }
+
   tr.student-band-even td {
     background: #fff;
   }
@@ -171,6 +178,20 @@
 
   .missing {
     color: var(--muted);
+  }
+
+  .source-badge {
+    display: inline-block;
+    margin-left: 8px;
+    border: 1px solid #f3b9b5;
+    border-radius: 999px;
+    background: #fff1f1;
+    color: var(--danger);
+    font-size: 11px;
+    font-weight: 900;
+    line-height: 1;
+    padding: 4px 7px;
+    vertical-align: middle;
   }
 
   .empty {

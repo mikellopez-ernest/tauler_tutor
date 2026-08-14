@@ -19,6 +19,8 @@ var FORM_CONFIG = {
   sheetAuthorizedPeople: 'persones_autoritzades',
   sheetVerificationTokens: 'verification_tokens',
   sheetAuthorizationsCache: 'authorizations_cache',
+  sheetContactsCache: 'contacts_cache',
+  sheetStudentsCache: 'students_cache',
   confirmationEmailFromName: 'Institut Ernest Lluch i Martín',
   confirmationEmailSubjectPrefix: 'Còpia del formulari d’autoritzacions',
   launcherUrl: 'https://script.google.com/macros/s/AKfycbwOgYsVCf-MdEEbpGFFmWyjMB__MrgDowQuo7W6Ky8ymZwkY_-c7gUPm9QGTGUxiYGrYg/exec'

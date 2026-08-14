@@ -27,6 +27,19 @@ The endpoint must persist submitted responses to the registry-backed `Autoritzac
 
 After a successful submission, the endpoint must refresh `Dinantia` -> `authorizations_cache` so the tutor panel can show the new authorization without waiting for the nightly cache rebuild.
 
+After the authorization cache refresh, the endpoint must also update the affected student's emergency-contact row in `Dinantia` -> `contacts_cache` when the submitted response contains `emergencia_nom` or `emergencia_telefon`. This write-through update must touch only the dirty student's `contact_source = authorization_emergency` row:
+
+- Remove any existing `authorization_emergency` row for the same `id_student`.
+- Append one new emergency row when the saved response contains an emergency contact name or phone.
+- Use `contact_id = AUTH-EMERGENCY-{resposta_id}`.
+- Use `contact_position = 99`.
+- Use `contact_name = emergencia_nom`.
+- Use blank `contact_email`.
+- Use `contact_phone = emergencia_telefon`.
+- Use `contact_source = authorization_emergency`.
+
+The canonical source remains `Autoritzacions` -> `autoritzacions`; the contacts cache is only a read model for tutor-facing contact screens.
+
 After the cache refresh succeeds, the endpoint must send a confirmation email to the verified respondent address. The email must:
 
 - Use `Institut Ernest Lluch i Martín` as the sender display name.
@@ -496,6 +509,7 @@ The registry spreadsheet must map `Autoritzacions` to the spreadsheet that conta
 | `Autoritzacions` | `persones_autoritzades` | Zero-to-many authorized pickup people for each response. |
 | `Autoritzacions` | `verification_tokens` | Invitation/token history used to include latest invitation metadata in the cache. |
 | `Dinantia` | `authorizations_cache` | Fast authorization read model used by `tauler_tutor`. |
+| `Dinantia` | `contacts_cache` | Fast contact read model updated with authorization emergency-contact rows after successful form submissions. |
 
 Relationship:
 
@@ -547,9 +561,10 @@ The server-side function must:
 8. Extract all authorized pickup people from the submitted form data.
 9. For each non-empty authorized person, generate a new `id` and append one row to `Autoritzacions` -> `persones_autoritzades` using the same `resposta_id`.
 10. Refresh `Dinantia` -> `authorizations_cache` from `Autoritzacions` -> `autoritzacions` and `Autoritzacions` -> `verification_tokens`.
-11. Mark the launcher token as used for editable flows.
-12. Send a confirmation email with a structured HTML copy of the saved answers to the verified respondent email address.
-13. Return a success response containing at least the generated `resposta_id`.
+11. Replace the dirty student's `authorization_emergency` row in `Dinantia` -> `contacts_cache` when emergency-contact data exists.
+12. Mark the launcher token as used for editable flows.
+13. Send a confirmation email with a structured HTML copy of the saved answers to the verified respondent email address.
+14. Return a success response containing at least the generated `resposta_id`.
 
 A submitted response can have zero authorized pickup people. In that case, the app must still create the parent `autoritzacions` row and create no rows in `persones_autoritzades`.
 

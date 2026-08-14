@@ -100,10 +100,10 @@ function loadStudentsFromCacheForGroups_(groups) {
 function loadContactsFromCacheForStudents_(students) {
   var registry = loadTableRegistry_();
   var sheet = openTableSheet_(registry, TABLES.dinantia, SHEETS.contactsCache);
-  var headers = requireHeaders_(sheet, [
+  var headers = ensureHeaderNames_(sheet, [
     'student_id', 'student_name', 'group_name', 'contact_id', 'contact_position',
-    'contact_name', 'contact_email', 'contact_phone'
-  ], TABLES.dinantia + ' -> ' + SHEETS.contactsCache);
+    'contact_name', 'contact_email', 'contact_phone', 'contact_source'
+  ]);
   if (sheet.getLastRow() < 2) return [];
   var studentSet = {};
   (students || []).forEach(function(student) {
@@ -139,7 +139,8 @@ function loadContactsFromCacheForStudents_(students) {
       position: Number(row[headers.contact_position]) || byStudent[studentId].contacts.length + 1,
       name: String(row[headers.contact_name] || '').trim(),
       email: String(row[headers.contact_email] || '').trim(),
-      phone: String(row[headers.contact_phone] || '').trim()
+      phone: String(row[headers.contact_phone] || '').trim(),
+      source: String(row[headers.contact_source] || 'dinantia').trim() || 'dinantia'
     });
   }
 
@@ -212,14 +213,16 @@ function updateContactsCacheAfterSave_(changes) {
   try {
     var registry = loadTableRegistry_();
     var sheet = openTableSheet_(registry, TABLES.dinantia, SHEETS.contactsCache);
-    var headers = requireHeaders_(sheet, [
-      'contact_id', 'contact_name', 'contact_email', 'contact_phone'
-    ], TABLES.dinantia + ' -> ' + SHEETS.contactsCache);
+    var headers = ensureHeaderNames_(sheet, [
+      'contact_id', 'contact_name', 'contact_email', 'contact_phone', 'contact_source'
+    ]);
     var values = sheet.getDataRange().getValues();
     var rowsByContactId = {};
     for (var i = 1; i < values.length; i++) {
       var contactId = String(values[i][headers.contact_id] || '').trim();
+      var source = String(values[i][headers.contact_source] || 'dinantia').trim() || 'dinantia';
       if (!contactId) continue;
+      if (source !== 'dinantia') continue;
       if (!rowsByContactId[contactId]) rowsByContactId[contactId] = [];
       rowsByContactId[contactId].push(i + 1);
     }
@@ -307,11 +310,125 @@ function buildContactsCacheRows_(accounts, students) {
         contact_position: index + 1,
         contact_name: contact.name,
         contact_email: contact.email,
-        contact_phone: contact.phone
+        contact_phone: contact.phone,
+        contact_source: 'dinantia'
       });
     });
   });
+  appendEmergencyContactRows_(rows, students, latestEmergencyAuthorizationsByStudent_());
   return rows;
+}
+
+function latestEmergencyAuthorizationsByStudent_() {
+  var latest = {};
+  readAuthorizationRows_().forEach(function(auth) {
+    var studentId = String(auth.id_student || '').trim();
+    if (!studentId) return;
+    if (!String(auth.emergencia_nom || '').trim() && !String(auth.emergencia_telefon || '').trim()) return;
+    if (!latest[studentId] || String(auth.data_hora_enviament || '') >= String(latest[studentId].data_hora_enviament || '')) {
+      latest[studentId] = auth;
+    }
+  });
+  return latest;
+}
+
+function appendEmergencyContactRows_(rows, students, latestEmergencyByStudent) {
+  var studentById = {};
+  (students || []).forEach(function(student) {
+    if (student && student.student_id) studentById[String(student.student_id)] = student;
+  });
+
+  Object.keys(latestEmergencyByStudent || {}).forEach(function(studentId) {
+    var student = studentById[studentId];
+    if (!student) {
+      logWarn_('emergency_contact_cache_skipped_missing_student', { studentId: studentId });
+      return;
+    }
+    rows.push(emergencyContactCacheRow_(student, latestEmergencyByStudent[studentId] || {}));
+  });
+}
+
+function emergencyContactCacheRow_(student, auth) {
+  return {
+    student_id: String(student.student_id || auth.id_student || '').trim(),
+    student_name: String(student.student_name || '').trim(),
+    group_name: String(student.group_name || '').trim(),
+    contact_id: 'AUTH-EMERGENCY-' + String(auth.resposta_id || auth.id_student || '').trim(),
+    contact_position: 99,
+    contact_name: String(auth.emergencia_nom || '').trim(),
+    contact_email: '',
+    contact_phone: String(auth.emergencia_telefon || '').trim(),
+    contact_source: 'authorization_emergency'
+  };
+}
+
+function removeEmergencyContactCacheForStudent_(studentId) {
+  updateEmergencyContactCacheForStudent_(studentId, null);
+}
+
+function updateEmergencyContactCacheForStudent_(studentId, auth) {
+  studentId = String(studentId || (auth && auth.id_student) || '').trim();
+  if (!studentId) return;
+  try {
+    var registry = loadTableRegistry_();
+    var sheet = openTableSheet_(registry, TABLES.dinantia, SHEETS.contactsCache);
+    var headers = ensureHeaderNames_(sheet, [
+      'student_id', 'student_name', 'group_name', 'contact_id', 'contact_position',
+      'contact_name', 'contact_email', 'contact_phone', 'contact_source'
+    ]);
+    var width = sheet.getLastColumn();
+    var values = sheet.getDataRange().getValues();
+    var rowsToDelete = [];
+    var student = null;
+
+    for (var i = 1; i < values.length; i++) {
+      var row = values[i];
+      var rowStudentId = String(row[headers.student_id] || '').trim();
+      var source = String(row[headers.contact_source] || 'dinantia').trim() || 'dinantia';
+      if (rowStudentId === studentId && source === 'authorization_emergency') {
+        rowsToDelete.push(i + 1);
+        continue;
+      }
+      if (rowStudentId === studentId && !student) {
+        student = {
+          student_id: studentId,
+          student_name: String(row[headers.student_name] || '').trim(),
+          group_name: String(row[headers.group_name] || '').trim()
+        };
+      }
+    }
+
+    if (!student) student = studentCacheInfoById_(registry, studentId);
+    rowsToDelete.sort(function(a, b) { return b - a; }).forEach(function(rowNumber) {
+      sheet.deleteRow(rowNumber);
+    });
+    if (auth && (String(auth.emergencia_nom || '').trim() || String(auth.emergencia_telefon || '').trim()) && student) {
+      var rowObject = emergencyContactCacheRow_(student, auth);
+      var newRow = new Array(width).fill('');
+      Object.keys(headers).forEach(function(header) {
+        newRow[headers[header]] = rowObject[header] === undefined ? '' : rowObject[header];
+      });
+      sheet.appendRow(newRow);
+    }
+  } catch (error) {
+    logError_('emergency_contact_cache_update_failed', error, { studentId: studentId });
+  }
+}
+
+function studentCacheInfoById_(registry, studentId) {
+  var sheet = openTableSheet_(registry, TABLES.dinantia, SHEETS.studentsCache);
+  var headers = requireHeaders_(sheet, ['student_id', 'student_name', 'group_name'], TABLES.dinantia + ' -> ' + SHEETS.studentsCache);
+  var values = sheet.getDataRange().getValues();
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][headers.student_id] || '').trim() === studentId) {
+      return {
+        student_id: studentId,
+        student_name: String(values[i][headers.student_name] || '').trim(),
+        group_name: String(values[i][headers.group_name] || '').trim()
+      };
+    }
+  }
+  return null;
 }
 
 function buildAuthorizationsCacheRows_() {

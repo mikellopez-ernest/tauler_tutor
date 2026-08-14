@@ -81,7 +81,7 @@ function loadContactsFromCache_() {
   var sheet = openTableSheet_(registry, TABLES.dinantia, SHEETS.contactsCache);
   var headers = requireHeaders_(sheet, [
     'student_id', 'student_name', 'group_name', 'contact_id', 'contact_position',
-    'contact_name', 'contact_email', 'contact_phone'
+    'contact_name', 'contact_email', 'contact_phone', 'contact_source'
   ], TABLES.dinantia + ' -> ' + SHEETS.contactsCache);
 
   if (sheet.getLastRow() < 2) return [];
@@ -106,7 +106,8 @@ function loadContactsFromCache_() {
       contactPosition: Number(row[headers.contact_position]) || 0,
       contactName: String(row[headers.contact_name] || '').trim(),
       contactEmail: String(row[headers.contact_email] || '').trim(),
-      contactPhone: String(row[headers.contact_phone] || '').trim()
+      contactPhone: String(row[headers.contact_phone] || '').trim(),
+      contactSource: String(row[headers.contact_source] || 'dinantia').trim() || 'dinantia'
     });
   }
 

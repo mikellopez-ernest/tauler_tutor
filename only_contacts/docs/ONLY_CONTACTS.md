@@ -53,8 +53,17 @@ Required headers:
 | `contact_name` | Contact full name. |
 | `contact_email` | Contact email. |
 | `contact_phone` | Contact phone. |
+| `contact_source` | Contact origin. Current values are `dinantia` and `authorization_emergency`. Blank legacy values are treated as `dinantia`. |
 
 The endpoint must not call Dinantia directly. Cache refresh remains the responsibility of the tutor panel cache process.
+
+Contact-source rules:
+
+- `dinantia` rows represent parent/contact accounts from Dinantia.
+- `authorization_emergency` rows represent emergency contacts submitted through `auth_form`.
+- Emergency rows are read from `contacts_cache` exactly like any other row, but the UI should show a small `Emergència` badge/icon next to the contact name.
+- Emergency rows have no email value unless a future database field is added, so the email cell should show `-`.
+- The endpoint stays read-only for every source.
 
 Group selector source:
 
@@ -129,6 +138,8 @@ The table columns are:
 The table follows the visual logic of the `Contactes` page in `tauler_tutor`, but all fields are plain read-only text.
 
 Rows are grouped by student. Group and student cells may use row spans when a student has more than one contact.
+
+Rows where `contact_source = authorization_emergency` must show the emergency badge/icon next to the contact name.
 
 ## Performance Rules
 

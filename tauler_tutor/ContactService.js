@@ -40,6 +40,7 @@ function sanitizeContactChanges_(changes) {
     var fieldChanged = String(change.fieldChanged || '').trim();
     var accountField = getContactAccountField_(fieldChanged);
     var contactId = String(change.contactId || '').trim();
+    var contactSource = String(change.contactSource || 'dinantia').trim() || 'dinantia';
     var studentId = String(change.studentId || '').trim();
     var oldValue = String(change.oldValue === null || change.oldValue === undefined ? '' : change.oldValue);
     var newValue = String(change.newValue === null || change.newValue === undefined ? '' : change.newValue);
@@ -53,10 +54,14 @@ function sanitizeContactChanges_(changes) {
     if (!studentId) {
       throw new Error('Missing student id for field: ' + fieldChanged);
     }
+    if (contactSource !== 'dinantia') {
+      throw new Error('Unsupported contact source for editable contact: ' + contactSource);
+    }
 
     return {
       studentId: studentId,
       contactId: contactId,
+      contactSource: contactSource,
       fieldChanged: fieldChanged,
       accountField: accountField,
       oldValue: accountField === 'phone' ? normalizeDinantiaPhone_(oldValue) : oldValue,

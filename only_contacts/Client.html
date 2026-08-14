@@ -129,7 +129,7 @@
             appendCell(tr, student.studentName || '-', contacts.length);
           }
 
-          appendCell(tr, contact.contactName || '-');
+          appendContactNameCell(tr, contact);
           appendCell(tr, contact.contactEmail || '-');
           appendCell(tr, contact.contactPhone || '-');
           tbody.appendChild(tr);
@@ -167,7 +167,8 @@
           contactPosition: row.contactPosition,
           contactName: row.contactName,
           contactEmail: row.contactEmail,
-          contactPhone: row.contactPhone
+          contactPhone: row.contactPhone,
+          contactSource: row.contactSource || 'dinantia'
         });
       });
 
@@ -186,6 +187,23 @@
       td.textContent = value;
       if (rowSpan && rowSpan > 1) td.rowSpan = rowSpan;
       if (value === '-') td.className = 'missing';
+      row.appendChild(td);
+      return td;
+    }
+
+    function appendContactNameCell(row, contact) {
+      var td = document.createElement('td');
+      var value = contact.contactName || '-';
+      var text = document.createElement('span');
+      text.textContent = value;
+      if (value === '-') text.className = 'missing';
+      td.appendChild(text);
+      if ((contact.contactSource || 'dinantia') !== 'dinantia') {
+        var badge = document.createElement('span');
+        badge.className = 'source-badge';
+        badge.textContent = 'Emergència';
+        td.appendChild(badge);
+      }
       row.appendChild(td);
       return td;
     }

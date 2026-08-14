@@ -63,6 +63,7 @@ function saveAuthorizationResponse_(payload) {
   });
 
   refreshAuthorizationsCache_();
+  updateEmergencyContactCacheForAuthorization_(normalized);
   markLauncherTokenUsedForEditableSave_(payload || {}, tokenRecord);
   var confirmationEmail = sendSubmissionConfirmationEmailSafely_(normalized, people, tokenRecord, updateExisting);
 
@@ -331,6 +332,98 @@ function updateContactsCacheForRespondent_(contactId, fields) {
     if (h.contact_name !== undefined && fields.name !== undefined) sheet.getRange(i + 1, h.contact_name + 1).setValue(fields.name);
     if (h.contact_phone !== undefined && fields.phone !== undefined) sheet.getRange(i + 1, h.contact_phone + 1).setValue(fields.phone);
   }
+}
+
+function updateEmergencyContactCacheForAuthorization_(authorization) {
+  authorization = authorization || {};
+  var studentId = stringValue_(authorization.id_student);
+  if (!studentId) return;
+
+  try {
+    var contactsSheet = openTableSheetFromRegistry_(FORM_CONFIG.tableDinantia, FORM_CONFIG.sheetContactsCache);
+    var headers = ensureHeadersForRows_(contactsSheet, [emptyContactCacheRow_()]);
+    var width = contactsSheet.getLastColumn();
+    var values = contactsSheet.getDataRange().getValues();
+    var rowsToDelete = [];
+    var student = null;
+
+    for (var i = 1; i < values.length; i++) {
+      var row = values[i];
+      var rowStudentId = stringValue_(row[headers.student_id]);
+      var source = stringValue_(row[headers.contact_source]) || 'dinantia';
+      if (rowStudentId === studentId && source === 'authorization_emergency') {
+        rowsToDelete.push(i + 1);
+        continue;
+      }
+      if (rowStudentId === studentId && !student) {
+        student = {
+          student_id: studentId,
+          student_name: stringValue_(row[headers.student_name]),
+          group_name: stringValue_(row[headers.group_name])
+        };
+      }
+    }
+
+    if (!student) student = findStudentCacheInfo_(studentId);
+    rowsToDelete.sort(function(a, b) { return b - a; }).forEach(function(rowNumber) {
+      contactsSheet.deleteRow(rowNumber);
+    });
+    if ((stringValue_(authorization.emergencia_nom) || stringValue_(authorization.emergencia_telefon)) && student) {
+      var emergency = emergencyContactCacheRow_(student, authorization);
+      var newRow = new Array(width).fill('');
+      Object.keys(headers).forEach(function(header) {
+        newRow[headers[header]] = emergency[header] === undefined ? '' : emergency[header];
+      });
+      contactsSheet.appendRow(newRow);
+    }
+  } catch (error) {
+    console.error('Emergency contact cache update failed: ' + (error && error.stack ? error.stack : error));
+  }
+}
+
+function emptyContactCacheRow_() {
+  return {
+    student_id: '',
+    student_name: '',
+    group_name: '',
+    contact_id: '',
+    contact_position: '',
+    contact_name: '',
+    contact_email: '',
+    contact_phone: '',
+    contact_source: ''
+  };
+}
+
+function emergencyContactCacheRow_(student, authorization) {
+  return {
+    student_id: stringValue_(student.student_id || authorization.id_student),
+    student_name: stringValue_(student.student_name),
+    group_name: stringValue_(student.group_name),
+    contact_id: 'AUTH-EMERGENCY-' + stringValue_(authorization.resposta_id || authorization.id_student),
+    contact_position: 99,
+    contact_name: stringValue_(authorization.emergencia_nom),
+    contact_email: '',
+    contact_phone: stringValue_(authorization.emergencia_telefon),
+    contact_source: 'authorization_emergency'
+  };
+}
+
+function findStudentCacheInfo_(studentId) {
+  var sheet = openTableSheetFromRegistry_(FORM_CONFIG.tableDinantia, FORM_CONFIG.sheetStudentsCache);
+  var h = getHeaderMap_(sheet);
+  requireHeaders_(h, ['student_id', 'student_name', 'group_name'], FORM_CONFIG.sheetStudentsCache);
+  var values = sheet.getDataRange().getValues();
+  for (var i = 1; i < values.length; i++) {
+    if (stringValue_(values[i][h.student_id]) === studentId) {
+      return {
+        student_id: studentId,
+        student_name: stringValue_(values[i][h.student_name]),
+        group_name: stringValue_(values[i][h.group_name])
+      };
+    }
+  }
+  return null;
 }
 
 function normalizeAuthorizationPayload_(payload) {

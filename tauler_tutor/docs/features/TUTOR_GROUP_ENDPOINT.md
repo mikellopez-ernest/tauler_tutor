@@ -226,6 +226,23 @@ Editable contact data must still write to Dinantia first. After Dinantia accepts
 
 The cache update must not be limited to `student_id + contact_id`, because siblings can share the same Dinantia contact account.
 
+`contacts_cache` may also contain read-only emergency-contact rows created from authorization responses:
+
+| `contact_source` | Meaning | Editable |
+| --- | --- | --- |
+| `dinantia` | Parent/contact account from Dinantia. Blank legacy values are treated as `dinantia`. | Yes |
+| `authorization_emergency` | Emergency contact from `Autoritzacions` -> `autoritzacions`.`emergencia_nom` / `emergencia_telefon`. | No |
+
+Emergency-contact rows must:
+
+- Use `contact_id = AUTH-EMERGENCY-{resposta_id}`.
+- Use `contact_position = 99`.
+- Show a small `Emergència` badge/icon next to the contact name.
+- Show blank email as `-`.
+- Be blocked from contact edit/save payloads.
+
+When the form writes or edits a response, only the affected student's emergency-contact cache row should be replaced. When a tutor invalidates a response, only that student's emergency-contact cache row should be removed. The nightly rebuild will also regenerate all emergency-contact rows from the latest active authorization data.
+
 ### Teacher Label
 
 The main page must show the teacher label below or near the group title.
@@ -367,6 +384,8 @@ For each Dinantia student:
 3. Render one table row for each contact.
 4. If a student has no contacts, render one row for the student and show `-` in the contact cells.
 
+The contact table can also include one read-only emergency-contact row for the student when the latest active authorization response contains emergency-contact data. This row comes from `contacts_cache.contact_source = authorization_emergency`, not from Dinantia.
+
 ### Contactes Table
 
 The table has 4 visible columns total:
@@ -409,6 +428,8 @@ Contact fields are editable:
 
 Student name is not editable.
 
+Rows where `contact_source` is not `dinantia` are not editable. The UI must render those cells as plain text and show the emergency badge/icon when the source is `authorization_emergency`.
+
 When any editable cell in a row changes:
 
 - Mark the row as dirty.
@@ -426,6 +447,7 @@ When saving:
 - Prevent duplicate saves while a save is in progress.
 - Update the relevant Dinantia parent/contact account through `POST /v1.2/accounts/update/:id`.
 - After the Dinantia update succeeds, update all cached rows with the edited `contact_id`, including sibling rows that were not visible or directly edited.
+- Reject any save attempt for rows whose `contact_source` is not `dinantia`.
 - Phone values must be sent to Dinantia in valid international/E.164 style.
 - Spanish 9-digit local phone numbers such as `686123456` should be normalized to `+34686123456` before calling Dinantia.
 - Empty phone values are valid and mean the phone number should be removed from the contact.
@@ -501,5 +523,4 @@ If a future editable field does not clearly match an existing field name, stop a
 
 - Mapping local teachers to Dinantia `account_id`.
 - Showing Dinantia group name or tag instead of group ID.
-- Implementing `Autoritzacions`.
 - Sending messages or notifications through Dinantia.
