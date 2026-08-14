@@ -1,0 +1,218 @@
+<script>
+  (function() {
+    var state = {
+      rows: [],
+      search: '',
+      group: '__all'
+    };
+
+    var loading = document.getElementById('loading-overlay');
+    var searchInput = document.getElementById('student-search');
+    var searchButton = document.getElementById('search-button');
+    var groupSelect = document.getElementById('group-select');
+    var resetButton = document.getElementById('reset-button');
+    var tbody = document.getElementById('contacts-table');
+    var empty = document.getElementById('contacts-empty');
+    var count = document.getElementById('contacts-count');
+    var errorBox = document.getElementById('error-box');
+
+    bindEvents();
+    loadContacts();
+
+    function bindEvents() {
+      searchButton.addEventListener('click', function() {
+        state.search = normalizeText(searchInput.value);
+        render();
+      });
+
+      searchInput.addEventListener('keydown', function(event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          state.search = normalizeText(searchInput.value);
+          render();
+        }
+      });
+
+      groupSelect.addEventListener('change', function() {
+        state.group = groupSelect.value || '__all';
+        render();
+      });
+
+      resetButton.addEventListener('click', function() {
+        searchInput.value = '';
+        groupSelect.value = '__all';
+        state.search = '';
+        state.group = '__all';
+        render();
+      });
+    }
+
+    function loadContacts() {
+      setLoading(true);
+      google.script.run
+        .withSuccessHandler(function(result) {
+          setLoading(false);
+          var parsed = parseResult(result);
+          if (!parsed || parsed.ok !== true) {
+            showError(parsed && parsed.error ? parsed.error.message : "No s'han pogut carregar els contactes.");
+            return;
+          }
+          state.rows = parsed.contacts || [];
+          populateGroups(state.rows);
+          render();
+        })
+        .withFailureHandler(function(error) {
+          setLoading(false);
+          showError(error && error.message ? error.message : String(error));
+        })
+        .loadContactsJson();
+    }
+
+    function parseResult(result) {
+      if (!result) return null;
+      if (typeof result !== 'string') return result;
+      try {
+        return JSON.parse(result);
+      } catch (error) {
+        return {
+          ok: false,
+          error: {
+            message: 'Resposta del servidor no valida: ' + error.message
+          }
+        };
+      }
+    }
+
+    function populateGroups(rows) {
+      var groups = {};
+      (rows || []).forEach(function(row) {
+        var groupName = String(row.groupName || '').trim();
+        if (groupName) groups[groupName] = true;
+      });
+
+      groupSelect.textContent = '';
+      var all = document.createElement('option');
+      all.value = '__all';
+      all.textContent = 'Tots els grups';
+      groupSelect.appendChild(all);
+
+      Object.keys(groups).sort(function(a, b) {
+        return a.localeCompare(b, 'ca', { sensitivity: 'base' });
+      }).forEach(function(groupName) {
+        var option = document.createElement('option');
+        option.value = groupName;
+        option.textContent = groupName;
+        groupSelect.appendChild(option);
+      });
+
+      groupSelect.value = state.group;
+    }
+
+    function render() {
+      hideError();
+      var rows = filteredRows();
+      var grouped = groupRowsByStudent(rows);
+      tbody.textContent = '';
+      count.textContent = grouped.length + ' alumnes';
+      empty.classList.toggle('is-hidden', rows.length > 0);
+
+      grouped.forEach(function(student, studentIndex) {
+        var contacts = student.contacts.length ? student.contacts : [{ contactName: '', contactEmail: '', contactPhone: '' }];
+        var bandClass = studentIndex % 2 === 0 ? 'student-band-even' : 'student-band-odd';
+
+        contacts.forEach(function(contact, contactIndex) {
+          var tr = document.createElement('tr');
+          tr.className = bandClass;
+
+          if (contactIndex === 0) {
+            appendCell(tr, student.groupName || '-', contacts.length);
+            appendCell(tr, student.studentName || '-', contacts.length);
+          }
+
+          appendCell(tr, contact.contactName || '-');
+          appendCell(tr, contact.contactEmail || '-');
+          appendCell(tr, contact.contactPhone || '-');
+          tbody.appendChild(tr);
+        });
+      });
+    }
+
+    function filteredRows() {
+      var search = state.search;
+      var group = state.group || '__all';
+      return (state.rows || []).filter(function(row) {
+        if (group !== '__all' && String(row.groupName || '') !== group) return false;
+        if (search && normalizeText(row.studentName).indexOf(search) === -1) return false;
+        return true;
+      });
+    }
+
+    function groupRowsByStudent(rows) {
+      var byStudent = {};
+      var order = [];
+
+      (rows || []).forEach(function(row) {
+        var key = String(row.studentId || '') || [row.groupName, row.studentName].join('|');
+        if (!byStudent[key]) {
+          byStudent[key] = {
+            studentId: row.studentId,
+            groupName: row.groupName,
+            studentName: row.studentName,
+            contacts: []
+          };
+          order.push(key);
+        }
+
+        byStudent[key].contacts.push({
+          contactPosition: row.contactPosition,
+          contactName: row.contactName,
+          contactEmail: row.contactEmail,
+          contactPhone: row.contactPhone
+        });
+      });
+
+      return order.map(function(key) {
+        var item = byStudent[key];
+        item.contacts.sort(function(a, b) {
+          return Number(a.contactPosition || 0) - Number(b.contactPosition || 0) ||
+            String(a.contactName || '').localeCompare(String(b.contactName || ''), 'ca', { sensitivity: 'base' });
+        });
+        return item;
+      });
+    }
+
+    function appendCell(row, value, rowSpan) {
+      var td = document.createElement('td');
+      td.textContent = value;
+      if (rowSpan && rowSpan > 1) td.rowSpan = rowSpan;
+      if (value === '-') td.className = 'missing';
+      row.appendChild(td);
+      return td;
+    }
+
+    function normalizeText(value) {
+      return String(value || '')
+        .trim()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+    }
+
+    function setLoading(active) {
+      loading.classList.toggle('is-hidden', !active);
+    }
+
+    function showError(message) {
+      errorBox.textContent = message || "No s'han pogut carregar els contactes.";
+      errorBox.classList.remove('is-hidden');
+      tbody.textContent = '';
+      count.textContent = '0 alumnes';
+      empty.classList.remove('is-hidden');
+    }
+
+    function hideError() {
+      errorBox.classList.add('is-hidden');
+      errorBox.textContent = '';
+    }
+  })();
+</script>

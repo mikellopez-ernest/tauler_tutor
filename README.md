@@ -2,7 +2,7 @@
 
 Google Apps Script workspace for the Institut Ernest Lluch tutor utilities system.
 
-This repository contains three coordinated GAS web apps. They share a registry-backed database model, but each app has its own Apps Script project, clasp configuration, deployment, and security boundary.
+This repository contains four GAS apps. They share a registry-backed database model when specified, but each app has its own Apps Script project, clasp configuration, deployment, and security boundary.
 
 ## Apps
 
@@ -11,6 +11,7 @@ This repository contains three coordinated GAS web apps. They share a registry-b
 | `tauler_tutor/` | Tutor panel | Teachers | Domain users only | Resolve the logged-in teacher, show their students, edit contacts, and manage authorization workflows. |
 | `form_launcher_example/` | Form launcher | Families, students, tutor panel | Public endpoint | Verify identity, create secure tokens, send invitation emails, create mobile-safe form sessions, and forward verified users to the form. |
 | `auth_form/` | Authorization form | Families and students | Public endpoint | Render the multilingual form, persist submissions, and refresh authorization cache data. |
+| `only_contacts/` | Only contacts | Anyone with the URL | Public endpoint | Render a read-only contacts table from the cached Dinantia contact data. |
 
 ## Current URLs
 
@@ -19,6 +20,7 @@ This repository contains three coordinated GAS web apps. They share a registry-b
 | Tutor panel | `https://script.google.com/a/macros/iernestlluch.cat/s/AKfycbwOcqce-v40j7kv1wVuhnERUtdup3GMZhdCHXnN-vP_CqlycQl_ttjaClbzQqUxSq3Leg/exec` |
 | Launcher | `https://script.google.com/macros/s/AKfycbwOgYsVCf-MdEEbpGFFmWyjMB__MrgDowQuo7W6Ky8ymZwkY_-c7gUPm9QGTGUxiYGrYg/exec` |
 | Auth form | `https://script.google.com/macros/s/AKfycbyZpqmW-iGRN6xr_GdpCpeQxstvcYjZTM8CcqI657YFPfuTCU7Il3Zp2gJRkBykbHjjzg/exec` |
+| Only contacts | Public web app URL created manually in Apps Script UI; record the final URL here when needed. |
 
 Useful launcher entry points:
 
@@ -35,6 +37,7 @@ tutor_utils/
   PENDING_DEVELOPMENTS.local.md
   auth_form/
   form_launcher_example/
+  only_contacts/
   tauler_tutor/
 ```
 
@@ -57,6 +60,7 @@ Primary data/spec documentation:
 | `tauler_tutor/docs/features/AUTHORIZATIONS_PANEL.md` | Authorization panel behavior. |
 | `form_launcher_example/docs/FORM_LAUNCHER_ENDPOINT.md` | Launcher identity, token, email, and forwarding behavior. |
 | `auth_form/docs/FORM_GAS_ENDPOINT.md` | Form rendering, validation, persistence, and cache write-through behavior. |
+| `only_contacts/docs/ONLY_CONTACTS.md` | Public read-only contacts endpoint behavior. |
 
 ## Security Rules
 
@@ -92,6 +96,7 @@ Missing properties must fail with clear configuration errors.
 - `Dinantia -> students_cache` and `Dinantia -> contacts_cache` must be rebuilt from the same source snapshot. A contact row for a student whose student row is missing or has blank age/model data can make launcher and panel filtering incomplete.
 - After a canonical authorization write, refresh `Dinantia -> authorizations_cache` immediately.
 - After contact edits, write Dinantia first, then update `Dinantia -> contacts_cache`.
+- The `only_contacts` group combo is generated from `Dinantia -> contacts_cache.group_name`, so it lists groups that currently have cached contact rows, not every configured Dinantia group.
 - Nightly cache rebuild function: `rebuildTutorPanelCache()` in `tauler_tutor`.
 - Manual authorization/scope helper: `authorizeServices()`.
 
@@ -124,6 +129,11 @@ clasp push
 
 ```bash
 cd auth_form
+clasp push
+```
+
+```bash
+cd only_contacts
 clasp push
 ```
 
