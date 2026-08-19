@@ -47,7 +47,7 @@ Current examples:
 | `Horaris` | `GPU001` |
 | `Dades de professors` | `Llista`, `leave_absence` |
 | `Càrrega lectiva` | `assignatures`, `carrecs` |
-| `Dinantia` | `dinantia_2_dades_alumnes`, `teachers_2_dinantia`, `changelog`, `students_cache`, `contacts_cache`, `authorizations_cache`, `cache_runs` |
+| `Dinantia` | `dinantia_2_dades_alumnes`, `teachers_2_dinantia`, `dinantia_groups`, `changelog`, `students_cache`, `contacts_cache`, `authorizations_cache`, `cache_runs` |
 | `Dades alumnes` | Group-specific student sheets referenced by `Dinantia` -> `dinantia_2_dades_alumnes`.`dades_alumnes_sheet` |
 | `Autoritzacions` | `autoritzacions`, `persones_autoritzades`, `verification_tokens` |
 | `Incidències` | `llistat_anual`, `config`, `meeting_records`, `study_group_students`, `study_group_teachers`, `3r_project`, `expulsions` |
@@ -220,6 +220,7 @@ The current app uses these registered sheets:
 - `Càrrega lectiva` -> `carrecs`
 - `Dinantia` -> `dinantia_2_dades_alumnes`
 - `Dinantia` -> `teachers_2_dinantia`
+- `Dinantia` -> `dinantia_groups`
 - `Dinantia` -> `changelog`
 - `Dinantia` -> `students_cache`
 - `Dinantia` -> `contacts_cache`
@@ -581,6 +582,20 @@ The tutor panel uses cache tables as a fast read model.
 
 Cache tables are not the canonical database. The canonical sources remain Dinantia, `Dades alumnes`, `Càrrega lectiva`, `Dades de professors`, and `Autoritzacions`.
 
+### Cache Function Naming
+
+Functions that create or update cache/read-model data in the `Dinantia` spreadsheet should use the `cache` prefix so they are easy to find and can be extracted later if needed.
+
+Public/admin entry points:
+
+| Function | Purpose |
+| --- | --- |
+| `cacheRebuildTutorPanel()` | Rebuild shared tutor-panel read models: `students_cache`, `contacts_cache`, and `authorizations_cache`. |
+| `cacheRebuildDinantiaGroups()` | Discover all Dinantia groups through the Dinantia API and create/update `dinantia_groups`. |
+| `rebuildTutorPanelCache()` | Backward-compatible wrapper for existing manual triggers. Calls `cacheRebuildTutorPanel()`. |
+
+Private cache helpers should also use the `cache` prefix when they build, merge, overwrite, or incrementally update cache rows.
+
 ### Cache Write Policy
 
 Editable data must follow this order:
@@ -598,10 +613,16 @@ The panel must never persist user edits only in cache.
 The cache rebuild function is:
 
 ```javascript
-rebuildTutorPanelCache()
+cacheRebuildTutorPanel()
 ```
 
 This function is designed to be attached manually to a nightly Apps Script time trigger.
+
+Existing triggers may continue to call the backward-compatible wrapper:
+
+```javascript
+rebuildTutorPanelCache()
+```
 
 The rebuild process must:
 
@@ -617,6 +638,47 @@ The rebuild process must:
 
 Only `cache_runs` keeps history. The other cache sheets are fully replaced on every successful rebuild.
 
+### Dinantia Group Discovery
+
+The Dinantia group discovery function is:
+
+```javascript
+cacheRebuildDinantiaGroups()
+```
+
+This function reads every group available from Dinantia and creates or updates `Dinantia` -> `dinantia_groups`.
+
+It must:
+
+1. Call Dinantia `GET /v1/groups/index` with pagination.
+2. Create the `dinantia_groups` sheet inside the logical table `Dinantia` if it does not already exist.
+3. Add missing headers without deleting existing columns.
+4. Store the full parent-child tree using `id` and `parent_id`.
+5. Compute `level`, `path_ids`, and `path_names`.
+6. Mark groups returned by Dinantia as `active = TRUE`.
+7. Preserve previously stored groups that are no longer returned by Dinantia and mark them as `active = FALSE`.
+8. Update `last_seen_at` only for groups found in the current Dinantia API response.
+
+Required headers:
+
+| Header | Meaning |
+| --- | --- |
+| `id` | Dinantia group ID. Primary key. |
+| `name` | Dinantia group visible name. |
+| `tag` | Dinantia group tag/path value returned by Dinantia. |
+| `parent_id` | Parent Dinantia group ID. Blank for root groups. |
+| `parent_name` | Parent group visible name, denormalized for readability. |
+| `level` | Tree depth. Root = `0`, child = `1`, grandchild = `2`, etc. |
+| `path_ids` | Full path of group IDs from root to this group, joined by `/`. |
+| `path_names` | Full path of group names from root to this group, joined by ` / `. |
+| `sort_order` | Order returned by the paginated Dinantia API response. |
+| `types` | JSON array of Dinantia group messaging types. |
+| `created` | Dinantia group creation datetime when returned by the API. |
+| `active` | Boolean-like value. `TRUE` when seen in the latest discovery run; `FALSE` when preserved from an older run but not seen now. |
+| `last_seen_at` | Datetime when the group was last seen by the discovery function. |
+
+`dinantia_groups` is a discovery/reference table. It does not replace `teachers_2_dinantia` or `dinantia_2_dades_alumnes` for tutor-panel visibility.
+
 ### Cache Integrity Rules
 
 `students_cache` and `contacts_cache` are coupled read models and must describe the same Dinantia/student snapshot.
@@ -627,7 +689,7 @@ Required invariants:
 - Every `students_cache` row used by the panel or launcher must include `age`, `study_type`, `is_adult`, and `is_14_plus`.
 - Parent launcher flows may only show under-18 students when the system can prove the student is under 18 from `students_cache.age` or an equivalent trusted enrichment path.
 - If `contacts_cache` contains a sibling/contact relationship but `students_cache` is missing the student or has blank age/model fields, the parent selector can be incomplete by design, because adult students must not be exposed to the parent flow.
-- After adding, removing, or moving students in `Dades alumnes`, run `rebuildTutorPanelCache()` before validating launcher or panel behavior.
+- After adding, removing, or moving students in `Dades alumnes`, run `cacheRebuildTutorPanel()` before validating launcher or panel behavior. Existing triggers may still call `rebuildTutorPanelCache()`.
 
 ### `Dinantia` -> `students_cache`
 
@@ -694,7 +756,7 @@ Authorization emergency contact rows:
 
 Emergency-contact cache update rules:
 
-- Full `rebuildTutorPanelCache()` appends emergency rows from the latest non-invalidated authorization per student.
+- Full `cacheRebuildTutorPanel()` appends emergency rows from the latest non-invalidated authorization per student.
 - When the authorization form writes or edits a response, update only that student's emergency row in `contacts_cache`.
 - When a tutor invalidates an authorization response, remove only that student's `authorization_emergency` row from `contacts_cache`.
 - `contacts_cache` remains a read model. The canonical emergency-contact values are `Autoritzacions` -> `autoritzacions`.`emergencia_nom` and `emergencia_telefon`.

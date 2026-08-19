@@ -4,63 +4,204 @@
     <base target="_top">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contacts</title>
+    <title>Alumnes</title>
     <?!= include_('Styles'); ?>
   </head>
   <body>
     <div class="loading-overlay" id="loading-overlay">
       <div class="loader" aria-label="Carregant"></div>
-      <div class="loading-message">Carregant</div>
+      <div class="loading-message" id="loading-message">Carregant</div>
     </div>
 
-    <main class="main-shell">
-      <header class="page-header">
-        <h1>Contacts</h1>
-      </header>
-
-      <section class="filters" aria-label="Filtres">
-        <label class="filter-field" for="student-search">
-          <span>Alumne</span>
-          <input id="student-search" type="search" autocomplete="off" placeholder="Cerca alumne">
-        </label>
-        <button class="button primary" type="button" id="search-button">OK</button>
-
-        <label class="filter-field" for="group-select">
-          <span>Grup</span>
-          <select id="group-select">
-            <option value="__all">Tots els grups</option>
-          </select>
-        </label>
-
-        <button class="button" type="button" id="reset-button">Reinicia</button>
-      </section>
-
-      <section class="table-section" aria-labelledby="contacts-title">
-        <div class="section-header">
-          <h2 id="contacts-title">Contacts</h2>
-          <span class="count" id="contacts-count">0 alumnes</span>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Menú principal">
+        <div class="brand">
+          <span class="brand-mark">A</span>
+          <span class="brand-text">Alumnes</span>
         </div>
+        <nav class="nav">
+          <a class="nav-link active" href="#" data-view="inici">Llistats</a>
+          <a class="nav-link" href="#" data-view="contactes">Contactes</a>
+          <a class="nav-link" href="#" data-view="autoritzacions">Autoritzacions</a>
+        </nav>
+      </aside>
 
-        <div class="error-box is-hidden" id="error-box"></div>
+      <main class="main">
+        <section class="view active" id="view-inici">
+          <header class="page-header">
+            <h1>Llistats</h1>
+          </header>
 
-        <div class="table-wrap">
-          <table class="contacts-table">
-            <thead>
-              <tr>
-                <th>Grup</th>
-                <th>Alumne</th>
-                <th>Nom</th>
-                <th>Email</th>
-                <th>Telèfon</th>
-              </tr>
-            </thead>
-            <tbody id="contacts-table"></tbody>
-          </table>
+          <section class="filters" aria-label="Filtres">
+            <label class="filter-field" for="inici-group-select">
+              <span>Grup</span>
+              <select id="inici-group-select">
+                <option value="__none">Selecciona un grup</option>
+              </select>
+            </label>
+          </section>
+
+          <section class="table-section" aria-labelledby="students-title">
+            <div class="section-header">
+              <h2 id="students-title">Alumnat</h2>
+              <span class="count" id="students-count">0 alumnes</span>
+            </div>
+            <div class="error-box is-hidden" id="students-error"></div>
+            <div class="table-wrap">
+              <table class="students-table">
+                <thead>
+                  <tr>
+                    <th>Grup</th>
+                    <th>Nom sencer</th>
+                  </tr>
+                </thead>
+                <tbody id="students-table"></tbody>
+              </table>
+            </div>
+            <p class="empty" id="students-empty">Selecciona un grup per veure l'alumnat.</p>
+          </section>
+        </section>
+
+        <section class="view" id="view-contactes">
+          <header class="page-header">
+            <h1>Contactes</h1>
+          </header>
+
+          <section class="filters" aria-label="Filtres">
+            <label class="filter-field" for="contact-student-search">
+              <span>Alumne</span>
+              <input id="contact-student-search" type="search" autocomplete="off" placeholder="Cerca alumne">
+            </label>
+            <button class="button primary" type="button" id="contact-search-button">OK</button>
+
+            <label class="filter-field" for="contact-group-select">
+              <span>Grup</span>
+              <select id="contact-group-select">
+                <option value="__all">Tots els grups</option>
+              </select>
+            </label>
+
+            <button class="button" type="button" id="contact-reset-button">Reinicia</button>
+          </section>
+
+          <section class="table-section" aria-labelledby="contacts-title">
+            <div class="section-header">
+              <h2 id="contacts-title">Contactes</h2>
+              <span class="count" id="contacts-count">0 alumnes</span>
+            </div>
+            <div class="error-box is-hidden" id="contacts-error"></div>
+            <div class="table-wrap">
+              <table class="contacts-table">
+                <thead>
+                  <tr>
+                    <th>Grup</th>
+                    <th>Alumne</th>
+                    <th>Nom</th>
+                    <th>Email</th>
+                    <th>Telèfon</th>
+                  </tr>
+                </thead>
+                <tbody id="contacts-table"></tbody>
+              </table>
+            </div>
+            <p class="empty is-hidden" id="contacts-empty">No s'ha trobat cap contacte.</p>
+          </section>
+        </section>
+
+        <section class="view" id="view-autoritzacions">
+          <header class="page-header">
+            <h1>Autoritzacions</h1>
+          </header>
+
+          <section class="filters" aria-label="Filtres">
+            <label class="filter-field" for="authorization-student-search">
+              <span>Alumne</span>
+              <input id="authorization-student-search" type="search" autocomplete="off" placeholder="Cerca alumne">
+            </label>
+            <button class="button primary" type="button" id="authorization-search-button">OK</button>
+
+            <label class="filter-field" for="authorization-group-select">
+              <span>Grup</span>
+              <select id="authorization-group-select">
+                <option value="__all">Tots els grups</option>
+              </select>
+            </label>
+            <label class="filter-field" for="authorization-status-select">
+              <span>Estat</span>
+              <select id="authorization-status-select">
+                <option value="__all">Tots els estats</option>
+                <option value="pending_parents">Pendent</option>
+                <option value="pending_tutors">Pendent tutors</option>
+                <option value="pending_student">Pendent alumne</option>
+                <option value="complete">Complet</option>
+              </select>
+            </label>
+
+            <button class="button" type="button" id="authorization-reset-button">Reinicia</button>
+          </section>
+
+          <section class="table-section" aria-labelledby="authorizations-title">
+            <div class="section-header">
+              <h2 id="authorizations-title">Autoritzacions</h2>
+              <span class="count" id="authorizations-count">0 alumnes</span>
+            </div>
+            <div class="error-box is-hidden" id="authorizations-error"></div>
+            <div class="table-wrap">
+              <table class="authorizations-table">
+                <thead>
+                  <tr>
+                    <th rowspan="2">Alumne</th>
+                    <th rowspan="2">Grup</th>
+                    <th rowspan="2">Estat</th>
+                    <th rowspan="2">Data</th>
+                    <th rowspan="2">Detall</th>
+                    <th colspan="4">Sortides</th>
+                    <th colspan="3">Comunicacions</th>
+                    <th colspan="3">Imatge i publicació</th>
+                    <th colspan="4">Obres</th>
+                    <th colspan="3">Salut</th>
+                    <th colspan="2">Documents</th>
+                    <th colspan="2">Signatura</th>
+                  </tr>
+                  <tr>
+                    <th>Surt sol/a</th><th>Esbarjo</th><th>Imprevistos</th><th>Municipi</th>
+                    <th>Acadèmica</th><th>Salut</th><th>Plataformes</th>
+                    <th>Intranet</th><th>Web</th><th>Externes</th>
+                    <th>Oberta</th><th>Centre</th><th>Biblioteca</th><th>Repositori</th>
+                    <th>Medicació</th><th>Paracetamol</th><th>Info salut</th>
+                    <th>Compromís educatiu</th><th>Normativa mòbils</th>
+                    <th>Responsable</th><th>Alumne/a</th>
+                  </tr>
+                </thead>
+                <tbody id="authorizations-table"></tbody>
+              </table>
+            </div>
+            <p class="empty is-hidden" id="authorizations-empty">No s'ha trobat cap autorització.</p>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <button class="export-button export-button-large" type="button" id="export-students" title="Exporta l'alumnat visible a XLSX" aria-label="Exporta l'alumnat visible a XLSX">
+      <svg class="export-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2M9.5 3A1.5 1.5 0 0 0 11 4.5h2V9H3V2a1 1 0 0 1 1-1h5.5zM3 12v-2h2v2zm0 1h2v2H4a1 1 0 0 1-1-1zm3 2v-2h3v2zm4 0v-2h3v1a1 1 0 0 1-1 1zm3-3h-3v-2h3zm-4 0H6v-2h3z"/>
+      </svg>
+    </button>
+    <button class="export-button export-button-large is-hidden" type="button" id="export-authorizations" title="Exporta les dades visibles a XLSX" aria-label="Exporta les dades visibles a XLSX">
+      <svg class="export-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2M9.5 3A1.5 1.5 0 0 0 11 4.5h2V9H3V2a1 1 0 0 1 1-1h5.5zM3 12v-2h2v2zm0 1h2v2H4a1 1 0 0 1-1-1zm3 2v-2h3v2zm4 0v-2h3v1a1 1 0 0 1-1 1zm3-3h-3v-2h3zm-4 0H6v-2h3z"/>
+      </svg>
+    </button>
+
+    <div class="modal-backdrop is-hidden" id="authorization-detail-modal" role="dialog" aria-modal="true" aria-labelledby="authorization-detail-title">
+      <section class="modal-panel">
+        <div class="modal-header">
+          <h2 id="authorization-detail-title">Detall de l'autorització</h2>
+          <button class="modal-close" type="button" aria-label="Tanca">×</button>
         </div>
-
-        <p class="empty is-hidden" id="contacts-empty">No s'ha trobat cap contacte.</p>
+        <div class="modal-body" id="authorization-detail-body"></div>
       </section>
-    </main>
+    </div>
 
     <?!= include_('Client'); ?>
   </body>

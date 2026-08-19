@@ -26,7 +26,7 @@ function sendAuthorizationInvitations_(requests) {
     totals.ok = true;
   }
   if (totals.sent > 0) {
-    refreshAuthorizationsCache_();
+    cacheRefreshAuthorizations_();
   }
   return totals;
 }

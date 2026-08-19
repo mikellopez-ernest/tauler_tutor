@@ -149,8 +149,8 @@ function invalidateAuthorizationResponse_(request) {
     sheet.getRange(rowNumber, headers.invalidated_at + 1).setValue(formatSheetDateTime_(new Date()));
     sheet.getRange(rowNumber, headers.invalidated_by_email + 1).setValue(getCurrentUserEmail_());
     sheet.getRange(rowNumber, headers.invalidated_reason + 1).setValue(reason);
-    refreshAuthorizationsCache_();
-    removeEmergencyContactCacheForStudent_(String(values[i][headers.id_student] || '').trim());
+    cacheRefreshAuthorizations_();
+    cacheRemoveEmergencyContactForStudent_(String(values[i][headers.id_student] || '').trim());
     return { ok: true, resposta_id: respostaId };
   }
   throw new AppError('No es pot invalidar el formulari: no s ha trobat la resposta.', { code: 'AUTH_INVALIDATE_NOT_FOUND' });

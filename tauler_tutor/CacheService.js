@@ -1,8 +1,16 @@
 function rebuildTutorPanelCache() {
-  return rebuildTutorPanelCache_();
+  return cacheRebuildTutorPanel();
 }
 
-function rebuildTutorPanelCache_() {
+function cacheRebuildTutorPanel() {
+  return cacheRebuildTutorPanel_();
+}
+
+function cacheRebuildDinantiaGroups() {
+  return cacheRebuildDinantiaGroups_();
+}
+
+function cacheRebuildTutorPanel_() {
   var startedAt = new Date();
   var run = {
     startedAt: startedAt,
@@ -19,13 +27,13 @@ function rebuildTutorPanelCache_() {
     var registry = loadTableRegistry_();
     var groupMappings = loadCacheGroupMappings_(registry);
     var accounts = fetchAllDinantiaAccounts_();
-    var students = buildStudentsCacheRows_(accounts, groupMappings);
-    var contacts = buildContactsCacheRows_(accounts, students);
-    var authorizations = buildAuthorizationsCacheRows_();
+    var students = cacheBuildStudentsRows_(accounts, groupMappings);
+    var contacts = cacheBuildContactsRows_(accounts, students);
+    var authorizations = cacheBuildAuthorizationsRows_();
 
-    overwriteCacheSheet_(registry, TABLES.dinantia, SHEETS.studentsCache, students);
-    overwriteCacheSheet_(registry, TABLES.dinantia, SHEETS.contactsCache, contacts);
-    overwriteCacheSheet_(registry, TABLES.dinantia, SHEETS.authorizationsCache, authorizations);
+    cacheOverwriteSheet_(registry, TABLES.dinantia, SHEETS.studentsCache, students);
+    cacheOverwriteSheet_(registry, TABLES.dinantia, SHEETS.contactsCache, contacts);
+    cacheOverwriteSheet_(registry, TABLES.dinantia, SHEETS.authorizationsCache, authorizations);
 
     run.status = 'ok';
     run.studentsCount = students.length;
@@ -45,7 +53,7 @@ function rebuildTutorPanelCache_() {
   } finally {
     run.finishedAt = new Date();
     try {
-      appendCacheRun_(run);
+      cacheAppendRun_(run);
     } catch (logError) {
       logError_('cache_run_append_failed', logError, {});
     }
@@ -59,6 +67,153 @@ function rebuildTutorPanelCache_() {
     authorizations: run.authorizationsCount,
     message: run.message
   };
+}
+
+function cacheRebuildDinantiaGroups_() {
+  var registry = loadTableRegistry_();
+  var groups = fetchAllDinantiaGroups_();
+  var rows = cacheBuildDinantiaGroupRows_(groups);
+  var spreadsheet = openTableSpreadsheet_(registry, TABLES.dinantia);
+  var sheet = spreadsheet.getSheetByName(SHEETS.dinantiaGroups) || spreadsheet.insertSheet(SHEETS.dinantiaGroups);
+  cacheMergeDinantiaGroupRows_(sheet, rows);
+  logInfo_('dinantia_groups_cache_rebuilt', { groups: rows.length });
+  return {
+    ok: true,
+    groups: rows.length,
+    sheet: SHEETS.dinantiaGroups,
+    message: 'Dinantia groups updated successfully.'
+  };
+}
+
+function cacheBuildDinantiaGroupRows_(groups) {
+  var now = formatCacheDateTime_(new Date());
+  var byId = {};
+  (groups || []).forEach(function(group, index) {
+    var id = String(group && group.id || '').trim();
+    if (!id) return;
+    byId[id] = {
+      id: id,
+      name: String(group.name || '').trim(),
+      tag: String(group.tag || '').trim(),
+      parent_id: String(group.parent || '').trim(),
+      types: JSON.stringify(group.types || []),
+      created: String(group.created || '').trim(),
+      sort_order: index + 1
+    };
+  });
+
+  function resolvePath(group, seen) {
+    seen = seen || {};
+    if (!group || !group.id) return { ids: [], names: [], level: 0 };
+    if (seen[group.id]) return { ids: [group.id], names: [group.name || group.id], level: 0 };
+    seen[group.id] = true;
+
+    var parent = group.parent_id ? byId[group.parent_id] : null;
+    if (!parent) return { ids: [group.id], names: [group.name || group.id], level: 0 };
+
+    var parentPath = resolvePath(parent, seen);
+    return {
+      ids: parentPath.ids.concat([group.id]),
+      names: parentPath.names.concat([group.name || group.id]),
+      level: parentPath.level + 1
+    };
+  }
+
+  return Object.keys(byId).map(function(id) {
+    var group = byId[id];
+    var path = resolvePath(group, {});
+    return {
+      id: group.id,
+      name: group.name,
+      tag: group.tag,
+      parent_id: group.parent_id,
+      parent_name: group.parent_id && byId[group.parent_id] ? byId[group.parent_id].name : '',
+      level: path.level,
+      path_ids: path.ids.join('/'),
+      path_names: path.names.join(' / '),
+      sort_order: group.sort_order,
+      types: group.types,
+      created: group.created,
+      active: true,
+      last_seen_at: now
+    };
+  }).sort(function(a, b) {
+    return String(a.path_names || '').localeCompare(String(b.path_names || ''), 'ca', { sensitivity: 'base' }) ||
+      Number(a.sort_order || 0) - Number(b.sort_order || 0);
+  });
+}
+
+function cacheMergeDinantiaGroupRows_(sheet, activeRows) {
+  var headerNames = [
+    'id', 'name', 'tag', 'parent_id', 'parent_name', 'level', 'path_ids', 'path_names',
+    'sort_order', 'types', 'created', 'active', 'last_seen_at'
+  ];
+  var headers = cacheEnsureExplicitHeaders_(sheet, headerNames);
+  var width = sheet.getLastColumn();
+  var previousById = {};
+
+  if (sheet.getLastRow() > 1) {
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, width).getValues();
+    values.forEach(function(row) {
+      var id = String(row[headers.id] || '').trim();
+      if (!id) return;
+      var object = {};
+      Object.keys(headers).forEach(function(header) {
+        object[header] = row[headers[header]];
+      });
+      previousById[id] = object;
+    });
+  }
+
+  var activeById = {};
+  (activeRows || []).forEach(function(row) {
+    activeById[String(row.id || '').trim()] = row;
+  });
+
+  Object.keys(previousById).forEach(function(id) {
+    if (activeById[id]) return;
+    var oldRow = previousById[id];
+    oldRow.active = false;
+    activeRows.push(oldRow);
+  });
+
+  activeRows.sort(function(a, b) {
+    var activeCompare = Number(b.active === true) - Number(a.active === true);
+    if (activeCompare !== 0) return activeCompare;
+    return String(a.path_names || '').localeCompare(String(b.path_names || ''), 'ca', { sensitivity: 'base' }) ||
+      String(a.name || '').localeCompare(String(b.name || ''), 'ca', { sensitivity: 'base' });
+  });
+
+  if (sheet.getLastRow() > 1) sheet.getRange(2, 1, sheet.getLastRow() - 1, width).clearContent();
+  if (!activeRows.length) return;
+
+  var valuesToWrite = activeRows.map(function(rowObject) {
+    var row = new Array(width).fill('');
+    headerNames.forEach(function(header) {
+      row[headers[header]] = rowObject[header] === undefined ? '' : rowObject[header];
+    });
+    return row;
+  });
+  var range = sheet.getRange(2, 1, valuesToWrite.length, width);
+  range.setNumberFormat('@');
+  range.setValues(valuesToWrite);
+}
+
+function cacheEnsureExplicitHeaders_(sheet, requiredHeaders) {
+  var lastColumn = sheet.getLastColumn();
+  if (lastColumn < 1 || sheet.getLastRow() < 1) {
+    sheet.getRange(1, 1, 1, requiredHeaders.length).setValues([requiredHeaders]);
+    return getHeaderMap_(sheet);
+  }
+
+  var headers = getHeaderMap_(sheet);
+  var missing = (requiredHeaders || []).filter(function(header) {
+    return headers[header] === undefined;
+  });
+  if (missing.length) {
+    sheet.getRange(1, sheet.getLastColumn() + 1, 1, missing.length).setValues([missing]);
+  }
+  return getHeaderMap_(sheet);
 }
 
 function loadStudentsFromCacheForGroups_(groups) {
@@ -208,7 +363,7 @@ function authorizationCacheRequiredHeaders_() {
   ];
 }
 
-function updateContactsCacheAfterSave_(changes) {
+function cacheUpdateContactsAfterSave_(changes) {
   if (!changes || !changes.length) return;
   try {
     var registry = loadTableRegistry_();
@@ -240,11 +395,11 @@ function updateContactsCacheAfterSave_(changes) {
   }
 }
 
-function refreshAuthorizationsCache_() {
+function cacheRefreshAuthorizations_() {
   try {
     var registry = loadTableRegistry_();
-    var authorizations = buildAuthorizationsCacheRows_();
-    overwriteCacheSheet_(registry, TABLES.dinantia, SHEETS.authorizationsCache, authorizations);
+    var authorizations = cacheBuildAuthorizationsRows_();
+    cacheOverwriteSheet_(registry, TABLES.dinantia, SHEETS.authorizationsCache, authorizations);
     logInfo_('authorizations_cache_refreshed', { rows: authorizations.length });
     return authorizations.length;
   } catch (error) {
@@ -253,7 +408,7 @@ function refreshAuthorizationsCache_() {
   }
 }
 
-function buildStudentsCacheRows_(accounts, groupMappings) {
+function cacheBuildStudentsRows_(accounts, groupMappings) {
   var students = [];
   var studentAccounts = (accounts || []).filter(function(account) {
     return (account.roles || []).indexOf('Student') !== -1;
@@ -292,7 +447,7 @@ function buildStudentsCacheRows_(accounts, groupMappings) {
   });
 }
 
-function buildContactsCacheRows_(accounts, students) {
+function cacheBuildContactsRows_(accounts, students) {
   var accountById = {};
   (accounts || []).forEach(function(account) {
     if (account && account.id) accountById[String(account.id)] = account;
@@ -315,11 +470,11 @@ function buildContactsCacheRows_(accounts, students) {
       });
     });
   });
-  appendEmergencyContactRows_(rows, students, latestEmergencyAuthorizationsByStudent_());
+  cacheAppendEmergencyContactRows_(rows, students, cacheLatestEmergencyAuthorizationsByStudent_());
   return rows;
 }
 
-function latestEmergencyAuthorizationsByStudent_() {
+function cacheLatestEmergencyAuthorizationsByStudent_() {
   var latest = {};
   readAuthorizationRows_().forEach(function(auth) {
     var studentId = String(auth.id_student || '').trim();
@@ -332,7 +487,7 @@ function latestEmergencyAuthorizationsByStudent_() {
   return latest;
 }
 
-function appendEmergencyContactRows_(rows, students, latestEmergencyByStudent) {
+function cacheAppendEmergencyContactRows_(rows, students, latestEmergencyByStudent) {
   var studentById = {};
   (students || []).forEach(function(student) {
     if (student && student.student_id) studentById[String(student.student_id)] = student;
@@ -344,11 +499,11 @@ function appendEmergencyContactRows_(rows, students, latestEmergencyByStudent) {
       logWarn_('emergency_contact_cache_skipped_missing_student', { studentId: studentId });
       return;
     }
-    rows.push(emergencyContactCacheRow_(student, latestEmergencyByStudent[studentId] || {}));
+    rows.push(cacheEmergencyContactRow_(student, latestEmergencyByStudent[studentId] || {}));
   });
 }
 
-function emergencyContactCacheRow_(student, auth) {
+function cacheEmergencyContactRow_(student, auth) {
   return {
     student_id: String(student.student_id || auth.id_student || '').trim(),
     student_name: String(student.student_name || '').trim(),
@@ -362,11 +517,11 @@ function emergencyContactCacheRow_(student, auth) {
   };
 }
 
-function removeEmergencyContactCacheForStudent_(studentId) {
-  updateEmergencyContactCacheForStudent_(studentId, null);
+function cacheRemoveEmergencyContactForStudent_(studentId) {
+  cacheUpdateEmergencyContactForStudent_(studentId, null);
 }
 
-function updateEmergencyContactCacheForStudent_(studentId, auth) {
+function cacheUpdateEmergencyContactForStudent_(studentId, auth) {
   studentId = String(studentId || (auth && auth.id_student) || '').trim();
   if (!studentId) return;
   try {
@@ -403,7 +558,7 @@ function updateEmergencyContactCacheForStudent_(studentId, auth) {
       sheet.deleteRow(rowNumber);
     });
     if (auth && (String(auth.emergencia_nom || '').trim() || String(auth.emergencia_telefon || '').trim()) && student) {
-      var rowObject = emergencyContactCacheRow_(student, auth);
+      var rowObject = cacheEmergencyContactRow_(student, auth);
       var newRow = new Array(width).fill('');
       Object.keys(headers).forEach(function(header) {
         newRow[headers[header]] = rowObject[header] === undefined ? '' : rowObject[header];
@@ -431,7 +586,7 @@ function studentCacheInfoById_(registry, studentId) {
   return null;
 }
 
-function buildAuthorizationsCacheRows_() {
+function cacheBuildAuthorizationsRows_() {
   var authorizations = attachAuthorizedPeopleToAuthorizations_(readAuthorizationRows_());
   var invitations = readVerificationTokenSummaries_();
   var latestAuth = {};
@@ -491,9 +646,9 @@ function loadCacheGroupMappings_(registry) {
   return groups;
 }
 
-function overwriteCacheSheet_(registry, tableName, sheetName, rows) {
+function cacheOverwriteSheet_(registry, tableName, sheetName, rows) {
   var sheet = openTableSheet_(registry, tableName, sheetName);
-  var headers = ensureCacheHeaders_(sheet, rows);
+  var headers = cacheEnsureHeaders_(sheet, rows);
   var headerNames = Object.keys(headers);
   var lastRow = sheet.getLastRow();
   if (lastRow > 1) {
@@ -513,7 +668,7 @@ function overwriteCacheSheet_(registry, tableName, sheetName, rows) {
   targetRange.setValues(values);
 }
 
-function ensureCacheHeaders_(sheet, rows) {
+function cacheEnsureHeaders_(sheet, rows) {
   var headers = getHeaderMap_(sheet);
   var missing = {};
   (rows || []).forEach(function(row) {
@@ -538,7 +693,7 @@ function ensureHeaderNames_(sheet, requiredHeaders) {
   return getHeaderMap_(sheet);
 }
 
-function appendCacheRun_(run) {
+function cacheAppendRun_(run) {
   var registry = loadTableRegistry_();
   var sheet = openTableSheet_(registry, TABLES.dinantia, SHEETS.cacheRuns);
   var headers = requireHeaders_(sheet, [

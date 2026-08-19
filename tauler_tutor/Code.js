@@ -42,9 +42,9 @@ function refreshAuthorizationDataJson() {
   var email = getCurrentUserEmail_();
   var tutorGroup = resolveTutorGroupForEmail_(email);
   if (tutorGroup.isAdmin === true) {
-    rebuildTutorPanelCache_();
+    cacheRebuildTutorPanel_();
   }
-  refreshAuthorizationsCache_();
+  cacheRefreshAuthorizations_();
   var authorizationData = loadAuthorizationData_();
   if (tutorGroup.isAdmin === true && authorizationData.ok === true) {
     var students = loadStudentsForTutorGroupsCached_(tutorGroup.groups);

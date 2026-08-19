@@ -44,6 +44,25 @@ function fetchAllDinantiaAccounts_() {
   return accounts;
 }
 
+function fetchAllDinantiaGroups_() {
+  var credentials = getDinantiaCredentials_();
+  var groups = [];
+  var page = 1;
+
+  while (true) {
+    var body = fetchDinantiaJson_('/v1/groups/index?limit=100&page=' + page, credentials);
+    groups = groups.concat(body.data || []);
+
+    if (!body.pagination || !body.pagination.has_next_page) {
+      break;
+    }
+
+    page++;
+  }
+
+  return groups;
+}
+
 function fetchDinantiaJson_(path, credentials) {
   var auth = Utilities.base64Encode(credentials.user + ':' + credentials.secret);
   var response = UrlFetchApp.fetch(APP_CONFIG.dinantiaBaseUrl + path, {

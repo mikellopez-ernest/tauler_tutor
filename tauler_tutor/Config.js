@@ -33,6 +33,7 @@ var SHEETS = {
   studentsCache: 'students_cache',
   contactsCache: 'contacts_cache',
   authorizationsCache: 'authorizations_cache',
+  dinantiaGroups: 'dinantia_groups',
   cacheRuns: 'cache_runs',
   registry: 'tables',
   authorizations: 'autoritzacions',

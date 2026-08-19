@@ -63,7 +63,7 @@ Cache completeness matters for the parent selector:
 - `students_cache` provides age and authorization-model fields.
 - A student linked in `contacts_cache` but missing from `students_cache`, or present with blank `age`, `study_type`, `is_adult`, or `is_14_plus`, must be treated as unresolved.
 - Unresolved students must not be shown as parent-selectable minors, because the launcher must not expose adult-student forms to parents.
-- Operationally, run `rebuildTutorPanelCache()` after changes in Dinantia groups, Dinantia parent relations, or `Dades alumnes` before validating the parent launcher flow.
+- Operationally, run `cacheRebuildTutorPanel()` after changes in Dinantia groups, Dinantia parent relations, or `Dades alumnes` before validating the parent launcher flow. Existing manual triggers may still call the compatibility wrapper `rebuildTutorPanelCache()`.
 
 ### Parent With Multiple Children
 

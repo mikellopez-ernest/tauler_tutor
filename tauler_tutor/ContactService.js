@@ -19,7 +19,7 @@ function saveContactChanges_(changes) {
     updateDinantiaAccountFields_(contactId, updatesByContactId[contactId]);
   });
 
-  updateContactsCacheAfterSave_(sanitized);
+  cacheUpdateContactsAfterSave_(sanitized);
   appendChangelogRows_(sanitized, userEmail);
 
   return {

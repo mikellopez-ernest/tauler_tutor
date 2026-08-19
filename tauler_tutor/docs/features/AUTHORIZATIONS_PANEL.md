@@ -332,7 +332,7 @@ Behavior:
 - When clicked, refresh only the authorization read model and reload the authorization table.
 - The refresh must rebuild `Dinantia` -> `authorizations_cache` from canonical `Autoritzacions` data.
 - The button must be disabled while the refresh is running.
-- If the logged-in tutor has `isAdmin = true`, the same button must first run `rebuildTutorPanelCache()` and then perform the normal authorization refresh/reload behavior.
+- If the logged-in tutor has `isAdmin = true`, the same button must first run `cacheRebuildTutorPanel()` and then perform the normal authorization refresh/reload behavior.
 - During the admin refresh, show the loading overlay with text equivalent to `Actualitzant totes les dades...`.
 - Non-admin users must keep the narrower authorization-only refresh behavior.
 

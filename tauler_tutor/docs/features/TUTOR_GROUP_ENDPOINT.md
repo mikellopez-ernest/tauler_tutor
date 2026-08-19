@@ -215,10 +215,16 @@ The panel must use cache tables for normal reads:
 The cache rebuild function is:
 
 ```javascript
-rebuildTutorPanelCache()
+cacheRebuildTutorPanel()
 ```
 
 This function fully overwrites `students_cache`, `contacts_cache`, and `authorizations_cache`, and appends one row to `cache_runs`.
+
+The legacy function `rebuildTutorPanelCache()` remains as a compatibility wrapper for existing manual triggers and calls `cacheRebuildTutorPanel()`.
+
+Cache/read-model functions that build, overwrite, refresh, or incrementally update sheets in the logical table `Dinantia` should use the `cache` prefix so they are easy to detect and extract later if needed.
+
+The separate discovery function `cacheRebuildDinantiaGroups()` creates or updates `Dinantia` -> `dinantia_groups` with the full Dinantia group tree. This discovery sheet does not replace `teachers_2_dinantia` or `dinantia_2_dades_alumnes` for tutor visibility.
 
 The panel may keep a live fallback during the transition period, but the intended production path is cache-first.
 
