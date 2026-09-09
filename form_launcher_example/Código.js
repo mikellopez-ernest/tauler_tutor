@@ -455,12 +455,15 @@ function handleForwardForm_(payload) {
 
 function handleStudentConfirmation_(payload) {
   var rawToken = stringValue_(payload.token);
+  var rawSession = stringValue_(payload.form_session);
   var respostaId = stringValue_(payload.resposta_id);
-  var record = validateToken_(rawToken, { allowPendingOnly: true });
+  var record = rawSession
+    ? validateFormSession_(rawSession, { allowPendingOnly: true })
+    : validateToken_(rawToken, { allowPendingOnly: true });
   if (record.sender !== 'student') return renderMessagePage_('No s’ha pogut confirmar', 'Aquest enllaç no correspon a una confirmació d’alumne.', true);
   updateStudentSignature_(record.student_id, respostaId, record.email);
   refreshAuthorizationsCache_();
-  markTokenUsed_(rawToken);
+  markTokenRecordUsed_(record);
   return renderMessagePage_('Confirmacio registrada', 'La teva conformitat ha quedat registrada correctament.', false);
 }
 
@@ -975,6 +978,29 @@ function validateToken_(rawToken, options) {
   throw new Error('Token not found.');
 }
 
+function validateFormSession_(rawSession, options) {
+  var hash = hashToken_(rawSession);
+  var sheet = openTableSheet_('Autoritzacions', 'verification_tokens');
+  var h = headerMap_(sheet);
+  var values = sheet.getDataRange().getValues();
+  for (var i = values.length - 1; i >= 1; i--) {
+    var row = values[i];
+    var record = objectFromRow_(row, h);
+    var metadata = parseJson_(record.metadata_json) || {};
+    var session = metadata.form_session || {};
+    if (stringValue_(session.session_hash) !== hash) continue;
+    record._rowNumber = i + 1;
+    if (record.status === 'revoked') throw new Error('Token revoked.');
+    if (record.status === 'used' && options && options.allowPendingOnly) throw new Error('Token already used.');
+    if (new Date(record.expires_at).getTime() < new Date().getTime() || new Date(session.expires_at).getTime() < new Date().getTime()) {
+      markTokenExpired_(sheet, h, record._rowNumber);
+      throw new Error('Token expired.');
+    }
+    return record;
+  }
+  throw new Error('Form session not found.');
+}
+
 function expireOldPendingTokens_() {
   var sheet = openTableSheet_('Autoritzacions', 'verification_tokens');
   var h = headerMap_(sheet);
@@ -1001,6 +1027,10 @@ function markTokenExpired_(sheet, h, rowNumber) {
 
 function markTokenUsed_(rawToken) {
   var record = validateToken_(rawToken, { allowPendingOnly: true });
+  markTokenRecordUsed_(record);
+}
+
+function markTokenRecordUsed_(record) {
   var sheet = openTableSheet_('Autoritzacions', 'verification_tokens');
   var h = headerMap_(sheet);
   sheet.getRange(record._rowNumber, h.used_at + 1).setValue(formatDateTime_(new Date()));

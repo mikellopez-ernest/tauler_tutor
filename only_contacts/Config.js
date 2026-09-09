@@ -2,6 +2,7 @@ var APP_CONFIG = {
   timezone: 'Europe/Madrid',
   dinantiaBaseUrl: 'https://app.dinantia.com/api/web',
   rootGroupIds: ['ESO', 'PFI', 'BAT', 'CIC'],
+  runtimeStudentGroupCacheVersion: 'v2',
   genericErrorTitle: "S'ha produït un error"
 };
 

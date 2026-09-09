@@ -11,11 +11,15 @@
       selectedAuthorizationStatus: '__all',
       hasMultipleGroups: false,
       contactsLoadedScopes: {},
+      profileContactsLoadedByStudent: {},
+      profileContactsLoadingByStudent: {},
       contactsLoading: false,
       authorizationsLoaded: false,
       inviting: false,
       isAdmin: false,
       formLauncherUrl: '',
+      activeProfileStudent: null,
+      activeProfileTab: 'med',
       contactSort: { key: 'name', direction: 'asc' }
     };
 
@@ -41,6 +45,7 @@
     bindSaveButton();
     bindBulkInviteButton();
     bindRefreshAuthButton();
+    bindStudentProfile();
     bindAuthorizationDetailModal();
     bindAuthorizationFloatingScroll();
     loadInitialData();
@@ -256,10 +261,22 @@
 
       students.forEach(function(student) {
         var row = document.createElement('tr');
+        row.className = 'clickable-row';
+        row.tabIndex = 0;
+        row.setAttribute('role', 'button');
+        row.setAttribute('aria-label', 'Obre la fitxa de ' + (student.name || 'alumne'));
         row.setAttribute('data-group', student.groupName || '');
         row.setAttribute('data-name', student.name || '');
         row.setAttribute('data-birthdate', student.birthdateSortKey || '');
         row.setAttribute('data-age', student.age || '');
+        row.addEventListener('click', function() {
+          openStudentProfile(student);
+        });
+        row.addEventListener('keydown', function(event) {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          openStudentProfile(student);
+        });
 
         if (state.hasMultipleGroups) appendCell(row, student.groupName || '');
         appendCell(row, student.name || '');
@@ -355,13 +372,14 @@
       (contacts || []).forEach(function(item) {
         if (!item || !item.id) return;
         byId[String(item.id)] = item;
+        state.profileContactsLoadedByStudent[String(item.id)] = true;
       });
       state.contacts = Object.keys(byId).map(function(id) { return byId[id]; });
     }
 
 
 
-    function loadAuthorizations() {
+    function loadAuthorizations(callback) {
       setInitialLoading(true);
       google.script.run
         .withSuccessHandler(function(result) {
@@ -369,8 +387,10 @@
           var parsed = parseInitialData(result);
           state.authorizationsLoaded = true;
           if (!parsed || !parsed.ok) {
-            showAuthorizationsError(parsed && parsed.error ? parsed.error.message || parsed.error.details : 'No s han pogut carregar les autoritzacions.');
+            var message = parsed && parsed.error ? parsed.error.message || parsed.error.details : 'No s han pogut carregar les autoritzacions.';
+            showAuthorizationsError(message);
             renderAuthorizations();
+            if (callback) callback(false, message);
             return;
           }
           if (parsed.fullCacheRebuilt) {
@@ -379,12 +399,14 @@
           state.authorizations = parsed.authorizations || [];
           state.invitations = parsed.invitations || [];
           renderAuthorizations();
+          if (callback) callback(true);
         })
         .withFailureHandler(function(error) {
           setInitialLoading(false);
           state.authorizationsLoaded = true;
           showAuthorizationsError(error && error.message ? error.message : String(error));
           renderAuthorizations();
+          if (callback) callback(false, error && error.message ? error.message : String(error));
         })
         .loadAuthorizationDataJson();
     }
@@ -432,6 +454,8 @@
         renderStudents(filteredStudents());
         state.contacts = [];
         state.contactsLoadedScopes = {};
+        state.profileContactsLoadedByStudent = {};
+        state.profileContactsLoadingByStudent = {};
         renderContacts([]);
       }
       state.isAdmin = parsed.isAdmin === true || state.isAdmin === true;
@@ -1113,7 +1137,8 @@
 
     function updateTopFilterVisibility() {
       if (!groupFilter) return;
-      groupFilter.classList.toggle('is-hidden', !state.hasMultipleGroups && !isViewActive('autoritzacions'));
+      var showForGroup = state.hasMultipleGroups && (isViewActive('inici') || isViewActive('contactes') || isViewActive('autoritzacions'));
+      groupFilter.classList.toggle('is-hidden', !showForGroup && !isViewActive('autoritzacions'));
     }
 
     function showAuthorizationsError(message) {
@@ -1179,6 +1204,276 @@
       return cell;
     }
 
+    function bindStudentProfile() {
+      var back = document.getElementById('student-profile-back');
+      if (back) {
+        back.addEventListener('click', function() {
+          showView_('inici');
+        });
+      }
+      document.querySelectorAll('.tab').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+          document.querySelectorAll('.tab').forEach(function(item) {
+            item.classList.toggle('active', item === tab);
+          });
+          state.activeProfileTab = tab.getAttribute('data-profile-tab') || 'med';
+          renderStudentProfileTab();
+        });
+      });
+    }
+
+    function openStudentProfile(student) {
+      if (!student) return;
+      state.activeProfileStudent = student;
+      state.activeProfileTab = 'med';
+      document.querySelectorAll('.tab').forEach(function(tab) {
+        tab.classList.toggle('active', (tab.getAttribute('data-profile-tab') || 'med') === 'med');
+      });
+      document.getElementById('student-profile-title').textContent = student.name || 'Fitxa de l alumne/a';
+      document.getElementById('profile-student-name').textContent = student.name || '-';
+      document.getElementById('profile-student-group').textContent = student.groupName || '-';
+      document.getElementById('profile-student-birthdate').textContent = student.birthdate || '-';
+      document.getElementById('profile-student-age').textContent = calculateAgeFromStudent_(student) || '-';
+      renderStudentProfileTab();
+      showView_('student-profile');
+    }
+
+    function renderStudentProfileTab() {
+      var panel = document.getElementById('student-profile-tab-panel');
+      if (!panel) return;
+      panel.textContent = '';
+      if (state.activeProfileTab === 'med') {
+        renderMedicalProfileTab(panel, state.activeProfileStudent);
+        return;
+      }
+      if (state.activeProfileTab === 'fam') {
+        renderFamilyProfileTab(panel, state.activeProfileStudent);
+        return;
+      }
+      renderWorkInProgressTab(panel);
+    }
+
+    function renderMedicalProfileTab(panel, student) {
+      if (!student) {
+        renderWorkInProgressTab(panel);
+        return;
+      }
+      if (!state.authorizationsLoaded) {
+        renderNotebookLoading(panel, 'Carregant dades mèdiques...');
+        loadAuthorizations(function(success, message) {
+          if (!success) {
+            renderNotebookMessage(panel, "No s'han pogut carregar les dades mèdiques: " + (message || 'Error desconegut.'));
+            return;
+          }
+          renderStudentProfileTab();
+        });
+        return;
+      }
+      var auth = latestAuthorizationsByStudent_()[String(student.id || '').trim()] || null;
+      if (!auth) {
+        renderNotebookMessage(panel, 'Aquesta família encara no ha omplert les autoritzacions, i per tant, manca aquesta informació.');
+        return;
+      }
+
+      panel.className = 'notebook-panel medical-panel';
+      var section = document.createElement('section');
+      section.className = 'medical-summary';
+      appendMedicalBoolean(section, 'Comunicació de salut', auth.comunicacio_salut);
+      appendMedicalText(section, 'Problemes de salut', auth.problemes_salut);
+      appendMedicalText(section, 'Altres aspectes de salut', auth.altres_salut);
+      appendMedicalText(section, 'Medicació', auth.medicacio);
+      appendMedicalText(section, 'Posologia', auth.posologia);
+      appendMedicalText(section, 'Dosi', auth.dosi);
+      appendMedicalBoolean(section, 'Administració de medicació', auth.administracio_medicacio);
+      appendMedicalBoolean(section, 'Paracetamol', auth.paracetamol);
+      panel.appendChild(section);
+    }
+
+    function renderFamilyProfileTab(panel, student) {
+      if (!student) {
+        renderWorkInProgressTab(panel);
+        return;
+      }
+      var studentId = String(student.id || '').trim();
+      var contactData = contactsForProfileStudent_(studentId);
+      if (!state.profileContactsLoadedByStudent[studentId] && !contactData) {
+        renderNotebookLoading(panel, 'Carregant dades familiars...');
+        loadProfileContacts(student, function(success, message) {
+          if (!success) {
+            renderNotebookMessage(panel, "No s'han pogut carregar les dades familiars: " + (message || 'Error desconegut.'));
+            return;
+          }
+          renderStudentProfileTab();
+        });
+        return;
+      }
+
+      var contacts = contactData && contactData.contacts ? contactData.contacts : [];
+      if (!contacts.length) {
+        renderNotebookMessage(panel, 'No hi ha contactes familiars informats per a aquest alumne/a.');
+        return;
+      }
+
+      panel.className = 'notebook-panel medical-panel';
+      var section = document.createElement('section');
+      section.className = 'medical-summary family-summary';
+      contacts.forEach(function(contact) {
+        appendFamilyContact(section, contact);
+      });
+      panel.appendChild(section);
+    }
+
+    function contactsForProfileStudent_(studentId) {
+      studentId = String(studentId || '').trim();
+      if (!studentId) return null;
+      for (var i = 0; i < (state.contacts || []).length; i++) {
+        if (String(state.contacts[i].id || '').trim() === studentId) return state.contacts[i];
+      }
+      return null;
+    }
+
+    function loadProfileContacts(student, callback) {
+      var studentId = String(student && student.id || '').trim();
+      if (!studentId) {
+        if (callback) callback(false, 'Falta l identificador de l alumne.');
+        return;
+      }
+      if (state.profileContactsLoadingByStudent[studentId]) return;
+      state.profileContactsLoadingByStudent[studentId] = true;
+      google.script.run
+        .withSuccessHandler(function(result) {
+          state.profileContactsLoadingByStudent[studentId] = false;
+          var parsed = parseInitialData(result);
+          if (!parsed || !parsed.ok) {
+            if (callback) callback(false, parsed && parsed.error ? parsed.error.details || parsed.error.message : 'Resposta buida del servidor.');
+            return;
+          }
+          mergeContacts(parsed.contacts || []);
+          state.profileContactsLoadedByStudent[studentId] = true;
+          if (callback) callback(true);
+        })
+        .withFailureHandler(function(error) {
+          state.profileContactsLoadingByStudent[studentId] = false;
+          if (callback) callback(false, error && error.message ? error.message : String(error));
+        })
+        .loadContactsForStudents([student]);
+    }
+
+    function appendFamilyContact(section, contact) {
+      var item = document.createElement('article');
+      item.className = 'medical-item family-contact';
+      var header = document.createElement('div');
+      header.className = 'family-contact-header';
+      var title = document.createElement('h3');
+      title.textContent = contactSourceLabel_(contact);
+      header.appendChild(title);
+      item.appendChild(header);
+      appendFamilyField(item, 'Nom', contact.name);
+      appendFamilyField(item, 'Telèfon', contact.phone);
+      appendFamilyField(item, 'Email', contact.email);
+      section.appendChild(item);
+    }
+
+    function appendFamilyField(item, label, value) {
+      var row = document.createElement('div');
+      row.className = 'family-field';
+      var key = document.createElement('span');
+      key.textContent = label;
+      var val = document.createElement('strong');
+      val.textContent = textValue(value) || '-';
+      row.appendChild(key);
+      row.appendChild(val);
+      item.appendChild(row);
+    }
+
+    function contactSourceLabel_(contact) {
+      if (String(contact && contact.source || '').trim() === 'authorization_emergency') return 'Contacte d’emergència';
+      var position = Number(contact && contact.position) || 0;
+      return position ? 'Contacte ' + position : 'Contacte familiar';
+    }
+
+    function appendMedicalText(section, label, value) {
+      var item = document.createElement('article');
+      item.className = 'medical-item';
+      var title = document.createElement('h3');
+      title.textContent = label;
+      var body = document.createElement('p');
+      body.textContent = textValue(value) || '-';
+      item.appendChild(title);
+      item.appendChild(body);
+      section.appendChild(item);
+    }
+
+    function appendMedicalBoolean(section, label, value) {
+      var item = document.createElement('article');
+      item.className = 'medical-item medical-bool';
+      var title = document.createElement('h3');
+      title.textContent = label;
+      var pill = document.createElement('span');
+      var enabled = parseBooleanValue(value) === true;
+      pill.className = enabled ? 'medical-pill yes' : 'medical-pill no';
+      pill.textContent = enabled ? 'Sí' : 'No';
+      item.appendChild(title);
+      item.appendChild(pill);
+      section.appendChild(item);
+    }
+
+    function renderNotebookLoading(panel, message) {
+      panel.className = 'notebook-panel';
+      panel.textContent = '';
+      var spinner = document.createElement('div');
+      spinner.className = 'spinner';
+      var text = document.createElement('p');
+      text.className = 'subtle';
+      text.textContent = message || 'Carregant...';
+      panel.appendChild(spinner);
+      panel.appendChild(text);
+    }
+
+    function renderNotebookMessage(panel, message) {
+      panel.className = 'notebook-panel notebook-message';
+      panel.textContent = '';
+      var text = document.createElement('p');
+      text.textContent = message;
+      panel.appendChild(text);
+    }
+
+    function renderWorkInProgressTab(panel) {
+      panel.className = 'notebook-panel';
+      panel.textContent = '';
+      var cone = document.createElement('div');
+      cone.className = 'work-cone';
+      cone.setAttribute('aria-label', 'En construcció');
+      cone.textContent = '🚧';
+      var text = document.createElement('p');
+      text.className = 'subtle';
+      text.textContent = 'En construcció';
+      panel.appendChild(cone);
+      panel.appendChild(text);
+    }
+
+    function calculateAgeFromStudent_(student) {
+      var iso = String(student && student.birthdateSortKey || '').trim();
+      var display = String(student && student.birthdate || '').trim();
+      var parsed = parseDateForAge_(iso) || parseDateForAge_(display);
+      if (!parsed) return '';
+      var today = new Date();
+      var age = today.getFullYear() - parsed.getFullYear();
+      var birthdayThisYear = new Date(today.getFullYear(), parsed.getMonth(), parsed.getDate());
+      if (today < birthdayThisYear) age--;
+      return age >= 0 ? String(age) : '';
+    }
+
+    function parseDateForAge_(value) {
+      value = String(value || '').trim();
+      if (!value) return null;
+      var iso = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+      var local = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (local) return new Date(Number(local[3]), Number(local[2]) - 1, Number(local[1]));
+      return null;
+    }
+
 
     function bindAuthorizationDetailModal() {
       var modal = document.getElementById('authorization-detail-modal');
@@ -1205,18 +1500,22 @@
             loadVisibleContactsIfNeeded();
           }
 
-          document.querySelectorAll('[data-view]').forEach(function(item) {
-            item.classList.toggle('active', item === link);
-          });
-
-          document.querySelectorAll('.view').forEach(function(view) {
-            view.classList.toggle('active', view.id === 'view-' + viewName);
-          });
-
-          updateSaveButton();
-          updateAuthorizationStatusFilterVisibility();
+          showView_(viewName);
         });
       });
+    }
+
+    function showView_(viewName) {
+      document.querySelectorAll('[data-view]').forEach(function(item) {
+        item.classList.toggle('active', item.getAttribute('data-view') === viewName);
+      });
+
+      document.querySelectorAll('.view').forEach(function(view) {
+        view.classList.toggle('active', view.id === 'view-' + viewName);
+      });
+
+      updateSaveButton();
+      updateAuthorizationStatusFilterVisibility();
     }
 
     function isViewActive(viewName) {

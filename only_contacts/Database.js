@@ -149,12 +149,36 @@ function loadReadOnlyGroupOptions_() {
 function loadStudentsForGroup_(groupId) {
   groupId = String(groupId || '').trim();
   if (!groupId || groupId === '__none') return [];
-  var cached = loadStudentsForGroupFromCache_(groupId);
+  var group = findDinantiaGroupById_(groupId);
+  var groupAliases = groupAliases_(group || { id: groupId, name: groupId });
+  var cached = loadStudentsForGroupFromCache_(groupAliases);
   if (cached.length) return cached;
-  return fetchStudentsForGroupFromDinantia_(groupId);
+  return loadStudentsForGroupFromRuntimeCache_(group || { id: groupId, name: groupId });
 }
 
-function loadStudentsForGroupFromCache_(groupId) {
+function findDinantiaGroupById_(groupId) {
+  groupId = String(groupId || '').trim();
+  if (!groupId) return null;
+  var registry = loadTableRegistry_();
+  var sheet = openTableSheet_(registry, TABLES.dinantia, SHEETS.dinantiaGroups);
+  var headers = requireHeaders_(sheet, [
+    'id', 'name', 'path_names'
+  ], TABLES.dinantia + ' -> ' + SHEETS.dinantiaGroups);
+  if (sheet.getLastRow() < 2) return null;
+  var values = sheet.getDataRange().getValues();
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    if (String(row[headers.id] || '').trim() !== groupId) continue;
+    return {
+      id: groupId,
+      name: String(row[headers.name] || groupId).trim() || groupId,
+      pathNames: String(row[headers.path_names] || '').trim()
+    };
+  }
+  return null;
+}
+
+function loadStudentsForGroupFromCache_(groupAliases) {
   var registry = loadTableRegistry_();
   var sheet = openTableSheet_(registry, TABLES.dinantia, SHEETS.studentsCache);
   var headers = requireHeaders_(sheet, [
@@ -163,9 +187,10 @@ function loadStudentsForGroupFromCache_(groupId) {
   if (sheet.getLastRow() < 2) return [];
   var values = sheet.getDataRange().getValues();
   var rows = [];
+  var acceptedGroups = aliasLookup_(groupAliases);
   for (var i = 1; i < values.length; i++) {
     var row = values[i];
-    if (String(row[headers.group_name] || '').trim() !== groupId) continue;
+    if (!acceptedGroups[textKey_(row[headers.group_name])]) continue;
     rows.push({
       id: String(row[headers.student_id] || '').trim(),
       name: String(row[headers.student_name] || '').trim(),
@@ -177,30 +202,322 @@ function loadStudentsForGroupFromCache_(groupId) {
   return sortStudents_(rows);
 }
 
-function fetchStudentsForGroupFromDinantia_(groupId) {
+function fetchStudentsForGroupFromDinantia_(group) {
   var credentials = getDinantiaCredentials_();
+  var aliases = groupAliases_(group);
   var students = [];
-  var page = 1;
+  var firstPage = fetchDinantiaJson_('/v1.2/accounts/index?limit=100&page=1', credentials);
+  var pageCount = Math.max(1, Number(firstPage.pagination && firstPage.pagination.page_count) || 1);
+  var pages = [firstPage].concat(fetchDinantiaAccountPages_(credentials, 2, pageCount));
 
-  while (true) {
-    var body = fetchDinantiaJson_('/v1.2/accounts/index?limit=100&page=' + page, credentials);
-    (body.data || []).forEach(function(account) {
-      var roles = account.roles || [];
-      var memberGroups = account.groups && account.groups.member ? account.groups.member : [];
-      if (roles.indexOf('Student') === -1 || memberGroups.indexOf(groupId) === -1) return;
-      students.push({
-        id: account.id || '',
-        name: account.name || '',
-        groupName: groupId,
-        email: account.email || '',
-        source: 'dinantia'
-      });
-    });
-    if (!body.pagination || !body.pagination.has_next_page) break;
-    page++;
-  }
+  pages.forEach(function(body) {
+    collectStudentsFromAccountsPage_(students, body, group, aliases);
+  });
 
   return sortStudents_(students);
+}
+
+function loadStudentsForGroupFromRuntimeCache_(group) {
+  var key = runtimeStudentGroupCacheKey_(group);
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get(key);
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch (error) {
+      console.warn('Invalid runtime student group cache ignored: ' + (error && error.message ? error.message : error));
+    }
+  }
+
+  var start = Date.now();
+  var students = fetchStudentsForGroupFromDinantia_(group);
+  console.log(JSON.stringify({
+    event: 'dinantia_group_students_loaded',
+    groupId: group.id || '',
+    groupName: group.name || '',
+    students: students.length,
+    elapsedMs: Date.now() - start
+  }));
+  try {
+    cache.put(key, JSON.stringify(students), 21600);
+  } catch (error) {
+    console.warn('Runtime student group cache write failed: ' + (error && error.message ? error.message : error));
+  }
+  return students;
+}
+
+function runtimeStudentGroupCacheKey_(group) {
+  var raw = [APP_CONFIG.runtimeStudentGroupCacheVersion || 'v1'].concat(groupAliases_(group)).join('|');
+  var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, raw);
+  return 'ro_students_' + Utilities.base64EncodeWebSafe(digest).replace(/=+$/g, '');
+}
+
+function fetchDinantiaAccountPages_(credentials, startPage, endPage) {
+  if (endPage < startPage) return [];
+  var auth = Utilities.base64Encode(credentials.user + ':' + credentials.secret);
+  var requests = [];
+  for (var page = startPage; page <= endPage; page++) {
+    requests.push({
+      url: APP_CONFIG.dinantiaBaseUrl + '/v1.2/accounts/index?limit=100&page=' + page,
+      method: 'get',
+      headers: {
+        Authorization: 'Basic ' + auth,
+        Accept: 'application/vnd.api+json',
+        'Content-Type': 'application/vnd.api+json'
+      },
+      muteHttpExceptions: true
+    });
+  }
+  return UrlFetchApp.fetchAll(requests).map(parseDinantiaResponse_);
+}
+
+function collectStudentsFromAccountsPage_(students, body, group, aliases) {
+  (body.data || []).forEach(function(account) {
+    if (!accountHasRole_(account, 'Student') || !accountBelongsToGroup_(account, aliases)) return;
+    students.push({
+      id: account.id || '',
+      name: account.name || '',
+      groupName: group.name || group.id || '',
+      email: account.email || '',
+      source: 'dinantia'
+    });
+  });
+}
+
+function accountHasRole_(account, role) {
+  role = String(role || '').trim().toLowerCase();
+  return (account && account.roles || []).map(function(value) {
+    return String(value || '').trim().toLowerCase();
+  }).indexOf(role) !== -1;
+}
+
+function accountBelongsToGroup_(account, groupAliases) {
+  var wanted = aliasLookup_(groupAliases);
+  var refs = collectAccountGroupRefs_(account && account.groups);
+  for (var i = 0; i < refs.length; i++) {
+    if (wanted[textKey_(refs[i])]) return true;
+  }
+  return false;
+}
+
+function groupAliases_(group) {
+  group = group || {};
+  var aliases = [group.id, group.name, group.pathNames];
+  var path = String(group.pathNames || '').trim();
+  if (path) {
+    path.split(/[>:|/]+/).forEach(function(part) {
+      aliases.push(part);
+    });
+  }
+  return uniqueTextValues_(aliases);
+}
+
+function aliasLookup_(values) {
+  var lookup = {};
+  uniqueTextValues_(values).forEach(function(value) {
+    lookup[textKey_(value)] = true;
+  });
+  return lookup;
+}
+
+function uniqueTextValues_(values) {
+  var seen = {};
+  var out = [];
+  (Array.isArray(values) ? values : [values]).forEach(function(value) {
+    value = String(value || '').trim();
+    if (!value || seen[value]) return;
+    seen[value] = true;
+    out.push(value);
+  });
+  return out;
+}
+
+function collectAccountGroupRefs_(groups) {
+  var refs = [];
+  if (!groups) return refs;
+  Object.keys(groups).forEach(function(scope) {
+    flattenGroupRefs_(groups[scope]).forEach(function(ref) {
+      if (ref && refs.indexOf(ref) === -1) refs.push(ref);
+    });
+  });
+  return refs;
+}
+
+function flattenGroupRefs_(value) {
+  if (value === null || value === undefined) return [];
+  if (Array.isArray(value)) {
+    return value.reduce(function(out, item) {
+      return out.concat(flattenGroupRefs_(item));
+    }, []);
+  }
+  if (typeof value === 'object') {
+    return ['id', 'name', 'tag'].map(function(key) {
+      return String(value[key] || '').trim();
+    }).filter(Boolean);
+  }
+  var text = String(value || '').trim();
+  return text ? [text] : [];
+}
+
+function diagnoseReadOnlyGroupStudents_(groupText, studentText) {
+  groupText = String(groupText || '').trim();
+  studentText = String(studentText || '').trim();
+  var report = {
+    ok: false,
+    query: groupText,
+    studentQuery: studentText,
+    matchingGroups: [],
+    selectedGroup: null,
+    cacheCount: 0,
+    cacheSample: [],
+    dinantiaCount: 0,
+    dinantiaSample: [],
+    matchingGroupNonStudentCount: 0,
+    matchingGroupNonStudentSample: [],
+    studentMatches: [],
+    studentGroupScopeHits: {},
+    studentGroupRefSamples: [],
+    pagesScanned: 0,
+    studentAccountsScanned: 0,
+    error: ''
+  };
+
+  try {
+    var groups = findDinantiaGroupsByText_(groupText);
+    report.matchingGroups = groups;
+    report.selectedGroup = groups[0] || findDinantiaGroupById_(groupText) || { id: groupText, name: groupText };
+
+    var cached = loadStudentsForGroupFromCache_(groupAliases_(report.selectedGroup));
+    report.cacheCount = cached.length;
+    report.cacheSample = cached.slice(0, 10);
+
+    var credentials = getDinantiaCredentials_();
+    var page = 1;
+    while (true) {
+      var body = fetchDinantiaJson_('/v1.2/accounts/index?limit=100&page=' + page, credentials);
+      report.pagesScanned++;
+      (body.data || []).forEach(function(account) {
+        var hits = matchingAccountGroupScopes_(account, groupAliases_(report.selectedGroup));
+        var isStudent = accountHasRole_(account, 'Student');
+        if (isStudent) report.studentAccountsScanned++;
+        if (studentText && accountMatchesText_(account, studentText)) {
+          report.studentMatches.push({
+            id: account.id || '',
+            name: account.name || '',
+            email: account.email || '',
+            roles: account.roles || [],
+            matchingScopes: hits,
+            refs: collectAccountGroupRefs_(account.groups).slice(0, 30)
+          });
+        }
+        if (hits.length && !isStudent) {
+          report.matchingGroupNonStudentCount++;
+          if (report.matchingGroupNonStudentSample.length < 10) {
+            report.matchingGroupNonStudentSample.push({
+              id: account.id || '',
+              name: account.name || '',
+              email: account.email || '',
+              roles: account.roles || [],
+              scopes: hits
+            });
+          }
+          return;
+        }
+        if (!isStudent) return;
+        if (hits.length) {
+          report.dinantiaCount++;
+          hits.forEach(function(scope) {
+            report.studentGroupScopeHits[scope] = (report.studentGroupScopeHits[scope] || 0) + 1;
+          });
+          if (report.dinantiaSample.length < 10) {
+            report.dinantiaSample.push({
+              id: account.id || '',
+              name: account.name || '',
+              email: account.email || '',
+              scopes: hits
+            });
+          }
+        } else if (report.studentGroupRefSamples.length < 10) {
+          report.studentGroupRefSamples.push({
+            id: account.id || '',
+            name: account.name || '',
+            refs: collectAccountGroupRefs_(account.groups).slice(0, 20)
+          });
+        }
+      });
+      if (!body.pagination || !body.pagination.has_next_page) break;
+      page++;
+    }
+
+    report.ok = true;
+  } catch (error) {
+    report.error = error && error.message ? error.message : String(error);
+  }
+
+  return report;
+}
+
+function accountMatchesText_(account, text) {
+  var wanted = textKey_(text);
+  if (!wanted) return false;
+  return textKey_(account && account.name).indexOf(wanted) !== -1 ||
+    wanted.indexOf(textKey_(account && account.name)) !== -1 ||
+    textKey_(account && account.email).indexOf(wanted) !== -1 ||
+    textKey_(account && account.id) === wanted;
+}
+
+function findDinantiaGroupsByText_(groupText) {
+  var registry = loadTableRegistry_();
+  var sheet = openTableSheet_(registry, TABLES.dinantia, SHEETS.dinantiaGroups);
+  var headers = requireHeaders_(sheet, [
+    'id', 'name', 'parent_id', 'level', 'path_names'
+  ], TABLES.dinantia + ' -> ' + SHEETS.dinantiaGroups);
+  if (sheet.getLastRow() < 2) return [];
+  var wanted = textKey_(groupText);
+  var values = sheet.getDataRange().getValues();
+  var exactRows = [];
+  var containsRows = [];
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    var id = String(row[headers.id] || '').trim();
+    var name = String(row[headers.name] || '').trim();
+    var pathNames = String(row[headers.path_names] || '').trim();
+    if (!id) continue;
+    var idKey = textKey_(id);
+    var nameKey = textKey_(name);
+    var pathKey = textKey_(pathNames);
+    var matched = idKey === wanted || nameKey === wanted || pathKey === wanted;
+    var contains = !matched && wanted && (idKey.indexOf(wanted) !== -1 || nameKey.indexOf(wanted) !== -1 || pathKey.indexOf(wanted) !== -1 || wanted.indexOf(idKey) !== -1 || wanted.indexOf(nameKey) !== -1);
+    if (!matched && !contains) continue;
+    var item = {
+      id: id,
+      name: name || id,
+      parentId: String(row[headers.parent_id] || '').trim(),
+      level: Number(row[headers.level]) || 0,
+      pathNames: pathNames,
+      matchType: matched ? 'exact' : 'contains'
+    };
+    if (matched) exactRows.push(item);
+    else containsRows.push(item);
+  }
+  return exactRows.concat(containsRows).slice(0, 25);
+}
+
+function matchingAccountGroupScopes_(account, groupAliases) {
+  var wanted = aliasLookup_(groupAliases);
+  var hits = [];
+  var groups = account && account.groups;
+  if (!groups) return hits;
+  Object.keys(groups).forEach(function(scope) {
+    var refs = flattenGroupRefs_(groups[scope]);
+    for (var i = 0; i < refs.length; i++) {
+      if (wanted[textKey_(refs[i])]) {
+        hits.push(scope);
+        return;
+      }
+    }
+  });
+  return hits;
 }
 
 function loadAuthorizationsReadOnly_() {
@@ -348,6 +665,10 @@ function fetchDinantiaJson_(path, credentials) {
     },
     muteHttpExceptions: true
   });
+  return parseDinantiaResponse_(response);
+}
+
+function parseDinantiaResponse_(response) {
   var status = response.getResponseCode();
   var text = response.getContentText();
   var body;
@@ -392,4 +713,14 @@ function formatDateValue_(value) {
     return Utilities.formatDate(value, APP_CONFIG.timezone, 'dd/MM/yyyy');
   }
   return String(value === null || value === undefined ? '' : value).trim();
+}
+
+function textKey_(value) {
+  return String(value === null || value === undefined ? '' : value)
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[‐‑‒–—]/g, '-')
+    .replace(/\s+/g, '')
+    .toLowerCase();
 }

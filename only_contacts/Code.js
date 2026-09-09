@@ -119,10 +119,24 @@ function publicReadOnlyError_(error, fallbackMessage) {
   var message = error && error.message ? String(error.message) : String(error || '');
 
   if (/Missing required script property/i.test(message)) {
+    if (message.indexOf(SCRIPT_PROPERTIES.databaseId) !== -1) {
+      return {
+        code: 'DATABASE_CONFIG_MISSING',
+        title: APP_CONFIG.genericErrorTitle,
+        message: 'La configuració de la base de dades no està completa. Contacta amb el centre.'
+      };
+    }
+    if (message.indexOf(SCRIPT_PROPERTIES.dinantiaUser) !== -1 || message.indexOf(SCRIPT_PROPERTIES.dinantiaSecret) !== -1) {
+      return {
+        code: 'DINANTIA_CONFIG_MISSING',
+        title: APP_CONFIG.genericErrorTitle,
+        message: 'La configuració de Dinantia no està completa. Contacta amb el centre.'
+      };
+    }
     return {
       code: 'CONFIG_MISSING',
       title: APP_CONFIG.genericErrorTitle,
-      message: 'La configuracio del servei no esta completa. Contacta amb el centre.'
+      message: 'La configuració del servei no està completa. Contacta amb el centre.'
     };
   }
 
@@ -199,6 +213,30 @@ function diagnoseTaulerProfessorsReadOnlySetup() {
 
 function diagnoseOnlyContactsSetup() {
   return diagnoseTaulerProfessorsReadOnlySetup();
+}
+
+function diagnoseTaulerProfessorsReadOnlyGroupStudents(groupText) {
+  var report = diagnoseReadOnlyGroupStudents_(groupText || 'OPT3.1-Francès');
+  logDiagnosticReport_(report);
+  return report;
+}
+
+function diagnoseOpt31FrancesStudents() {
+  var report = diagnoseReadOnlyGroupStudents_('OPT3.1-Francès');
+  logDiagnosticReport_(report);
+  return report;
+}
+
+function diagnoseOpt31ArtCreativitatStudents() {
+  var report = diagnoseReadOnlyGroupStudents_('OPT3.1- Art i creativitat 1', 'Venón Jaraba, Julián');
+  logDiagnosticReport_(report);
+  return report;
+}
+
+function logDiagnosticReport_(report) {
+  var text = JSON.stringify(report, null, 2);
+  console.log(text);
+  Logger.log(text);
 }
 
 function authorizeTaulerProfessorsReadOnlyServices() {

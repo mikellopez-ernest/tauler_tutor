@@ -172,6 +172,7 @@ The `Inici` page must show:
 
 1. The selected Dinantia group ID as the page title, or `Tots els grups` when all groups are selected.
 2. A table with all students in the selected group scope.
+3. Clickable student rows that open a full-page read-only student profile.
 
 The title uses the group ID directly from the resolved group list. When more than one group is visible, the default title is `Tots els grups`.
 
@@ -227,6 +228,80 @@ Cache/read-model functions that build, overwrite, refresh, or incrementally upda
 The separate discovery function `cacheRebuildDinantiaGroups()` creates or updates `Dinantia` -> `dinantia_groups` with the full Dinantia group tree. This discovery sheet does not replace `teachers_2_dinantia` or `dinantia_2_dades_alumnes` for tutor visibility.
 
 The panel may keep a live fallback during the transition period, but the intended production path is cache-first.
+
+## Student Profile Page
+
+When a row in the `Inici` student table is clicked, the app must open a full-page student profile view without reloading the browser page.
+
+The profile is read-only.
+
+The profile data comes from the already-loaded student cache/read model in memory. Opening the profile must not perform a new server request.
+
+The top profile summary must show a compact 1x4 matrix on desktop, falling back to one column on narrow screens:
+
+| Field | Source / Rule |
+| --- | --- |
+| Student full name | Loaded student `name`. |
+| Group | Loaded student `groupName`. |
+| Birthdate | Loaded student `birthdate`. |
+| Age | Calculated dynamically in the browser from `birthdateSortKey` / `birthdate`, using the current date. |
+
+After the summary, the profile must show a notebook/tab area.
+
+Tabs:
+
+| Tab | Tooltip |
+| --- | --- |
+| `MED` | `Dades mèdiques` |
+| `FAM` | `Dades familiars` |
+| `OBS` | `Observacions` |
+| `ASS` | `Assistència` |
+| `PI` | No tooltip required. |
+| `CONV` | `Convivència` |
+| `TUT` | `Tutoria amb la família` |
+| `ORI` | `Orientació` |
+
+The `MED` tab must show the medical information submitted through the authorization form. It must match the loaded student through:
+
+| Student source | Authorization source |
+| --- | --- |
+| `Dinantia` -> `students_cache`.`student_id` | `Autoritzacions` -> `autoritzacions`.`id_student` / `Dinantia` -> `authorizations_cache`.`id_student` |
+
+If no active, non-invalidated authorization response exists for the student, the `MED` tab must show:
+
+`Aquesta família encara no ha omplert les autoritzacions, i per tant, manca aquesta informació.`
+
+If an active authorization response exists, the `MED` tab must render these fields read-only, in a visual style similar to the authorization form:
+
+| Field | Meaning |
+| --- | --- |
+| `comunicacio_salut` | Health communication authorization. |
+| `problemes_salut` | Diagnosed health issues, contact/ingestion/inhalation detail, and reactions. |
+| `altres_salut` | Other relevant health information. |
+| `medicacio` | Medication required during school hours. |
+| `posologia` | Medication dosage schedule. |
+| `dosi` | Medication dose. |
+| `administracio_medicacio` | Authorization for school staff to administer prescribed medication. |
+| `paracetamol` | Authorization to administer paracetamol according to the form conditions. |
+
+The tab should use the already-loaded authorization cache when available. If the profile is opened before authorization data has been loaded in the current browser session, the tab may lazy-load authorizations once and then render from memory.
+
+The `FAM` tab must show the same family/contact information used by the `Contactes` page, but read-only. It must include:
+
+| Field | Source |
+| --- | --- |
+| Contact name | `contacts_cache.contact_name` |
+| Contact phone | `contacts_cache.contact_phone` |
+| Contact email | `contacts_cache.contact_email` |
+| Emergency contact marker | `contacts_cache.contact_source = authorization_emergency` |
+
+Contacts must be grouped by contact, using the same card/bubble visual language as the `MED` tab. Emergency contacts created from authorization responses must be clearly labeled as `Contacte d’emergència`.
+
+The tab should use the already-loaded contact cache when available. If the profile is opened before contact data has been loaded in the current browser session, the tab may lazy-load only the clicked student's contacts and then render from memory.
+
+If no contacts exist for the student, the tab must show a clear Catalan empty-state message.
+
+All remaining tabs display only a centered work-in-progress safety-cone icon/message for now. No fields are editable and no profile data is written.
 
 Editable contact data must still write to Dinantia first. After Dinantia accepts the change, update every matching `contacts_cache` row with the same `contact_id` and append the changelog row.
 

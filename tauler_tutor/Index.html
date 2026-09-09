@@ -75,6 +75,52 @@
           </section>
         </section>
 
+        <section class="view" id="view-student-profile">
+          <header class="page-header profile-header">
+            <button class="back-button" type="button" id="student-profile-back">Torna</button>
+            <div>
+              <h1 id="student-profile-title">Fitxa de l'alumne/a</h1>
+              <p class="subtle">Consulta de dades de l'alumne/a.</p>
+            </div>
+          </header>
+
+          <section class="profile-summary" aria-label="Dades principals">
+            <div class="profile-summary-item">
+              <span>Nom complet</span>
+              <strong id="profile-student-name">-</strong>
+            </div>
+            <div class="profile-summary-item">
+              <span>Grup</span>
+              <strong id="profile-student-group">-</strong>
+            </div>
+            <div class="profile-summary-item">
+              <span>Data de naixement</span>
+              <strong id="profile-student-birthdate">-</strong>
+            </div>
+            <div class="profile-summary-item">
+              <span>Edat</span>
+              <strong id="profile-student-age">-</strong>
+            </div>
+          </section>
+
+          <section class="notebook" aria-label="Quadern de l'alumne/a">
+            <div class="tabs" role="tablist">
+              <button class="tab active" type="button" title="Dades mèdiques" data-profile-tab="med">MED</button>
+              <button class="tab" type="button" title="Dades familiars" data-profile-tab="fam">FAM</button>
+              <button class="tab" type="button" title="Observacions" data-profile-tab="obs">OBS</button>
+              <button class="tab" type="button" title="Assistència" data-profile-tab="ass">ASS</button>
+              <button class="tab" type="button" data-profile-tab="pi">PI</button>
+              <button class="tab" type="button" title="Convivència" data-profile-tab="conv">CONV</button>
+              <button class="tab" type="button" title="Tutoria amb la família" data-profile-tab="tut">TUT</button>
+              <button class="tab" type="button" title="Orientació" data-profile-tab="ori">ORI</button>
+            </div>
+            <div class="notebook-panel" id="student-profile-tab-panel">
+              <div class="work-cone" aria-label="En construcció">🚧</div>
+              <p class="subtle">En construcció</p>
+            </div>
+          </section>
+        </section>
+
         <section class="view" id="view-contactes">
           <header class="page-header">
             <h1>Contactes</h1>

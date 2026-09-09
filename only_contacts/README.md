@@ -13,7 +13,7 @@ This folder is connected to Apps Script project:
 Latest synced clasp deployment:
 
 ```text
-AKfycbymAatPjttACa4C91C7W7RoWVhJYUvjy24PLECz0PA1CSKksA7FGvtNoh-YGi1Lc1sX @16
+AKfycbymAatPjttACa4C91C7W7RoWVhJYUvjy24PLECz0PA1CSKksA7FGvtNoh-YGi1Lc1sX @18
 ```
 
 Deployment note: create or confirm the public web app deployment in the Apps Script UI with:
@@ -40,13 +40,19 @@ Views:
 
 | View | Data source | Behavior |
 | --- | --- | --- |
-| `Llistats` | `Dinantia -> dinantia_groups`, `students_cache` when possible, Dinantia API fallback when needed | Shows selected group students with `Grup` and `Nom sencer`. |
+| `Llistats` | `Dinantia -> dinantia_groups`, `students_cache` when possible, Dinantia API fallback when needed | Shows selected group students with `Grup`, `Nom sencer`, and `Correu`. |
 | `Contactes` | `Dinantia -> contacts_cache` | Shows the existing read-only contact table. |
 | `Autoritzacions` | `Dinantia -> students_cache`, `authorizations_cache` | Shows the authorization matrix and filters, without tutor actions. |
 
 `Llistats` uses the Dinantia group discovery table for its combo. The visible level-1 groups are `ESO`, `PFI`, `BAT`, and `CIC`, in that order, with the full hierarchy of descendants underneath. Each level is visually indented with a clear marker. Selecting a group shows only students directly belonging to that group; descendant groups are not included automatically.
 
+For speed, `Llistats` first checks `students_cache` using both the selected Dinantia group ID and visible group name. Group matching tolerates accent, spacing, and dash variants. If there is no cached match, it checks a short-lived Apps Script runtime cache for the selected group, then falls back to Dinantia only when needed. The Dinantia fallback checks every group scope on each student account, fetches paginated account pages in parallel after the first page, and stores successful results in runtime cache.
+
+Runtime cache keys include a version marker so stale fallback results can be invalidated after lookup changes. The browser also memoizes selected groups during the current page session, so refresh the page before retesting a group after deployment.
+
 `Llistats` includes a floating XLSX export button for the currently visible student list.
+
+When a selected group has no direct students, `Llistats` shows `Aquest grup està buit`.
 
 `Autoritzacions` includes a student-name textbox filter and reset button equivalent to `Contactes`. It also includes a floating XLSX export button that exports only the currently visible filtered rows. The export always keeps core visible columns and includes every authorization field that has at least one answered value among the visible rows, including related detail fields such as emergency contact, health information, academic contact, external platforms, submit/update metadata, and authorized pickup people.
 
@@ -86,6 +92,8 @@ The root `.gitignore` already ignores `.clasp.json` at every level.
 | `dinantia_api_user` | Dinantia API Basic Auth user, used only for `Llistats` fallback when a selected group is not available in `students_cache`. |
 | `dinantia_api_secret` | Dinantia API Basic Auth secret, used only for `Llistats` fallback when a selected group is not available in `students_cache`. |
 
+If `db`, `dinantia_api_user`, or `dinantia_api_secret` is missing when required, the UI must show a clear Catalan configuration error.
+
 ## Export Permissions
 
 XLSX export requires Drive access because the backend creates a temporary Google Spreadsheet, exports it as XLSX through Drive, and trashes the temporary file.
@@ -122,7 +130,7 @@ authorizeTaulerProfessorsReadOnlyServices()
 Latest synced clasp deployment:
 
 ```text
-AKfycbymAatPjttACa4C91C7W7RoWVhJYUvjy24PLECz0PA1CSKksA7FGvtNoh-YGi1Lc1sX @16
+AKfycbymAatPjttACa4C91C7W7RoWVhJYUvjy24PLECz0PA1CSKksA7FGvtNoh-YGi1Lc1sX @18
 ```
 
 ## Diagnostics

@@ -531,16 +531,19 @@ function setReadOnlyMode(allowStudentConfirm) {
 
 function confirmStudentAuthorization() {
   const token = document.getElementById('launcherToken').value;
+  const formSession = document.getElementById('formSession').value;
   const respostaId = document.getElementById('responseId').value;
   const launcherUrl = (window.INITIAL_FORM_DATA || {}).launcher_url || '';
-  if (!token || !respostaId || !launcherUrl) {
+  if ((!token && !formSession) || !respostaId || !launcherUrl) {
     alert('No s ha pogut confirmar: falten dades de verificació.');
     return;
   }
   const formPost = document.createElement('form');
   formPost.method = 'post';
   formPost.action = launcherUrl;
-  [['action','confirm_student'],['token',token],['resposta_id',respostaId]].forEach(([name,value]) => {
+  const fields = [['action','confirm_student'],['resposta_id',respostaId]];
+  fields.push(token ? ['token',token] : ['form_session',formSession]);
+  fields.forEach(([name,value]) => {
     const input = document.createElement('input');
     input.type = 'hidden';
     input.name = name;

@@ -12,7 +12,7 @@ The local folder remains `only_contacts/` for repository stability. The Apps Scr
 | Apps Script project name | `tauler_professors_read_only` |
 | Apps Script ID | `1oBPSQB3zJrpRHcGpbdeSs04fGjCd8SUGYwn-tASEEsFddlABsOjW4h2X` |
 | Web app URL | `https://script.google.com/macros/s/AKfycbymAatPjttACa4C91C7W7RoWVhJYUvjy24PLECz0PA1CSKksA7FGvtNoh-YGi1Lc1sX/exec` |
-| Latest clasp deployment | `AKfycbymAatPjttACa4C91C7W7RoWVhJYUvjy24PLECz0PA1CSKksA7FGvtNoh-YGi1Lc1sX @16` |
+| Latest clasp deployment | `AKfycbymAatPjttACa4C91C7W7RoWVhJYUvjy24PLECz0PA1CSKksA7FGvtNoh-YGi1Lc1sX @18` |
 | Runtime | V8 |
 | Time zone | `Europe/Madrid` |
 | Execute as | Creator / deploying user |
@@ -20,7 +20,7 @@ The local folder remains `only_contacts/` for repository stability. The Apps Scr
 
 ## Current Status
 
-The Apps Script project has been cloned locally, implemented, pushed with clasp, and synced through deployment `@16`.
+The Apps Script project has been cloned locally, implemented, pushed with clasp, and synced through deployment `@18`.
 
 ## Endpoint Behavior
 
@@ -76,7 +76,11 @@ The `Llistats` group combo:
 - Displays `name`.
 - Uses `id` internally.
 - Does not include descendants when a parent group is selected.
-- If a selected group has no direct students, the table is empty.
+- If a selected group has no direct students, the table is empty and the UI message is `Aquest grup està buit`.
+- If the selected group is absent from `students_cache` and the Dinantia fallback cannot run because the Dinantia credentials are not configured, the app must show a clear Catalan configuration error.
+- Cache lookup must accept both the selected `dinantia_groups.id` and the selected `dinantia_groups.name`, because cache rows may store the visible group name while the selector uses the Dinantia ID internally.
+- Group matching must be tolerant of accent, spacing, and dash variants in Dinantia names and IDs.
+- Dinantia API fallback must not assume subgroup students are always listed only under `account.groups.member`. It must inspect all account group scopes and accept a match against the selected group ID, name, path fragments, or object-shaped references containing `id`, `name`, or `tag`.
 
 ### `students_cache`
 
@@ -215,10 +219,11 @@ The table columns are:
 | --- | --- |
 | `Grup` | Selected group ID/name from cache/API result. |
 | `Nom sencer` | Student full name. |
+| `Correu` | Student email from `students_cache.student_email` or Dinantia API fallback. |
 
 Students must be sorted by full name.
 
-The view includes a bottom-right floating XLSX export button. It exports only the currently visible student rows with `grup` and `nom_sencer` columns.
+The view includes a bottom-right floating XLSX export button. It exports only the currently visible student rows with `grup`, `nom_sencer`, and `correu` columns.
 
 ### Contactes
 
@@ -324,6 +329,12 @@ authorizeTaulerProfessorsReadOnlyExportServices()
 - Initial HTML must render quickly.
 - Data is loaded asynchronously through `google.script.run`.
 - `Llistats` loads students only after a group is selected.
+- `Llistats` must check `students_cache` first.
+- If the selected group is not present in `students_cache`, `Llistats` must check a short-lived Apps Script runtime cache for that group.
+- If the runtime cache is empty, `Llistats` may call Dinantia. After reading the first account page to discover pagination, remaining account pages should be fetched in parallel with `UrlFetchApp.fetchAll`.
+- Successful Dinantia fallback results should be cached per selected group in `CacheService.getScriptCache()` for up to 6 hours.
+- Runtime group-student cache keys must include a version marker so stale fallback results can be invalidated after lookup-rule changes.
+- The browser may memoize selected groups during the current page session; after deploying lookup changes, refresh the page before retesting a previously selected group.
 - `Contactes` data is loaded only when opening the `Contactes` view.
 - `Autoritzacions` data is loaded only when opening the `Autoritzacions` view.
 - Filtering is client-side over the loaded cached data.

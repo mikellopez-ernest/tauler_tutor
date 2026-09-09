@@ -32,7 +32,7 @@ clasp deploy -i AKfycbwOcqce-v40j7kv1wVuhnERUtdup3GMZhdCHXnN-vP_CqlycQl_ttjaClbz
 
 | View | Purpose |
 | --- | --- |
-| `Inici` | Student list, birthdate, and age for the teacher's visible groups. |
+| `Inici` | Student list, birthdate, age, and read-only student profile navigation for the teacher's visible groups. The profile `MED` tab shows medical data from active authorization responses, and `FAM` shows family contacts. |
 | `Contactes` | Editable Dinantia contact data with validation and changelog tracking. |
 | `Autoritzacions` | Permission matrix, invitation actions, read-only printable form view, and invalidation workflow. |
 

@@ -186,13 +186,14 @@
       tbody.textContent = '';
       state.visibleStudents = students.slice();
       document.getElementById('students-count').textContent = students.length + ' alumnes';
-      empty.textContent = "No s'ha trobat cap alumne en aquest grup.";
+      empty.textContent = 'Aquest grup està buit';
       empty.classList.toggle('is-hidden', students.length > 0);
       students.forEach(function(student, index) {
         var row = document.createElement('tr');
         row.className = index % 2 === 0 ? 'student-band-even' : 'student-band-odd';
         appendCell(row, student.groupName || '-');
         appendCell(row, student.name || '-');
+        appendCell(row, student.email || '-');
         tbody.appendChild(row);
       });
     }
@@ -487,7 +488,8 @@
       var rows = (state.visibleStudents || []).map(function(student) {
         return {
           grup: student.groupName || '',
-          nom_sencer: student.name || ''
+          nom_sencer: student.name || '',
+          correu: student.email || ''
         };
       });
       if (!rows.length) {
