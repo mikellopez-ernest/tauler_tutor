@@ -856,7 +856,7 @@ SMX 2n
 Attendance cache calculation rules:
 
 1. Read the requested month range.
-2. Page Dinantia attendances from newest backwards.
+2. Page Dinantia attendances from newest backwards. After page 1, fetch page batches in parallel with `UrlFetchApp.fetchAll` to reduce wall-clock time.
 3. Stop once the page stream is older than the cutoff date:
    - `updateAttendanceCacheAll()` uses September 8 of the current academic year.
    - `updateAttendanceCacheCurrentMonth()` uses the first day of the current month.

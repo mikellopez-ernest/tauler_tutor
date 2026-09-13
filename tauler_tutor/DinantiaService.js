@@ -91,6 +91,41 @@ function fetchDinantiaJson_(path, credentials) {
   return body;
 }
 
+function fetchDinantiaJsonBatch_(paths, credentials) {
+  if (!paths || !paths.length) return [];
+  var auth = Utilities.base64Encode(credentials.user + ':' + credentials.secret);
+  var requests = paths.map(function(path) {
+    return {
+      url: APP_CONFIG.dinantiaBaseUrl + path,
+      method: 'get',
+      headers: {
+        Authorization: 'Basic ' + auth,
+        Accept: 'application/vnd.api+json',
+        'Content-Type': 'application/vnd.api+json'
+      },
+      muteHttpExceptions: true
+    };
+  });
+
+  return UrlFetchApp.fetchAll(requests).map(function(response, index) {
+    var status = response.getResponseCode();
+    var bodyText = response.getContentText();
+    var body;
+
+    try {
+      body = JSON.parse(bodyText);
+    } catch (error) {
+      throw new Error('Dinantia response is not valid JSON. HTTP ' + status + ' for ' + paths[index] + ': ' + bodyText);
+    }
+
+    if (status < 200 || status >= 300 || body.success === false) {
+      throw new Error('Dinantia request failed. HTTP ' + status + ' for ' + paths[index] + ': ' + bodyText);
+    }
+
+    return body;
+  });
+}
+
 function studentFromAccount_(account) {
   return {
     id: account.id || '',

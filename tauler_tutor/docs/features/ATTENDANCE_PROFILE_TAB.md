@@ -17,7 +17,8 @@ Attendance data comes from Dinantia:
 
 - `GET /v1/attendances/index`
 - Sorted by most recent according to the Dinantia documentation.
-- No server-side student, group, or date filters are documented, so the app paginates from newest backwards and stops once all rows in a page are older than the academic-year start.
+- No server-side student, group, or date filters are documented, so the app paginates from newest backwards and stops once all rows in a page are older than the cutoff date.
+- To reduce wall-clock time, attendance pagination uses `UrlFetchApp.fetchAll` in small batches after page 1. This does not change the cutoff logic; it only parallelizes API page requests.
 - For the current implementation, the academic attendance start is September 8 of the start year, for example `2026-09-08` in school year `2026-2027`.
 
 Group structure comes from the local `Dinantia -> dinantia_groups` cache. Real monthly hour totals come from `Dinantia -> attendance_cache`.

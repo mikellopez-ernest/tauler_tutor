@@ -13,6 +13,7 @@ var ATTENDANCE_MONTHS = [
 
 var ATTENDANCE_SCHOOL_START_MONTH = 8;
 var ATTENDANCE_SCHOOL_START_DAY = 8;
+var ATTENDANCE_PAGE_BATCH_SIZE = 6;
 
 function loadStudentAttendanceSummary_(student) {
   try {
@@ -241,23 +242,15 @@ function loadStudentAttendanceCounts_(studentId, schoolYear) {
 }
 
 function aggregateStudentAttendanceCounts_(studentId, schoolYear) {
-  var credentials = getDinantiaCredentials_();
   var studentHourStatus = {};
   var counts = emptyAttendanceCounts_();
-  var page = 1;
+  var pages = fetchDinantiaAttendancePagesUntil_(schoolYear.start);
 
-  while (true) {
-    var body = fetchDinantiaJson_('/v1/attendances/index?limit=100&page=' + page, credentials);
-    var rows = body.data || [];
-    var pageHasDateInRangeOrNewer = false;
-
+  pages.forEach(function(pageInfo) {
+    var rows = pageInfo.body.data || [];
     rows.forEach(function(attendance) {
       var date = parseDinantiaAttendanceDate_(attendance.date);
-      if (!date) {
-        pageHasDateInRangeOrNewer = true;
-        return;
-      }
-      if (date >= schoolYear.start) pageHasDateInRangeOrNewer = true;
+      if (!date) return;
       if (date < schoolYear.start || date > schoolYear.end) return;
 
       var monthKey = attendanceMonthKey_(date, schoolYear);
@@ -274,10 +267,7 @@ function aggregateStudentAttendanceCounts_(studentId, schoolYear) {
         counts[status][monthKey]++;
       });
     });
-
-    if (!body.pagination || !body.pagination.has_next_page || !pageHasDateInRangeOrNewer) break;
-    page++;
-  }
+  });
 
   return counts;
 }
@@ -507,7 +497,6 @@ function attendanceLevelScopeForGroup_(group, groups, label) {
 }
 
 function aggregateAttendanceHoursForScopes_(scopes, start, end, schoolYear, debugState) {
-  var credentials = getDinantiaCredentials_();
   var scopeSets = {};
   var hourKeysByScopeMonth = {};
   var scopeStats = {};
@@ -541,13 +530,13 @@ function aggregateAttendanceHoursForScopes_(scopes, start, end, schoolYear, debu
     matchedAttendances: 0,
     pageSummaries: []
   };
-  var page = 1;
-  while (true) {
-    var body = fetchDinantiaJson_('/v1/attendances/index?limit=100&page=' + page, credentials);
+  var pages = fetchDinantiaAttendancePagesUntil_(start);
+
+  pages.forEach(function(pageInfo) {
+    var body = pageInfo.body;
     var rows = body.data || [];
-    var pageHasDateInRangeOrNewer = false;
     var pageStats = {
-      page: page,
+      page: pageInfo.page,
       rows: rows.length,
       invalidDate: 0,
       beforeStart: 0,
@@ -564,7 +553,6 @@ function aggregateAttendanceHoursForScopes_(scopes, start, end, schoolYear, debu
     rows.forEach(function(attendance) {
       var date = parseDinantiaAttendanceDate_(attendance.date);
       if (!date) {
-        pageHasDateInRangeOrNewer = true;
         stats.invalidDateRows++;
         pageStats.invalidDate++;
         return;
@@ -625,9 +613,7 @@ function aggregateAttendanceHoursForScopes_(scopes, start, end, schoolYear, debu
     });
 
     stats.pageSummaries.push(pageStats);
-    if (!body.pagination || !body.pagination.has_next_page || !pageHasDateInRangeOrNewer) break;
-    page++;
-  }
+  });
 
   var totals = {};
   Object.keys(hourKeysByScopeMonth).forEach(function(label) {
@@ -641,6 +627,47 @@ function aggregateAttendanceHoursForScopes_(scopes, start, end, schoolYear, debu
     totals: totals,
     stats: stats
   };
+}
+
+function fetchDinantiaAttendancePagesUntil_(cutoffDate) {
+  var credentials = getDinantiaCredentials_();
+  var pages = [];
+  var firstBody = fetchDinantiaJson_('/v1/attendances/index?limit=100&page=1', credentials);
+  pages.push({ page: 1, body: firstBody });
+
+  if (!firstBody.pagination || !firstBody.pagination.has_next_page || !attendancePageHasDateAtOrAfter_(firstBody, cutoffDate)) {
+    return pages;
+  }
+
+  var pageCount = Number(firstBody.pagination.page_count) || 1;
+  var page = 2;
+  while (page <= pageCount) {
+    var paths = [];
+    var pageNumbers = [];
+    for (var i = 0; i < ATTENDANCE_PAGE_BATCH_SIZE && page <= pageCount; i++, page++) {
+      paths.push('/v1/attendances/index?limit=100&page=' + page);
+      pageNumbers.push(page);
+    }
+
+    var bodies = fetchDinantiaJsonBatch_(paths, credentials);
+    for (var j = 0; j < bodies.length; j++) {
+      pages.push({ page: pageNumbers[j], body: bodies[j] });
+      if (!attendancePageHasDateAtOrAfter_(bodies[j], cutoffDate)) return pages;
+      if (!bodies[j].pagination || !bodies[j].pagination.has_next_page) return pages;
+    }
+  }
+
+  return pages;
+}
+
+function attendancePageHasDateAtOrAfter_(body, cutoffDate) {
+  var rows = body && body.data ? body.data : [];
+  for (var i = 0; i < rows.length; i++) {
+    var date = parseDinantiaAttendanceDate_(rows[i] && rows[i].date);
+    if (!date) return true;
+    if (date >= cutoffDate) return true;
+  }
+  return false;
 }
 
 function writeAttendanceCacheMonths_(sheet, table, totals, monthKeys) {
