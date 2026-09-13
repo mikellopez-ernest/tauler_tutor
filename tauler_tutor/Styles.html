@@ -552,6 +552,108 @@
     min-height: 78px;
   }
 
+  .convivencia-metric {
+    min-height: 118px;
+    width: 100%;
+    color: inherit;
+    cursor: default;
+    font: inherit;
+    text-align: left;
+  }
+
+  .convivencia-metric strong {
+    display: block;
+    color: var(--text);
+    font-size: 34px;
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .convivencia-metric p {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .convivencia-clickable {
+    cursor: pointer;
+  }
+
+  .convivencia-clickable:hover,
+  .convivencia-clickable:focus {
+    border-color: var(--accent);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.16);
+  }
+
+  .attendance-panel {
+    gap: 14px;
+  }
+
+  .attendance-meta {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .attendance-table-wrap {
+    width: 100%;
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  .attendance-table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+  }
+
+  .attendance-table th,
+  .attendance-table td {
+    border-bottom: 1px solid var(--line);
+    padding: 12px;
+    text-align: center;
+    vertical-align: middle;
+  }
+
+  .attendance-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--surface-muted);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .attendance-table tbody th {
+    min-width: 170px;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 900;
+    text-align: left;
+  }
+
+  .attendance-table td {
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 800;
+  }
+
+  .attendance-table tr:last-child th,
+  .attendance-table tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .attendance-total-row th,
+  .attendance-total-row td {
+    background: var(--surface-muted);
+  }
+
   .medical-pill {
     display: inline-flex;
     align-items: center;
@@ -865,6 +967,10 @@
     box-shadow: var(--shadow);
   }
 
+  .modal-panel-wide {
+    width: min(1180px, 100%);
+  }
+
   .modal-header {
     position: sticky;
     top: 0;
@@ -894,6 +1000,52 @@
 
   .modal-body {
     padding: 20px;
+  }
+
+  .convivencia-detail-table-wrap {
+    overflow: auto;
+    max-height: min(620px, calc(100vh - 190px));
+  }
+
+  .convivencia-detail-table {
+    min-width: 1080px;
+  }
+
+  .convivencia-detail-table th,
+  .convivencia-detail-table td {
+    border-bottom: 1px solid var(--line);
+    padding: 10px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .convivencia-detail-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--surface-muted);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .convivencia-detail-points {
+    font-weight: 900;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .convivencia-detail-note {
+    min-width: 220px;
+    max-width: 360px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .convivencia-empty {
+    margin: 0;
+    text-align: center;
   }
 
   .contact-checklist {

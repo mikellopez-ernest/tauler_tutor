@@ -70,6 +70,20 @@ function loadContactsForStudents(students) {
 }
 
 /**
+ * Client-callable profile endpoint for convivencia summary data.
+ */
+function loadStudentConvivenciaSummaryJson(student) {
+  return JSON.stringify(loadStudentConvivenciaSummary_(student));
+}
+
+/**
+ * Client-callable profile endpoint for attendance summary data.
+ */
+function loadStudentAttendanceSummaryJson(student) {
+  return JSON.stringify(loadStudentAttendanceSummary_(student));
+}
+
+/**
  * Client-callable invitation endpoint for pending authorization flows.
  */
 function sendAuthorizationInvitations(requests) {

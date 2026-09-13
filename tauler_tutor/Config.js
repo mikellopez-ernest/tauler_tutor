@@ -20,7 +20,8 @@ var TABLES = {
   teachingLoad: 'Càrrega lectiva',
   dinantia: 'Dinantia',
   students: 'Dades alumnes',
-  authorizations: 'Autoritzacions'
+  authorizations: 'Autoritzacions',
+  incidents: 'Incidències'
 };
 
 var SHEETS = {
@@ -33,12 +34,15 @@ var SHEETS = {
   studentsCache: 'students_cache',
   contactsCache: 'contacts_cache',
   authorizationsCache: 'authorizations_cache',
+  attendanceCache: 'attendance_cache',
   dinantiaGroups: 'dinantia_groups',
   cacheRuns: 'cache_runs',
   registry: 'tables',
   authorizations: 'autoritzacions',
   authorizedPeople: 'persones_autoritzades',
-  verificationTokens: 'verification_tokens'
+  verificationTokens: 'verification_tokens',
+  incidentsAnnual: 'llistat_anual',
+  incidentsConfig: 'config'
 };
 
 var HEADERS = {

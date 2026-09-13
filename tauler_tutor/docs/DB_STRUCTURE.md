@@ -47,7 +47,7 @@ Current examples:
 | `Horaris` | `GPU001` |
 | `Dades de professors` | `Llista`, `leave_absence` |
 | `Càrrega lectiva` | `assignatures`, `carrecs` |
-| `Dinantia` | `dinantia_2_dades_alumnes`, `teachers_2_dinantia`, `dinantia_groups`, `changelog`, `students_cache`, `contacts_cache`, `authorizations_cache`, `cache_runs` |
+| `Dinantia` | `dinantia_2_dades_alumnes`, `teachers_2_dinantia`, `dinantia_groups`, `changelog`, `students_cache`, `contacts_cache`, `authorizations_cache`, `attendance_cache`, `cache_runs` |
 | `Dades alumnes` | Group-specific student sheets referenced by `Dinantia` -> `dinantia_2_dades_alumnes`.`dades_alumnes_sheet` |
 | `Autoritzacions` | `autoritzacions`, `persones_autoritzades`, `verification_tokens` |
 | `Incidències` | `llistat_anual`, `config`, `meeting_records`, `study_group_students`, `study_group_teachers`, `3r_project`, `expulsions` |
@@ -593,8 +593,15 @@ Public/admin entry points:
 | `cacheRebuildTutorPanel()` | Rebuild shared tutor-panel read models: `students_cache`, `contacts_cache`, and `authorizations_cache`. |
 | `cacheRebuildDinantiaGroups()` | Discover all Dinantia groups through the Dinantia API and create/update `dinantia_groups`. |
 | `rebuildTutorPanelCache()` | Backward-compatible wrapper for existing manual triggers. Calls `cacheRebuildTutorPanel()`. |
+| `cacheRefreshAuthorizations_()` | Internal refresh for `authorizations_cache` after authorization writes, invitation sends, and invalidations. |
+| `updateAttendanceCacheAll()` | Recompute `attendance_cache` month totals from the September 8 course start through the current academic month. |
+| `updateAttendanceCacheCurrentMonth()` | Recompute only the current month in `attendance_cache`, from the first day of the month through today. |
+| `debugAttendanceCacheAll()` | Dry-run diagnostic version of the full attendance update; logs details and does not write sheet values. |
+| `debugAttendanceCacheCurrentMonth()` | Dry-run diagnostic version of the current-month attendance update; logs details and does not write sheet values. |
 
 Private cache helpers should also use the `cache` prefix when they build, merge, overwrite, or incrementally update cache rows.
+
+Attendance updater entry points are named `updateAttendance...` because they refresh a dedicated read-model sheet from Dinantia attendance registers instead of rebuilding the core tutor-panel cache bundle.
 
 ### Cache Write Policy
 
@@ -805,6 +812,70 @@ When the panel sends invitations through the launcher, the app should refresh `a
 When the authorization form writes a new row to `Autoritzacions` -> `autoritzacions`, it must refresh `authorizations_cache` immediately after the canonical write succeeds.
 
 When a student confirmation changes `Autoritzacions` -> `autoritzacions.signatura_alumne`, the launcher must refresh `authorizations_cache` immediately after the canonical write succeeds.
+
+### `Dinantia` -> `attendance_cache`
+
+This sheet stores real monthly teaching-hour totals by level for the student-profile `ASS` tab.
+
+It is a read model. The canonical source is Dinantia `GET /v1/attendances/index`.
+
+Required structure:
+
+| Column | Meaning |
+| --- | --- |
+| first blank/headerless column | Level label used by the cache updater and profile reader, for example `1r ESO`, `2n ESO`, `BATX 1r`, `SMX 2n`. |
+| `september` | Real attended teaching hours in September. |
+| `october` | Real attended teaching hours in October. |
+| `november` | Real attended teaching hours in November. |
+| `december` | Real attended teaching hours in December. |
+| `january` | Real attended teaching hours in January. |
+| `february` | Real attended teaching hours in February. |
+| `march` | Real attended teaching hours in March. |
+| `april` | Real attended teaching hours in April. |
+| `may` | Real attended teaching hours in May. |
+| `june` | Real attended teaching hours in June. |
+
+Current level rows:
+
+```text
+1r ESO
+2n ESO
+3r ESO
+4t ESO
+AC 1r
+AC 2n
+BATX 1r
+BATX 2n
+PCC 1r
+PCC 2n
+PFI
+SMX 1r
+SMX 2n
+```
+
+Attendance cache calculation rules:
+
+1. Read the requested month range.
+2. Page Dinantia attendances from newest backwards.
+3. Stop once the page stream is older than the cutoff date:
+   - `updateAttendanceCacheAll()` uses September 8 of the current academic year.
+   - `updateAttendanceCacheCurrentMonth()` uses the first day of the current month.
+4. Resolve each `attendance_cache` row label against `dinantia_groups`.
+5. If a level label is not present as an exact Dinantia group, build a synthetic level scope from active groups whose id, name, tag, or path tail starts with the label plus a space. Example: `BATX 1r` can match `BATX 1r A`, `BATX 1r B`, and `BATX 1r C`.
+6. Keep only attendance registers whose `groups` intersects that level scope.
+7. Keep only attendance registers with at least one attendee. Empty class-session registers do not count as real hours.
+8. Deduplicate by local `yyyy-MM-dd HH:mm`.
+9. Write the unique-hour count into the matching month cell.
+
+The `ASS` tab maps a student's class group to its level row before reading totals. For example, a student in `2n ESO A` reads `Total hores` from the `2n ESO` row.
+
+The debug attendance methods log, but do not write:
+
+- page counts and date cutoffs,
+- group/level resolution and synthetic matches,
+- skipped empty-attendee registers,
+- duplicate hour hits,
+- final totals by scope/month.
 
 ### `Dinantia` -> `cache_runs`
 

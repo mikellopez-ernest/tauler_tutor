@@ -235,7 +235,7 @@ When a row in the `Inici` student table is clicked, the app must open a full-pag
 
 The profile is read-only.
 
-The profile data comes from the already-loaded student cache/read model in memory. Opening the profile must not perform a new server request.
+The base profile summary comes from the already-loaded student cache/read model in memory. Opening the profile must not perform a new server request for the base student identity fields. Individual tabs may lazy-load their own heavier summaries when first opened.
 
 The top profile summary must show a compact 1x4 matrix on desktop, falling back to one column on narrow screens:
 
@@ -301,7 +301,29 @@ The tab should use the already-loaded contact cache when available. If the profi
 
 If no contacts exist for the student, the tab must show a clear Catalan empty-state message.
 
-All remaining tabs display only a centered work-in-progress safety-cone icon/message for now. No fields are editable and no profile data is written.
+The `ASS` tab shows a monthly attendance matrix for the active academic year, September through June:
+
+| Row | Source / Rule |
+| --- | --- |
+| `Absent no justificat` | Selected student's Dinantia attendance entries with status `absent`. |
+| `Justificat` | Selected student's Dinantia attendance entries with status `justified`. |
+| `Retard` | Selected student's Dinantia attendance entries with status `late`. |
+| `Total hores` | `Dinantia` -> `attendance_cache`, read from the student's resolved level row. |
+
+The `ASS` tab may lazy-load the selected student's status counts through `loadStudentAttendanceSummaryJson(student)`. Real total-hour values must come from `attendance_cache`; they must not be recalculated during profile rendering. Detailed cache rules live in `docs/features/ATTENDANCE_PROFILE_TAB.md`.
+
+The `CONV` tab shows a current-term convivencia summary:
+
+| Card | Source / Rule |
+| --- | --- |
+| `Punts del trimestre` | Sum of `Incidències` -> `llistat_anual`.`Puntuació` for the selected student in the current term. |
+| `Targetes grogues` | Count of current-term `FLLEU` rows. |
+| `Targetes vermelles` | Count of current-term `FALTA GREU` rows. |
+| `Retards` | Count of current-term `RETARD` rows. |
+
+The current term boundaries come from `Incidències` -> `config`. Clicking `Targetes grogues`, `Targetes vermelles`, or `Retards` opens a detail modal with `Data`, `Hora`, `Assignatura`, `Activitat`, `Puntuació`, `Professor`, `Missatge`, and `Nota interna`. Detailed CONV rules live in `docs/features/CONVIVENCIA_PROFILE_TAB.md`.
+
+All other tabs display only a centered work-in-progress safety-cone icon/message for now. No fields are editable and no profile data is written.
 
 Editable contact data must still write to Dinantia first. After Dinantia accepts the change, update every matching `contacts_cache` row with the same `contact_id` and append the changelog row.
 

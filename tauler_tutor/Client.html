@@ -13,6 +13,10 @@
       contactsLoadedScopes: {},
       profileContactsLoadedByStudent: {},
       profileContactsLoadingByStudent: {},
+      profileConvivenciaByStudent: {},
+      profileConvivenciaLoadingByStudent: {},
+      profileAttendanceByStudent: {},
+      profileAttendanceLoadingByStudent: {},
       contactsLoading: false,
       authorizationsLoaded: false,
       inviting: false,
@@ -47,6 +51,7 @@
     bindRefreshAuthButton();
     bindStudentProfile();
     bindAuthorizationDetailModal();
+    bindConvivenciaDetailModal();
     bindAuthorizationFloatingScroll();
     loadInitialData();
 
@@ -1250,6 +1255,14 @@
         renderFamilyProfileTab(panel, state.activeProfileStudent);
         return;
       }
+      if (state.activeProfileTab === 'conv') {
+        renderConvivenciaProfileTab(panel, state.activeProfileStudent);
+        return;
+      }
+      if (state.activeProfileTab === 'ass') {
+        renderAttendanceProfileTab(panel, state.activeProfileStudent);
+        return;
+      }
       renderWorkInProgressTab(panel);
     }
 
@@ -1287,6 +1300,260 @@
       appendMedicalBoolean(section, 'Administració de medicació', auth.administracio_medicacio);
       appendMedicalBoolean(section, 'Paracetamol', auth.paracetamol);
       panel.appendChild(section);
+    }
+
+    function renderConvivenciaProfileTab(panel, student) {
+      if (!student) {
+        renderWorkInProgressTab(panel);
+        return;
+      }
+      var studentId = String(student.id || '').trim();
+      var summary = state.profileConvivenciaByStudent[studentId] || null;
+      if (!summary) {
+        renderNotebookLoading(panel, 'Carregant dades de convivència...');
+        loadProfileConvivencia(student, function(success, message) {
+          if (!success) {
+            renderNotebookMessage(panel, "No s'han pogut carregar les dades de convivència: " + (message || 'Error desconegut.'));
+            return;
+          }
+          renderStudentProfileTab();
+        });
+        return;
+      }
+
+      if (summary.term && summary.term.outsideSchoolYear) {
+        renderNotebookMessage(panel, 'La data actual queda fora del curs configurat a Incidències.');
+        return;
+      }
+
+      var totals = summary.totals || {};
+      panel.className = 'notebook-panel medical-panel';
+      var section = document.createElement('section');
+      section.className = 'medical-summary convivencia-summary';
+      appendConvivenciaMetric(section, 'Punts del trimestre', formatSignedNumber_(totals.points || 0), summary.term && summary.term.label);
+      appendConvivenciaMetric(section, 'Targetes grogues', totals.yellowCards || 0, 'FLLEU', 'yellowCards');
+      appendConvivenciaMetric(section, 'Targetes vermelles', totals.redCards || 0, 'FALTA GREU', 'redCards');
+      appendConvivenciaMetric(section, 'Retards', totals.lateAssistances || 0, 'RETARD', 'lateAssistances');
+      panel.appendChild(section);
+    }
+
+    function renderAttendanceProfileTab(panel, student) {
+      if (!student) {
+        renderWorkInProgressTab(panel);
+        return;
+      }
+      var studentId = String(student.id || '').trim();
+      var summary = state.profileAttendanceByStudent[studentId] || null;
+      if (!summary) {
+        renderNotebookLoading(panel, 'Carregant dades d assistència...');
+        loadProfileAttendance(student, function(success, message) {
+          if (!success) {
+            renderNotebookMessage(panel, "No s'han pogut carregar les dades d assistència: " + (message || 'Error desconegut.'));
+            return;
+          }
+          renderStudentProfileTab();
+        });
+        return;
+      }
+
+      panel.className = 'notebook-panel medical-panel attendance-panel';
+      var summaryBar = document.createElement('div');
+      summaryBar.className = 'attendance-meta';
+      summaryBar.textContent = [
+        summary.schoolYear && summary.schoolYear.label ? 'Curs ' + summary.schoolYear.label : '',
+        summary.level && summary.level.name ? summary.level.name : ''
+      ].filter(Boolean).join(' · ');
+      panel.appendChild(summaryBar);
+
+      var wrap = document.createElement('div');
+      wrap.className = 'attendance-table-wrap';
+      var table = document.createElement('table');
+      table.className = 'attendance-table';
+      var thead = document.createElement('thead');
+      var headRow = document.createElement('tr');
+      appendAttendanceHeaderCell_(headRow, '');
+      (summary.months || []).forEach(function(month) {
+        appendAttendanceHeaderCell_(headRow, month.label || month.key);
+      });
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      var tbody = document.createElement('tbody');
+      (summary.rows || []).forEach(function(row) {
+        var tr = document.createElement('tr');
+        if (row.key === 'totalHours') tr.className = 'attendance-total-row';
+        var label = document.createElement('th');
+        label.scope = 'row';
+        label.textContent = row.label || '';
+        tr.appendChild(label);
+        (summary.months || []).forEach(function(month) {
+          var td = document.createElement('td');
+          td.textContent = String(Number(row.values && row.values[month.key]) || 0);
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      panel.appendChild(wrap);
+    }
+
+    function appendAttendanceHeaderCell_(row, label) {
+      var th = document.createElement('th');
+      th.scope = 'col';
+      th.textContent = label;
+      row.appendChild(th);
+    }
+
+    function loadProfileAttendance(student, callback) {
+      var studentId = String(student && student.id || '').trim();
+      if (!studentId) {
+        if (callback) callback(false, 'Falta l identificador de l alumne.');
+        return;
+      }
+      if (state.profileAttendanceLoadingByStudent[studentId]) return;
+      state.profileAttendanceLoadingByStudent[studentId] = true;
+      google.script.run
+        .withSuccessHandler(function(result) {
+          state.profileAttendanceLoadingByStudent[studentId] = false;
+          var parsed = parseInitialData(result);
+          if (!parsed || !parsed.ok) {
+            if (callback) callback(false, parsed && parsed.error ? parsed.error.details || parsed.error.message : 'Resposta buida del servidor.');
+            return;
+          }
+          state.profileAttendanceByStudent[studentId] = parsed;
+          if (callback) callback(true);
+        })
+        .withFailureHandler(function(error) {
+          state.profileAttendanceLoadingByStudent[studentId] = false;
+          if (callback) callback(false, error && error.message ? error.message : String(error));
+        })
+        .loadStudentAttendanceSummaryJson({
+          id: studentId,
+          name: student.name || '',
+          groupName: student.groupName || ''
+        });
+    }
+
+    function loadProfileConvivencia(student, callback) {
+      var studentId = String(student && student.id || '').trim();
+      if (!studentId) {
+        if (callback) callback(false, 'Falta l identificador de l alumne.');
+        return;
+      }
+      if (state.profileConvivenciaLoadingByStudent[studentId]) return;
+      state.profileConvivenciaLoadingByStudent[studentId] = true;
+      google.script.run
+        .withSuccessHandler(function(result) {
+          state.profileConvivenciaLoadingByStudent[studentId] = false;
+          var parsed = parseInitialData(result);
+          if (!parsed || !parsed.ok) {
+            if (callback) callback(false, parsed && parsed.error ? parsed.error.details || parsed.error.message : 'Resposta buida del servidor.');
+            return;
+          }
+          state.profileConvivenciaByStudent[studentId] = parsed;
+          if (callback) callback(true);
+        })
+        .withFailureHandler(function(error) {
+          state.profileConvivenciaLoadingByStudent[studentId] = false;
+          if (callback) callback(false, error && error.message ? error.message : String(error));
+        })
+        .loadStudentConvivenciaSummaryJson({
+          id: studentId,
+          name: student.name || ''
+        });
+    }
+
+    function appendConvivenciaMetric(section, label, value, note, detailKey) {
+      var item = document.createElement(detailKey ? 'button' : 'article');
+      item.className = 'medical-item convivencia-metric';
+      if (detailKey) {
+        item.className += ' convivencia-clickable';
+        item.type = 'button';
+        item.addEventListener('click', function() {
+          showConvivenciaDetail(detailKey, label);
+        });
+      }
+      var title = document.createElement('h3');
+      title.textContent = label;
+      var number = document.createElement('strong');
+      number.textContent = String(value);
+      item.appendChild(title);
+      item.appendChild(number);
+      if (note) {
+        var text = document.createElement('p');
+        text.textContent = note;
+        item.appendChild(text);
+      }
+      section.appendChild(item);
+    }
+
+    function showConvivenciaDetail(detailKey, title) {
+      var student = state.activeProfileStudent || {};
+      var studentId = String(student.id || '').trim();
+      var summary = state.profileConvivenciaByStudent[studentId] || {};
+      var rows = summary.details && summary.details[detailKey] ? summary.details[detailKey] : [];
+      var modal = document.getElementById('convivencia-detail-modal');
+      var body = document.getElementById('convivencia-detail-body');
+      if (!modal || !body) return;
+      document.getElementById('convivencia-detail-title').textContent = title || 'Incidències';
+      document.getElementById('convivencia-detail-subtitle').textContent = [
+        student.name || '',
+        summary.term && summary.term.label ? summary.term.label : ''
+      ].filter(Boolean).join(' · ');
+      body.textContent = '';
+
+      if (!rows.length) {
+        var empty = document.createElement('p');
+        empty.className = 'subtle convivencia-empty';
+        empty.textContent = 'No hi ha incidències d’aquest tipus en el trimestre actual.';
+        body.appendChild(empty);
+        modal.classList.remove('is-hidden');
+        return;
+      }
+
+      var wrap = document.createElement('div');
+      wrap.className = 'convivencia-detail-table-wrap';
+      var table = document.createElement('table');
+      table.className = 'convivencia-detail-table';
+      var thead = document.createElement('thead');
+      var headRow = document.createElement('tr');
+      ['Data', 'Hora', 'Assignatura', 'Activitat', 'Puntuació', 'Professor', 'Missatge', 'Nota interna'].forEach(function(label) {
+        var th = document.createElement('th');
+        th.textContent = label;
+        headRow.appendChild(th);
+      });
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+      var tbody = document.createElement('tbody');
+      rows.forEach(function(incident) {
+        var tr = document.createElement('tr');
+        appendConvivenciaDetailCell_(tr, incident.date);
+        appendConvivenciaDetailCell_(tr, incident.time);
+        appendConvivenciaDetailCell_(tr, incident.subject);
+        appendConvivenciaDetailCell_(tr, incident.activity);
+        appendConvivenciaDetailCell_(tr, incident.points, 'points');
+        appendConvivenciaDetailCell_(tr, incident.teacher);
+        appendConvivenciaDetailCell_(tr, incident.message, 'note');
+        appendConvivenciaDetailCell_(tr, incident.internalNote, 'note');
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      body.appendChild(wrap);
+      modal.classList.remove('is-hidden');
+    }
+
+    function appendConvivenciaDetailCell_(row, value, modifier) {
+      var td = document.createElement('td');
+      if (modifier) td.className = 'convivencia-detail-' + modifier;
+      td.textContent = textValue(value) || '-';
+      row.appendChild(td);
+    }
+
+    function closeConvivenciaDetail() {
+      var modal = document.getElementById('convivencia-detail-modal');
+      if (modal) modal.classList.add('is-hidden');
     }
 
     function renderFamilyProfileTab(panel, student) {
@@ -1452,6 +1719,12 @@
       panel.appendChild(text);
     }
 
+    function formatSignedNumber_(value) {
+      var number = Number(value || 0);
+      if (!isFinite(number)) number = 0;
+      return number > 0 ? '+' + number : String(number);
+    }
+
     function calculateAgeFromStudent_(student) {
       var iso = String(student && student.birthdateSortKey || '').trim();
       var display = String(student && student.birthdate || '').trim();
@@ -1485,6 +1758,19 @@
       });
       document.addEventListener('keydown', function(event) {
         if (event.key === 'Escape') closeAuthorizationDetail();
+      });
+    }
+
+    function bindConvivenciaDetailModal() {
+      var modal = document.getElementById('convivencia-detail-modal');
+      if (!modal) return;
+      var close = modal.querySelector('.modal-close');
+      if (close) close.addEventListener('click', closeConvivenciaDetail);
+      modal.addEventListener('click', function(event) {
+        if (event.target === modal) closeConvivenciaDetail();
+      });
+      document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') closeConvivenciaDetail();
       });
     }
 
