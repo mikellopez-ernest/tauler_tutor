@@ -286,14 +286,13 @@ function loadAttendanceTotalHoursFromSheet_(registry, groupName) {
   var sheet = openTableSheet_(registry, TABLES.dinantia, SHEETS.attendanceCache);
   var table = readAttendanceCacheTable_(sheet);
   var scope = resolveAttendanceGroupScope_(registry, groupName);
-  var wanted = textKey_(scope.label);
+  var cacheRow = findAttendanceCacheRowForGroup_(table.rows, groupName, scope);
   var totals = emptyAttendanceCounts_().totalHours;
 
-  for (var i = 0; i < table.rows.length; i++) {
-    if (textKey_(table.rows[i].label) !== wanted) continue;
+  if (cacheRow) {
     ATTENDANCE_MONTHS.forEach(function(month) {
       if (table.headers[month.header] === undefined) return;
-      totals[month.key] = Number(table.rows[i].row[table.headers[month.header]]) || 0;
+      totals[month.key] = Number(cacheRow.row[table.headers[month.header]]) || 0;
     });
     return totals;
   }
@@ -303,6 +302,39 @@ function loadAttendanceTotalHoursFromSheet_(registry, groupName) {
     expectedLevelRow: scope.label
   });
   return totals;
+}
+
+function findAttendanceCacheRowForGroup_(rows, groupName, scope) {
+  var candidates = [
+    groupName,
+    scope && scope.label,
+    scope && scope.name,
+    scope && scope.scopeName,
+    scope && scope.matchedName
+  ].filter(Boolean);
+
+  var exactKeys = {};
+  candidates.forEach(function(candidate) {
+    exactKeys[textKey_(candidate)] = true;
+  });
+
+  var bestPrefix = null;
+  var bestPrefixLength = -1;
+  for (var i = 0; i < (rows || []).length; i++) {
+    var row = rows[i];
+    var rowKey = textKey_(row.label);
+    if (exactKeys[rowKey]) return row;
+
+    for (var j = 0; j < candidates.length; j++) {
+      var candidateKey = textKey_(candidates[j]);
+      if (candidateKey.indexOf(rowKey + ' ') !== 0) continue;
+      if (rowKey.length > bestPrefixLength) {
+        bestPrefix = row;
+        bestPrefixLength = rowKey.length;
+      }
+    }
+  }
+  return bestPrefix;
 }
 
 function readAttendanceCacheTable_(sheet) {
