@@ -2,8 +2,11 @@
   (function() {
     var state = {
       groups: [],
-      selectedIniciGroup: '__none',
+      selectedIniciGroup: '__all',
+      allStudents: [],
       studentsByGroup: {},
+      currentStudents: [],
+      studentSearch: '',
       visibleStudents: [],
       contactRows: [],
       contactSearch: '',
@@ -40,8 +43,26 @@
 
     function bindInici() {
       var select = document.getElementById('inici-group-select');
+      var searchInput = document.getElementById('inici-student-search');
+      document.getElementById('inici-search-button').addEventListener('click', function() {
+        state.studentSearch = normalizeText(searchInput.value);
+        renderStudents(filteredStudents());
+      });
+      searchInput.addEventListener('keydown', function(event) {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        state.studentSearch = normalizeText(searchInput.value);
+        renderStudents(filteredStudents());
+      });
       select.addEventListener('change', function() {
-        state.selectedIniciGroup = select.value || '__none';
+        state.selectedIniciGroup = select.value || '__all';
+        loadStudentsForSelectedGroup();
+      });
+      document.getElementById('inici-reset-button').addEventListener('click', function() {
+        searchInput.value = '';
+        state.studentSearch = '';
+        state.selectedIniciGroup = '__all';
+        select.value = '__all';
         loadStudentsForSelectedGroup();
       });
     }
@@ -123,8 +144,11 @@
             return;
           }
           state.groups = parsed.groups || [];
-          populateTreeGroupSelect(document.getElementById('inici-group-select'), state.groups, true);
+          state.allStudents = parsed.students || [];
+          state.currentStudents = state.allStudents.slice();
+          populateTreeGroupSelect(document.getElementById('inici-group-select'), state.groups, true, '__all', 'Tots els grups');
           populateFlatGroupSelect(document.getElementById('authorization-group-select'), cachedGroupNamesFromGroups(state.groups), true);
+          renderStudents(filteredStudents());
         })
         .withFailureHandler(function(error) {
           setLoading(false);
@@ -149,14 +173,14 @@
     function loadStudentsForSelectedGroup() {
       var groupId = state.selectedIniciGroup;
       hideError('students-error');
-      if (!groupId || groupId === '__none') {
-        renderStudents([]);
-        document.getElementById('students-empty').textContent = "Selecciona un grup per veure l'alumnat.";
-        document.getElementById('students-empty').classList.remove('is-hidden');
+      if (!groupId || groupId === '__all') {
+        state.currentStudents = state.allStudents.slice();
+        renderStudents(filteredStudents());
         return;
       }
       if (state.studentsByGroup[groupId]) {
-        renderStudents(state.studentsByGroup[groupId]);
+        state.currentStudents = state.studentsByGroup[groupId].slice();
+        renderStudents(filteredStudents());
         return;
       }
       setLoading(true, 'Carregant alumnat');
@@ -170,7 +194,8 @@
             return;
           }
           state.studentsByGroup[groupId] = parsed.students || [];
-          renderStudents(state.studentsByGroup[groupId]);
+          state.currentStudents = state.studentsByGroup[groupId].slice();
+          renderStudents(filteredStudents());
         })
         .withFailureHandler(function(error) {
           setLoading(false);
@@ -178,6 +203,16 @@
           renderStudents([]);
         })
         .loadStudentsForGroupJson(groupId);
+    }
+
+    function filteredStudents() {
+      return (state.currentStudents || []).filter(function(student) {
+        if (state.studentSearch && normalizeText(student.name).indexOf(state.studentSearch) === -1) return false;
+        return true;
+      }).sort(function(a, b) {
+        return String(a.groupName || '').localeCompare(String(b.groupName || ''), 'ca', { sensitivity: 'base' }) ||
+          String(a.name || '').localeCompare(String(b.name || ''), 'ca', { sensitivity: 'base' });
+      });
     }
 
     function renderStudents(students) {
@@ -641,12 +676,12 @@
       return columns;
     }
 
-    function populateTreeGroupSelect(select, groups, includePlaceholder) {
+    function populateTreeGroupSelect(select, groups, includePlaceholder, placeholderValue, placeholderText) {
       select.textContent = '';
       if (includePlaceholder) {
         var placeholder = document.createElement('option');
-        placeholder.value = '__none';
-        placeholder.textContent = 'Selecciona un grup';
+        placeholder.value = placeholderValue || '__none';
+        placeholder.textContent = placeholderText || 'Selecciona un grup';
         select.appendChild(placeholder);
       }
       var roots = {};

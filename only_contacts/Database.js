@@ -152,8 +152,8 @@ function loadStudentsForGroup_(groupId) {
   var group = findDinantiaGroupById_(groupId);
   var groupAliases = groupAliases_(group || { id: groupId, name: groupId });
   var cached = loadStudentsForGroupFromCache_(groupAliases);
-  if (cached.length) return cached;
-  return loadStudentsForGroupFromRuntimeCache_(group || { id: groupId, name: groupId });
+  if (cached.length) return enrichStudentsWithCachedEmails_(cached);
+  return enrichStudentsWithCachedEmails_(loadStudentsForGroupFromRuntimeCache_(group || { id: groupId, name: groupId }));
 }
 
 function findDinantiaGroupById_(groupId) {
@@ -200,6 +200,37 @@ function loadStudentsForGroupFromCache_(groupAliases) {
     });
   }
   return sortStudents_(rows);
+}
+
+function enrichStudentsWithCachedEmails_(students) {
+  var lookup = loadStudentEmailLookupFromCache_();
+  return sortStudents_((students || []).map(function(student) {
+    student = Object.assign({}, student || {});
+    if (!student.email) {
+      student.email = lookup.byId[String(student.id || '').trim()] || lookup.byName[textKey_(student.name)] || '';
+    }
+    return student;
+  }));
+}
+
+function loadStudentEmailLookupFromCache_() {
+  var registry = loadTableRegistry_();
+  var sheet = openTableSheet_(registry, TABLES.dinantia, SHEETS.studentsCache);
+  var headers = requireHeaders_(sheet, [
+    'student_id', 'student_name', 'student_email'
+  ], TABLES.dinantia + ' -> ' + SHEETS.studentsCache);
+  var lookup = { byId: {}, byName: {} };
+  if (sheet.getLastRow() < 2) return lookup;
+  var values = sheet.getDataRange().getValues();
+  for (var i = 1; i < values.length; i++) {
+    var id = String(values[i][headers.student_id] || '').trim();
+    var name = String(values[i][headers.student_name] || '').trim();
+    var email = String(values[i][headers.student_email] || '').trim().toLowerCase();
+    if (!email) continue;
+    if (id && !lookup.byId[id]) lookup.byId[id] = email;
+    if (name && !lookup.byName[textKey_(name)]) lookup.byName[textKey_(name)] = email;
+  }
+  return lookup;
 }
 
 function fetchStudentsForGroupFromDinantia_(group) {
@@ -687,7 +718,8 @@ function sortStudents_(students) {
   return (students || []).filter(function(student) {
     return student && student.id;
   }).sort(function(a, b) {
-    return String(a.name || '').localeCompare(String(b.name || ''), 'ca', { sensitivity: 'base' });
+    return String(a.groupName || '').localeCompare(String(b.groupName || ''), 'ca', { sensitivity: 'base' }) ||
+      String(a.name || '').localeCompare(String(b.name || ''), 'ca', { sensitivity: 'base' });
   });
 }
 

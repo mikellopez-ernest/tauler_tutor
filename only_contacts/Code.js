@@ -13,7 +13,8 @@ function loadReadOnlyInitialJson() {
   try {
     return JSON.stringify({
       ok: true,
-      groups: loadReadOnlyGroupOptions_()
+      groups: loadReadOnlyGroupOptions_(),
+      students: loadAllStudentsFromCache_()
     });
   } catch (error) {
     logPublicError_('tauler_professors_read_only_initial_load_failed', error);
