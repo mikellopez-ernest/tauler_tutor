@@ -35,6 +35,7 @@ var SHEETS = {
   contactsCache: 'contacts_cache',
   authorizationsCache: 'authorizations_cache',
   attendanceCache: 'attendance_cache',
+  tutorMeetings: 'tutories',
   dinantiaGroups: 'dinantia_groups',
   cacheRuns: 'cache_runs',
   registry: 'tables',

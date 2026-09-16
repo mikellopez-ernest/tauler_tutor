@@ -228,6 +228,46 @@
           <div class="modal-body" id="convivencia-detail-body"></div>
         </section>
       </div>
+
+      <div class="modal-backdrop is-hidden" id="tutoria-modal" role="dialog" aria-modal="true" aria-labelledby="tutoria-title">
+        <section class="modal-panel">
+          <div class="modal-header">
+            <div>
+              <h2 id="tutoria-title">Reunió</h2>
+              <p class="subtle" id="tutoria-subtitle"></p>
+            </div>
+            <button class="modal-close" type="button" aria-label="Tanca">×</button>
+          </div>
+          <form class="modal-body tutoria-form" id="tutoria-form">
+            <input id="tutoria-id" type="hidden">
+            <label class="tutoria-field">
+              <span>Data</span>
+              <input id="tutoria-date" type="date" lang="ca-ES" required>
+            </label>
+            <label class="tutoria-field">
+              <span>Assistents</span>
+              <textarea id="tutoria-assistents" rows="2"></textarea>
+            </label>
+            <label class="tutoria-field">
+              <span>Motiu de la reunió</span>
+              <textarea id="tutoria-motiu" rows="2"></textarea>
+            </label>
+            <label class="tutoria-field">
+              <span>Desenvolupament</span>
+              <textarea id="tutoria-desenvolupament" rows="6"></textarea>
+            </label>
+            <label class="tutoria-field">
+              <span>Acords</span>
+              <textarea id="tutoria-acords" rows="6"></textarea>
+            </label>
+            <p class="form-error" id="tutoria-error" role="alert"></p>
+            <div class="tutoria-actions">
+              <button class="secondary-button" type="button" data-tutoria-cancel>Cancel·la</button>
+              <button class="primary-button" type="submit" id="tutoria-save">Desa</button>
+            </div>
+          </form>
+        </section>
+      </div>
     </div>
 
     <main class="error-page is-hidden">

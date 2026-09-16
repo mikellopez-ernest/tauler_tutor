@@ -8,6 +8,11 @@ function AppError_(code, message, userMessage) {
 AppError_.prototype = Object.create(Error.prototype);
 AppError_.prototype.constructor = AppError_;
 
+function AppError(message, options) {
+  options = options || {};
+  return new AppError_(options.code || 'APPLICATION', message, options.userMessage || message);
+}
+
 function tutorResolutionError_(message) {
   return new AppError_('TUTOR_RESOLUTION', message, APP_CONFIG.userTutorErrorMessage);
 }
@@ -42,4 +47,3 @@ function errorToViewModel_(error) {
     details: message
   };
 }
-

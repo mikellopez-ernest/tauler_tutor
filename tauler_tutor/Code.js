@@ -84,6 +84,20 @@ function loadStudentAttendanceSummaryJson(student) {
 }
 
 /**
+ * Client-callable profile endpoint for tutor meeting rows.
+ */
+function loadStudentTutoriesJson(student) {
+  return JSON.stringify(loadStudentTutories_(student));
+}
+
+/**
+ * Client-callable endpoint to create or update a tutor meeting row.
+ */
+function saveStudentTutoriaJson(record) {
+  return JSON.stringify(saveStudentTutoria_(record));
+}
+
+/**
  * Client-callable invitation endpoint for pending authorization flows.
  */
 function sendAuthorizationInvitations(requests) {

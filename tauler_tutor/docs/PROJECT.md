@@ -24,6 +24,7 @@ Current feature specs:
 | `docs/features/AUTHORIZATIONS_PANEL.md` | Read-only authorization permission matrix for the tutor dashboard. |
 | `docs/features/ATTENDANCE_PROFILE_TAB.md` | Student profile ASS tab using real Dinantia attendance registers grouped by month. |
 | `docs/features/CONVIVENCIA_PROFILE_TAB.md` | Student profile CONV tab using `Incidències` term configuration and annual incident rows. |
+| `docs/features/TUTORIA_PROFILE_TAB.md` | Student profile TUT tab for family-tutoring meeting records. |
 
 ## Architecture Principles
 

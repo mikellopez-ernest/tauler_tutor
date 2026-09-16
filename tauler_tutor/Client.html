@@ -17,6 +17,9 @@
       profileConvivenciaLoadingByStudent: {},
       profileAttendanceByStudent: {},
       profileAttendanceLoadingByStudent: {},
+      profileTutoriesByStudent: {},
+      profileTutoriesLoadingByStudent: {},
+      profileTutoriaSaving: false,
       contactsLoading: false,
       authorizationsLoaded: false,
       inviting: false,
@@ -52,6 +55,7 @@
     bindStudentProfile();
     bindAuthorizationDetailModal();
     bindConvivenciaDetailModal();
+    bindTutoriaModal();
     bindAuthorizationFloatingScroll();
     loadInitialData();
 
@@ -1263,6 +1267,10 @@
         renderAttendanceProfileTab(panel, state.activeProfileStudent);
         return;
       }
+      if (state.activeProfileTab === 'tut') {
+        renderTutoriaProfileTab(panel, state.activeProfileStudent);
+        return;
+      }
       renderWorkInProgressTab(panel);
     }
 
@@ -1462,6 +1470,220 @@
           id: studentId,
           name: student.name || ''
         });
+    }
+
+    function renderTutoriaProfileTab(panel, student) {
+      if (!student) {
+        renderWorkInProgressTab(panel);
+        return;
+      }
+      var studentId = String(student.id || '').trim();
+      var rows = state.profileTutoriesByStudent[studentId] || null;
+      if (!rows) {
+        renderNotebookLoading(panel, 'Carregant tutories...');
+        loadProfileTutories(student, function(success, message) {
+          if (!success) {
+            renderNotebookMessage(panel, "No s'han pogut carregar les tutories: " + (message || 'Error desconegut.'));
+            return;
+          }
+          renderStudentProfileTab();
+        });
+        return;
+      }
+
+      panel.className = 'notebook-panel medical-panel tutoria-panel';
+      var toolbar = document.createElement('div');
+      toolbar.className = 'tutoria-toolbar';
+      var title = document.createElement('p');
+      title.className = 'attendance-meta';
+      title.textContent = rows.length ? rows.length + ' reunions registrades' : 'Cap reunió registrada';
+      var button = document.createElement('button');
+      button.className = 'secondary-button';
+      button.type = 'button';
+      button.textContent = 'Nova reunió';
+      button.addEventListener('click', function() {
+        showTutoriaModal(null);
+      });
+      toolbar.appendChild(title);
+      toolbar.appendChild(button);
+      panel.appendChild(toolbar);
+
+      if (!rows.length) {
+        renderTutoriaEmpty_(panel);
+        return;
+      }
+
+      var wrap = document.createElement('div');
+      wrap.className = 'attendance-table-wrap tutoria-table-wrap';
+      var table = document.createElement('table');
+      table.className = 'attendance-table tutoria-table';
+      var thead = document.createElement('thead');
+      var headRow = document.createElement('tr');
+      ['Data', 'Motiu'].forEach(function(label) {
+        var th = document.createElement('th');
+        th.textContent = label;
+        headRow.appendChild(th);
+      });
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+      var tbody = document.createElement('tbody');
+      rows.forEach(function(item) {
+        var tr = document.createElement('tr');
+        tr.className = 'tutoria-row';
+        tr.tabIndex = 0;
+        tr.addEventListener('click', function() { showTutoriaModal(item); });
+        tr.addEventListener('keydown', function(event) {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            showTutoriaModal(item);
+          }
+        });
+        appendTutoriaCell_(tr, item.date || '-');
+        appendTutoriaCell_(tr, item.motiu || '-');
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      panel.appendChild(wrap);
+    }
+
+    function renderTutoriaEmpty_(panel) {
+      var empty = document.createElement('p');
+      empty.className = 'subtle tutoria-empty';
+      empty.textContent = "No hi ha cap reunió registrada per a aquest alumne/a.";
+      panel.appendChild(empty);
+    }
+
+    function appendTutoriaCell_(row, value) {
+      var td = document.createElement('td');
+      td.textContent = textValue(value) || '-';
+      row.appendChild(td);
+    }
+
+    function loadProfileTutories(student, callback) {
+      var studentId = String(student && student.id || '').trim();
+      if (!studentId) {
+        if (callback) callback(false, "Falta l'identificador de l'alumne.");
+        return;
+      }
+      if (state.profileTutoriesLoadingByStudent[studentId]) return;
+      state.profileTutoriesLoadingByStudent[studentId] = true;
+      google.script.run
+        .withSuccessHandler(function(result) {
+          state.profileTutoriesLoadingByStudent[studentId] = false;
+          var parsed = parseInitialData(result);
+          if (!parsed || !parsed.ok) {
+            if (callback) callback(false, parsed && parsed.error ? parsed.error.details || parsed.error.message : 'Resposta buida del servidor.');
+            return;
+          }
+          state.profileTutoriesByStudent[studentId] = parsed.tutories || [];
+          if (callback) callback(true);
+        })
+        .withFailureHandler(function(error) {
+          state.profileTutoriesLoadingByStudent[studentId] = false;
+          if (callback) callback(false, error && error.message ? error.message : String(error));
+        })
+        .loadStudentTutoriesJson({
+          id: studentId,
+          name: student.name || ''
+        });
+    }
+
+    function showTutoriaModal(record) {
+      var modal = document.getElementById('tutoria-modal');
+      if (!modal) return;
+      var student = state.activeProfileStudent || {};
+      var today = new Date();
+      document.getElementById('tutoria-title').textContent = record && record.id ? 'Detall de la reunió' : 'Nova reunió';
+      document.getElementById('tutoria-subtitle').textContent = student.name || '';
+      document.getElementById('tutoria-id').value = record && record.id ? record.id : '';
+      document.getElementById('tutoria-date').value = record && record.dateInput ? record.dateInput : [
+        today.getFullYear(),
+        String(today.getMonth() + 1).padStart(2, '0'),
+        String(today.getDate()).padStart(2, '0')
+      ].join('-');
+      document.getElementById('tutoria-assistents').value = record && record.assistents ? record.assistents : '';
+      document.getElementById('tutoria-motiu').value = record && record.motiu ? record.motiu : '';
+      document.getElementById('tutoria-desenvolupament').value = record && record.desenvolupament ? record.desenvolupament : '';
+      document.getElementById('tutoria-acords').value = record && record.acords ? record.acords : '';
+      document.getElementById('tutoria-error').textContent = '';
+      setTutoriaSaving_(false);
+      modal.classList.remove('is-hidden');
+    }
+
+    function closeTutoriaModal() {
+      var modal = document.getElementById('tutoria-modal');
+      if (modal) modal.classList.add('is-hidden');
+    }
+
+    function saveTutoriaFromModal() {
+      if (state.profileTutoriaSaving) return;
+      var student = state.activeProfileStudent || {};
+      var studentId = String(student.id || '').trim();
+      var error = document.getElementById('tutoria-error');
+      var dateValue = document.getElementById('tutoria-date').value;
+      if (!studentId) {
+        error.textContent = "Falta l'identificador de l'alumne.";
+        return;
+      }
+      if (!dateValue) {
+        error.textContent = 'Cal informar la data.';
+        return;
+      }
+      setTutoriaSaving_(true);
+      google.script.run
+        .withSuccessHandler(function(result) {
+          setTutoriaSaving_(false);
+          var parsed = parseInitialData(result);
+          if (!parsed || !parsed.ok) {
+            error.textContent = parsed && parsed.error ? parsed.error.details || parsed.error.message : 'Resposta buida del servidor.';
+            return;
+          }
+          upsertTutoriaInState_(studentId, parsed.tutoria);
+          closeTutoriaModal();
+          renderStudentProfileTab();
+        })
+        .withFailureHandler(function(saveError) {
+          setTutoriaSaving_(false);
+          error.textContent = saveError && saveError.message ? saveError.message : String(saveError);
+        })
+        .saveStudentTutoriaJson({
+          id: document.getElementById('tutoria-id').value,
+          studentId: studentId,
+          date: dateValue,
+          assistents: document.getElementById('tutoria-assistents').value,
+          motiu: document.getElementById('tutoria-motiu').value,
+          desenvolupament: document.getElementById('tutoria-desenvolupament').value,
+          acords: document.getElementById('tutoria-acords').value
+        });
+    }
+
+    function upsertTutoriaInState_(studentId, item) {
+      if (!item) return;
+      var rows = state.profileTutoriesByStudent[studentId] || [];
+      var replaced = false;
+      rows = rows.map(function(row) {
+        if (String(row.id) === String(item.id)) {
+          replaced = true;
+          return item;
+        }
+        return row;
+      });
+      if (!replaced) rows.push(item);
+      rows.sort(function(a, b) {
+        if (a.sortKey !== b.sortKey) return String(b.sortKey || '').localeCompare(String(a.sortKey || ''));
+        return Number(b.id || 0) - Number(a.id || 0);
+      });
+      state.profileTutoriesByStudent[studentId] = rows;
+    }
+
+    function setTutoriaSaving_(saving) {
+      state.profileTutoriaSaving = saving === true;
+      var save = document.getElementById('tutoria-save');
+      if (save) {
+        save.disabled = state.profileTutoriaSaving;
+        save.textContent = state.profileTutoriaSaving ? 'Desant...' : 'Desa';
+      }
     }
 
     function appendConvivenciaMetric(section, label, value, note, detailKey) {
@@ -1771,6 +1993,28 @@
       });
       document.addEventListener('keydown', function(event) {
         if (event.key === 'Escape') closeConvivenciaDetail();
+      });
+    }
+
+    function bindTutoriaModal() {
+      var modal = document.getElementById('tutoria-modal');
+      if (!modal) return;
+      var close = modal.querySelector('.modal-close');
+      var cancel = modal.querySelector('[data-tutoria-cancel]');
+      var form = document.getElementById('tutoria-form');
+      if (close) close.addEventListener('click', closeTutoriaModal);
+      if (cancel) cancel.addEventListener('click', closeTutoriaModal);
+      if (form) {
+        form.addEventListener('submit', function(event) {
+          event.preventDefault();
+          saveTutoriaFromModal();
+        });
+      }
+      modal.addEventListener('click', function(event) {
+        if (event.target === modal) closeTutoriaModal();
+      });
+      document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') closeTutoriaModal();
       });
     }
 

@@ -323,6 +323,15 @@ The `CONV` tab shows a current-term convivencia summary:
 
 The current term boundaries come from `Incidències` -> `config`. Clicking `Targetes grogues`, `Targetes vermelles`, or `Retards` opens a detail modal with `Data`, `Hora`, `Assignatura`, `Activitat`, `Puntuació`, `Professor`, `Missatge`, and `Nota interna`. Detailed CONV rules live in `docs/features/CONVIVENCIA_PROFILE_TAB.md`.
 
+The `TUT` tab shows family-tutoring meeting records from `Dinantia` -> `tutories`:
+
+| Column | Source / Rule |
+| --- | --- |
+| `Data` | `tutories.data`, displayed as `dd/MM/yyyy`. |
+| `Motiu` | `tutories`.`motiu de la reunió`. |
+
+The tab may lazy-load the selected student's rows through `loadStudentTutoriesJson(student)`. Clicking `Nova reunió` opens a modal for creating a record. Clicking an existing row opens the same modal populated with the row details for review and editing. The modal fields are `Data`, `Assistents`, `Motiu de la reunió`, `Desenvolupament`, and `Acords`. Detailed TUT rules live in `docs/features/TUTORIA_PROFILE_TAB.md`.
+
 All other tabs display only a centered work-in-progress safety-cone icon/message for now. No fields are editable and no profile data is written.
 
 Editable contact data must still write to Dinantia first. After Dinantia accepts the change, update every matching `contacts_cache` row with the same `contact_id` and append the changelog row.

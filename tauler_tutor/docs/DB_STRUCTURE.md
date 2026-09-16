@@ -47,7 +47,7 @@ Current examples:
 | `Horaris` | `GPU001` |
 | `Dades de professors` | `Llista`, `leave_absence` |
 | `Càrrega lectiva` | `assignatures`, `carrecs` |
-| `Dinantia` | `dinantia_2_dades_alumnes`, `teachers_2_dinantia`, `dinantia_groups`, `changelog`, `students_cache`, `contacts_cache`, `authorizations_cache`, `attendance_cache`, `cache_runs` |
+| `Dinantia` | `dinantia_2_dades_alumnes`, `teachers_2_dinantia`, `dinantia_groups`, `changelog`, `students_cache`, `contacts_cache`, `authorizations_cache`, `attendance_cache`, `tutories`, `cache_runs` |
 | `Dades alumnes` | Group-specific student sheets referenced by `Dinantia` -> `dinantia_2_dades_alumnes`.`dades_alumnes_sheet` |
 | `Autoritzacions` | `autoritzacions`, `persones_autoritzades`, `verification_tokens` |
 | `Incidències` | `llistat_anual`, `config`, `meeting_records`, `study_group_students`, `study_group_teachers`, `3r_project`, `expulsions` |
@@ -876,6 +876,36 @@ The debug attendance methods log, but do not write:
 - skipped empty-attendee registers,
 - duplicate hour hits,
 - final totals by scope/month.
+
+### `Dinantia` -> `tutories`
+
+This sheet stores family-tutoring meeting records for the student-profile `TUT` tab.
+
+It is app-owned data, keyed by Dinantia student ID. Row 1 contains headers and data starts in row 2.
+
+Required headers:
+
+| Header | Meaning |
+| --- | --- |
+| `id` | Autonumeric local record ID. |
+| `student_id` | Dinantia account/student ID. |
+| `data` | Meeting date. Written as a date value and formatted `dd/MM/yyyy`. |
+| `assistents` | Free text list of attendees. |
+| `motiu de la reunió` | Free text meeting reason. |
+| `desenvolupament` | Free text meeting development/notes. |
+| `acords` | Free text agreements. |
+
+Profile read rules:
+
+1. Filter rows where `student_id` matches the selected student ID exactly after trimming.
+2. Sort newest meeting date first.
+3. If two rows have the same date, sort by numeric `id` descending.
+
+Profile write rules:
+
+1. New records receive the next numeric `id`.
+2. Existing records may be updated only when both `id` and `student_id` match.
+3. The client writes `data` as ISO `yyyy-MM-dd`; the service also accepts local `dd/MM/yyyy` when reading existing sheet data.
 
 ### `Dinantia` -> `cache_runs`
 
