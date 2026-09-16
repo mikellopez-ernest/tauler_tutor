@@ -242,7 +242,12 @@
             <input id="tutoria-id" type="hidden">
             <label class="tutoria-field">
               <span>Data</span>
-              <input id="tutoria-date" type="date" lang="ca-ES" required>
+              <input id="tutoria-date" type="hidden" required>
+              <div class="tutoria-date-control" id="tutoria-date-control">
+                <input id="tutoria-date-display" type="text" placeholder="dd/mm/aaaa" inputmode="numeric" autocomplete="off">
+                <button class="date-picker-button" id="tutoria-date-button" type="button" aria-label="Obre el calendari">▦</button>
+                <div class="date-picker is-hidden" id="tutoria-calendar" role="application" aria-label="Calendari"></div>
+              </div>
             </label>
             <label class="tutoria-field">
               <span>Assistents</span>

@@ -20,6 +20,11 @@
       profileTutoriesByStudent: {},
       profileTutoriesLoadingByStudent: {},
       profileTutoriaSaving: false,
+      tutoriaDatepicker: {
+        selectedIso: '',
+        viewYear: null,
+        viewMonth: null
+      },
       contactsLoading: false,
       authorizationsLoaded: false,
       inviting: false,
@@ -1593,15 +1598,10 @@
       var modal = document.getElementById('tutoria-modal');
       if (!modal) return;
       var student = state.activeProfileStudent || {};
-      var today = new Date();
       document.getElementById('tutoria-title').textContent = record && record.id ? 'Detall de la reunió' : 'Nova reunió';
       document.getElementById('tutoria-subtitle').textContent = student.name || '';
       document.getElementById('tutoria-id').value = record && record.id ? record.id : '';
-      document.getElementById('tutoria-date').value = record && record.dateInput ? record.dateInput : [
-        today.getFullYear(),
-        String(today.getMonth() + 1).padStart(2, '0'),
-        String(today.getDate()).padStart(2, '0')
-      ].join('-');
+      setTutoriaDateValue_(record && record.dateInput ? record.dateInput : todayIso_());
       document.getElementById('tutoria-assistents').value = record && record.assistents ? record.assistents : '';
       document.getElementById('tutoria-motiu').value = record && record.motiu ? record.motiu : '';
       document.getElementById('tutoria-desenvolupament').value = record && record.desenvolupament ? record.desenvolupament : '';
@@ -1614,6 +1614,7 @@
     function closeTutoriaModal() {
       var modal = document.getElementById('tutoria-modal');
       if (modal) modal.classList.add('is-hidden');
+      closeTutoriaDatepicker_();
     }
 
     function saveTutoriaFromModal() {
@@ -1622,6 +1623,9 @@
       var studentId = String(student.id || '').trim();
       var error = document.getElementById('tutoria-error');
       var dateValue = document.getElementById('tutoria-date').value;
+      if (!dateValue) {
+        dateValue = syncTutoriaDateFromDisplay_();
+      }
       if (!studentId) {
         error.textContent = "Falta l'identificador de l'alumne.";
         return;
@@ -1684,6 +1688,180 @@
         save.disabled = state.profileTutoriaSaving;
         save.textContent = state.profileTutoriaSaving ? 'Desant...' : 'Desa';
       }
+    }
+
+    function setTutoriaDateValue_(iso) {
+      var parsed = parseIsoDate_(iso) || parseLocalDate_(iso) || parseIsoDate_(todayIso_());
+      var normalized = toIsoDate_(parsed);
+      state.tutoriaDatepicker.selectedIso = normalized;
+      state.tutoriaDatepicker.viewYear = parsed.getFullYear();
+      state.tutoriaDatepicker.viewMonth = parsed.getMonth();
+      document.getElementById('tutoria-date').value = normalized;
+      document.getElementById('tutoria-date-display').value = toLocalDateText_(parsed);
+      renderTutoriaDatepicker_();
+    }
+
+    function openTutoriaDatepicker_() {
+      var calendar = document.getElementById('tutoria-calendar');
+      if (!calendar) return;
+      syncTutoriaDateFromDisplay_();
+      renderTutoriaDatepicker_();
+      calendar.classList.remove('is-hidden');
+    }
+
+    function closeTutoriaDatepicker_() {
+      var calendar = document.getElementById('tutoria-calendar');
+      if (calendar) calendar.classList.add('is-hidden');
+    }
+
+    function syncTutoriaDateFromDisplay_() {
+      var display = document.getElementById('tutoria-date-display');
+      var hidden = document.getElementById('tutoria-date');
+      if (!display || !hidden) return '';
+      var parsed = parseLocalDate_(display.value);
+      if (!parsed) {
+        hidden.value = '';
+        return '';
+      }
+      var iso = toIsoDate_(parsed);
+      hidden.value = iso;
+      state.tutoriaDatepicker.selectedIso = iso;
+      state.tutoriaDatepicker.viewYear = parsed.getFullYear();
+      state.tutoriaDatepicker.viewMonth = parsed.getMonth();
+      renderTutoriaDatepicker_();
+      return iso;
+    }
+
+    function renderTutoriaDatepicker_() {
+      var calendar = document.getElementById('tutoria-calendar');
+      if (!calendar) return;
+      var months = ['gener', 'febrer', 'març', 'abril', 'maig', 'juny', 'juliol', 'agost', 'setembre', 'octubre', 'novembre', 'desembre'];
+      var weekdays = ['dl', 'dt', 'dc', 'dj', 'dv', 'ds', 'dg'];
+      var today = new Date();
+      var year = Number(state.tutoriaDatepicker.viewYear);
+      var month = Number(state.tutoriaDatepicker.viewMonth);
+      if (!isFinite(year) || !isFinite(month)) {
+        year = today.getFullYear();
+        month = today.getMonth();
+      }
+      calendar.textContent = '';
+
+      var header = document.createElement('div');
+      header.className = 'date-picker-header';
+      var previous = document.createElement('button');
+      previous.type = 'button';
+      previous.className = 'date-nav-button';
+      previous.setAttribute('aria-label', 'Mes anterior');
+      previous.textContent = '‹';
+      previous.addEventListener('click', function(event) {
+        event.preventDefault();
+        moveTutoriaDatepickerMonth_(-1);
+      });
+      var title = document.createElement('strong');
+      title.textContent = months[month] + ' ' + year;
+      var next = document.createElement('button');
+      next.type = 'button';
+      next.className = 'date-nav-button';
+      next.setAttribute('aria-label', 'Mes següent');
+      next.textContent = '›';
+      next.addEventListener('click', function(event) {
+        event.preventDefault();
+        moveTutoriaDatepickerMonth_(1);
+      });
+      header.appendChild(previous);
+      header.appendChild(title);
+      header.appendChild(next);
+      calendar.appendChild(header);
+
+      var grid = document.createElement('div');
+      grid.className = 'date-picker-grid';
+      weekdays.forEach(function(day) {
+        var label = document.createElement('span');
+        label.className = 'date-weekday';
+        label.textContent = day;
+        grid.appendChild(label);
+      });
+
+      var first = new Date(year, month, 1);
+      var firstOffset = (first.getDay() + 6) % 7;
+      var daysInMonth = new Date(year, month + 1, 0).getDate();
+      for (var empty = 0; empty < firstOffset; empty++) {
+        var spacer = document.createElement('span');
+        spacer.className = 'date-empty';
+        grid.appendChild(spacer);
+      }
+      for (var dayNumber = 1; dayNumber <= daysInMonth; dayNumber++) {
+        var dayDate = new Date(year, month, dayNumber);
+        var iso = toIsoDate_(dayDate);
+        var dayButton = document.createElement('button');
+        dayButton.type = 'button';
+        dayButton.className = 'date-day';
+        if (iso === state.tutoriaDatepicker.selectedIso) dayButton.className += ' is-selected';
+        if (iso === todayIso_()) dayButton.className += ' is-today';
+        dayButton.textContent = String(dayNumber);
+        dayButton.addEventListener('click', makeTutoriaDateSelectHandler_(iso));
+        grid.appendChild(dayButton);
+      }
+      calendar.appendChild(grid);
+    }
+
+    function makeTutoriaDateSelectHandler_(iso) {
+      return function(event) {
+        event.preventDefault();
+        setTutoriaDateValue_(iso);
+        closeTutoriaDatepicker_();
+      };
+    }
+
+    function moveTutoriaDatepickerMonth_(delta) {
+      var year = Number(state.tutoriaDatepicker.viewYear);
+      var month = Number(state.tutoriaDatepicker.viewMonth);
+      var moved = new Date(year, month + delta, 1);
+      state.tutoriaDatepicker.viewYear = moved.getFullYear();
+      state.tutoriaDatepicker.viewMonth = moved.getMonth();
+      renderTutoriaDatepicker_();
+    }
+
+    function todayIso_() {
+      return toIsoDate_(new Date());
+    }
+
+    function toIsoDate_(date) {
+      return [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, '0'),
+        String(date.getDate()).padStart(2, '0')
+      ].join('-');
+    }
+
+    function toLocalDateText_(date) {
+      return [
+        String(date.getDate()).padStart(2, '0'),
+        String(date.getMonth() + 1).padStart(2, '0'),
+        date.getFullYear()
+      ].join('/');
+    }
+
+    function parseIsoDate_(value) {
+      var match = String(value || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!match) return null;
+      var date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+      return isSameDateParts_(date, Number(match[1]), Number(match[2]) - 1, Number(match[3])) ? date : null;
+    }
+
+    function parseLocalDate_(value) {
+      var match = String(value || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (!match) return null;
+      var date = new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+      return isSameDateParts_(date, Number(match[3]), Number(match[2]) - 1, Number(match[1])) ? date : null;
+    }
+
+    function isSameDateParts_(date, year, month, day) {
+      return date instanceof Date
+        && !isNaN(date.getTime())
+        && date.getFullYear() === year
+        && date.getMonth() === month
+        && date.getDate() === day;
     }
 
     function appendConvivenciaMetric(section, label, value, note, detailKey) {
@@ -2002,6 +2180,9 @@
       var close = modal.querySelector('.modal-close');
       var cancel = modal.querySelector('[data-tutoria-cancel]');
       var form = document.getElementById('tutoria-form');
+      var dateDisplay = document.getElementById('tutoria-date-display');
+      var dateButton = document.getElementById('tutoria-date-button');
+      var dateControl = document.getElementById('tutoria-date-control');
       if (close) close.addEventListener('click', closeTutoriaModal);
       if (cancel) cancel.addEventListener('click', closeTutoriaModal);
       if (form) {
@@ -2010,11 +2191,36 @@
           saveTutoriaFromModal();
         });
       }
+      if (dateDisplay) {
+        dateDisplay.addEventListener('focus', function() {
+          openTutoriaDatepicker_();
+        });
+        dateDisplay.addEventListener('input', function() {
+          syncTutoriaDateFromDisplay_();
+        });
+        dateDisplay.addEventListener('blur', function() {
+          var iso = syncTutoriaDateFromDisplay_();
+          if (iso) setTutoriaDateValue_(iso);
+        });
+      }
+      if (dateButton) {
+        dateButton.addEventListener('click', function(event) {
+          event.preventDefault();
+          openTutoriaDatepicker_();
+        });
+      }
       modal.addEventListener('click', function(event) {
         if (event.target === modal) closeTutoriaModal();
       });
+      document.addEventListener('click', function(event) {
+        if (!dateControl || dateControl.contains(event.target)) return;
+        closeTutoriaDatepicker_();
+      });
       document.addEventListener('keydown', function(event) {
-        if (event.key === 'Escape') closeTutoriaModal();
+        if (event.key === 'Escape') {
+          closeTutoriaDatepicker_();
+          closeTutoriaModal();
+        }
       });
     }
 

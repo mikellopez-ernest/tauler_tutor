@@ -41,7 +41,7 @@ Fields:
 
 | Field | Control |
 | --- | --- |
-| `Data` | Date input, Catalan locale hint, required. |
+| `Data` | Text input showing `dd/mm/yyyy`, backed by a Catalan calendar with Monday as the first day, required. |
 | `Assistents` | Textarea, 2 rows. |
 | `Motiu de la reunió` | Textarea, 2 rows. |
 | `Desenvolupament` | Textarea, 6 rows. |
