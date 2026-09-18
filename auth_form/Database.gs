@@ -509,7 +509,66 @@ function validateLauncherTokenForSave_(payload) {
   if (mode === 'edit_owner' && codeKey_(record.dinantia_account_id) !== codeKey_(payload.verified_dinantia_account_id)) {
     throw new Error('Launcher token does not match the original respondent.');
   }
+  validateAuthorizationModelAgainstToken_(payload, record);
   return record;
+}
+
+function validateAuthorizationModelAgainstToken_(payload, record) {
+  var mode = String(payload.form_mode || payload.mode || '').trim();
+  var submittedModel = String(payload.tipus_alumne || '').trim();
+  var actor = String(payload.verified_actor_type || '').trim() || (record && record.sender === 'student' ? 'student' : 'parent');
+  var studentContext = trustedStudentContextFromToken_(record);
+  var expectedModel = expectedAuthorizationModelFromContext_(studentContext);
+
+  if (actor === 'parent' && submittedModel === 'major18') {
+    throw new Error('Model d autorització no vàlid: una família no pot enviar el model de major d edat.');
+  }
+  if (mode === 'new_parent' && expectedModel && submittedModel && submittedModel !== expectedModel) {
+    throw new Error('Model d autorització no vàlid per a l alumne/a verificat.');
+  }
+  if (mode === 'edit_owner' && expectedModel && submittedModel && submittedModel !== expectedModel) {
+    throw new Error('Model d autorització no vàlid per a l alumne/a verificat.');
+  }
+  if (mode === 'new_student_adult' && expectedModel && expectedModel !== 'major18') {
+    throw new Error('Model d autorització no vàlid: l alumne/a verificat no consta com a major d edat.');
+  }
+}
+
+function trustedStudentContextFromToken_(record) {
+  var metadata = parseJsonSafe_(record && record.metadata_json) || {};
+  var session = metadata.form_session || {};
+  var payload = session.payload || {};
+  var student = metadata.student || payload.student || {};
+  return {
+    id: String((student && student.id) || payload.id_student || (record && record.student_id) || '').trim(),
+    studyType: String(payload.studyType || (student && student.studyType) || '').trim(),
+    isAdult: String(payload.isAdult || (student && student.isAdult) || '').trim(),
+    is14Plus: String(payload.is14Plus || (student && student.is14Plus) || '').trim(),
+    age: String(payload.age || (student && student.age) || '').trim()
+  };
+}
+
+function expectedAuthorizationModelFromContext_(student) {
+  student = student || {};
+  var isAdult = normalizeSiNoForModel_(student.isAdult);
+  var is14Plus = normalizeSiNoForModel_(student.is14Plus);
+  var age = Number(student.age);
+  if (isAdult === 'si' || (!isNaN(age) && age >= 18)) return 'major18';
+  var studyType = String(student.studyType || '').trim();
+  if (studyType === 'batx') return 'batx_menor18';
+  if (studyType === 'fp') return 'post_menor18';
+  if (studyType === 'eso') {
+    if (is14Plus === 'si' || (!isNaN(age) && age >= 14)) return 'eso_14_17';
+    if (is14Plus === 'no' || (!isNaN(age) && age < 14)) return 'eso_menor14';
+  }
+  return '';
+}
+
+function normalizeSiNoForModel_(value) {
+  var text = String(value || '').trim().toLowerCase();
+  if (['si', 'sí', 'true', '1', 'yes'].indexOf(text) !== -1) return 'si';
+  if (['no', 'false', '0'].indexOf(text) !== -1) return 'no';
+  return '';
 }
 
 function resolveFormSessionPrefillIfPresent_(prefill) {
@@ -519,10 +578,14 @@ function resolveFormSessionPrefillIfPresent_(prefill) {
   var metadata = parseJsonSafe_(record.metadata_json);
   var session = metadata.form_session || {};
   var payload = Object.assign({}, session.payload || {});
+  var student = metadata.student || {};
   payload.form_session = rawSession;
   if (!payload.form_mode && payload.mode) payload.form_mode = payload.mode;
   if (!payload.id_student && record.student_id) payload.id_student = record.student_id;
   if (!payload.resposta_id && record.resposta_id) payload.resposta_id = record.resposta_id;
+  if (!payload.studyType && student.studyType) payload.studyType = student.studyType;
+  if (!payload.isAdult && student.isAdult) payload.isAdult = student.isAdult;
+  if (!payload.is14Plus && student.is14Plus) payload.is14Plus = student.is14Plus;
   payload.verified_actor_type = record.sender === 'student' ? 'student' : 'parent';
   payload.verified_dinantia_account_id = record.dinantia_account_id || '';
   payload.verified_email = record.email || '';

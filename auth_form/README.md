@@ -59,6 +59,8 @@ Protected modes require either a valid launcher token or a valid launcher-create
 
 Adult-student submissions (`new_student_adult` / `major18`) skip the respondent-identification page and do not show the parent/legal guardian name or document fields, because the student is the respondent.
 
+Verified launcher context is authoritative for model selection. When the launcher supplies student context, the form locks the derived model in the browser and the server validates the submitted `tipus_alumne` against the token/form-session metadata before saving. In particular, a parent/legal-guardian token can never save the `major18` adult-student model.
+
 ## User Experience
 
 The form may render a fast client shell when protected data needs to be resolved asynchronously. For the current mobile-safe launcher flow, `GET ?form_session=...` is resolved server-side before the first form HTML is rendered, so Android/Gmail/Chrome reloads can preserve verified context.

@@ -190,6 +190,25 @@ Sí, ho autoritzo
 No, no ho autoritzo
 ```
 
+### Verified Model Enforcement
+
+When the form is opened from a verified launcher token or form session, the launcher-provided student context is authoritative for model selection.
+
+The client must derive and lock the model from:
+
+- `studyType`
+- `isAdult`
+- `is14Plus`
+
+The server must repeat this validation before saving. It must reject impossible or tampered combinations, including:
+
+- `verified_actor_type = parent` with `tipus_alumne = major18`.
+- `form_mode = new_parent` where the submitted `tipus_alumne` differs from the model derived from verified student context.
+- `form_mode = edit_owner` where the submitted `tipus_alumne` differs from the model derived from verified student context.
+- `form_mode = new_student_adult` when verified student context does not indicate an adult student.
+
+This validation prevents a minor-student parent form from being saved as an adult-student self-submission.
+
 
 
 ## Form Step Flow

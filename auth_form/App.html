@@ -220,12 +220,67 @@ function ensureLaunchContextPayload(out) {
   });
 }
 
-function formToObject(){ updateSignatureFields(); if(document.getElementById('imatgeExternaSi').checked&&!document.getElementById('plataformesExternes').value.trim()) document.getElementById('plataformesExternes').value=DEFAULT_EXTERNAL_PLATFORMS; const out={}; for(const [k,v] of new FormData(form).entries()) out[k]=v; out.curs_inici=document.getElementById('cursInici').value; out.curs_fi=document.getElementById('cursFi').value; out.idioma_formulari=I18n.currentLanguage||'ca'; out.form_mode=currentFormMode||document.getElementById('formMode').value||''; out.isAdult=document.getElementById('isAdult').value; out.is14Plus=document.getElementById('is14Plus').value; ensureLaunchContextPayload(out); if(out.verified_actor_type==='student'&&out.isAdult==='si') out.signatura_alumne='true'; return out; }
+function formToObject(){
+  updateSignatureFields();
+  if(document.getElementById('imatgeExternaSi').checked&&!document.getElementById('plataformesExternes').value.trim()) document.getElementById('plataformesExternes').value=DEFAULT_EXTERNAL_PLATFORMS;
+  const out={};
+  for(const [k,v] of new FormData(form).entries()) out[k]=v;
+  const selectedType = form.querySelector('[name="tipus_alumne"]:checked')?.value || '';
+  if (selectedType) out.tipus_alumne = selectedType;
+  out.curs_inici=document.getElementById('cursInici').value;
+  out.curs_fi=document.getElementById('cursFi').value;
+  out.idioma_formulari=I18n.currentLanguage||'ca';
+  out.form_mode=currentFormMode||document.getElementById('formMode').value||'';
+  out.isAdult=document.getElementById('isAdult').value;
+  out.is14Plus=document.getElementById('is14Plus').value;
+  ensureLaunchContextPayload(out);
+  if(out.verified_actor_type==='student'&&out.isAdult==='si') out.signatura_alumne='true';
+  return out;
+}
 function forceStudentModel(model) {
   if (!model || !typeConfig[model]) return;
   document.querySelectorAll('[name="tipus_alumne"]').forEach(r => r.checked = r.value === model);
   setSetupFromModel(model);
   applyType();
+}
+
+function expectedModelFromVerifiedContext(data) {
+  const source = data || {};
+  const adult = String(source.isAdult || document.getElementById('isAdult').value || '').trim().toLowerCase();
+  const age14 = String(source.is14Plus || document.getElementById('is14Plus').value || '').trim().toLowerCase();
+  const studies = String(source.studyType || document.getElementById('studyType').value || '').trim();
+  if (['si','sí','true','1','yes'].includes(adult)) return 'major18';
+  if (studies === 'batx') return 'batx_menor18';
+  if (studies === 'fp') return 'post_menor18';
+  if (studies === 'eso') {
+    if (['si','sí','true','1','yes'].includes(age14)) return 'eso_14_17';
+    if (['no','false','0'].includes(age14)) return 'eso_menor14';
+  }
+  return '';
+}
+
+function lockVerifiedModel(data) {
+  const source = data || {};
+  const mode = String(source.form_mode || source.mode || currentFormMode || '').trim();
+  const actor = String(source.verified_actor_type || document.getElementById('verifiedActorType').value || '').trim();
+  if (!['new_parent','edit_owner','new_student_adult'].includes(mode)) return;
+  const expected = expectedModelFromVerifiedContext(source);
+  if (!expected) return;
+  forceStudentModel(expected);
+  form.dataset.modelLocked = 'true';
+  ['studyType','isAdult','is14Plus'].forEach(id => {
+    const field = document.getElementById(id);
+    if (field) field.disabled = true;
+  });
+  document.querySelectorAll('[name="tipus_alumne"]').forEach(field => {
+    field.disabled = true;
+  });
+  if (actor === 'parent' && expected !== 'major18') {
+    document.getElementById('initialSetup').classList.add('is-hidden');
+    if (document.getElementById('respondentStep').classList.contains('is-hidden')) {
+      form.classList.remove('is-hidden');
+    }
+  }
 }
 
 function isAdultStudentSubmission(data) {
@@ -300,6 +355,7 @@ function fillForm(data){
   setExternalPlatformsVisible(document.getElementById('imatgeExternaSi').checked);
   updateStudentBanner();
   syncAdultStudentRespondent(data);
+  lockVerifiedModel(data);
 }
 
 function updateStudentBanner() {
@@ -480,7 +536,7 @@ function setupRespondentStep(){
     document.getElementById('hiddenRespondentName').value=name;
     document.getElementById('hiddenRespondentPhone').value=phone;
     document.getElementById('respondentStep').classList.add('is-hidden');
-    document.getElementById('initialSetup').classList.remove('is-hidden');
+    document.getElementById('initialSetup').classList.toggle('is-hidden', form.dataset.modelLocked === 'true');
     form.classList.remove('is-hidden');
   });
 }
