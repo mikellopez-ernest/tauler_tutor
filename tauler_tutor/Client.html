@@ -38,7 +38,9 @@
       profilePhotoSaving: false,
       photoEditor: {
         source: null,
-        stream: null,
+        cameraWindow: null,
+        cameraToken: '',
+        cameraObjectUrl: '',
         zoom: 1,
         panX: 0,
         panY: 0,
@@ -1329,7 +1331,6 @@
       var cameraAction = document.getElementById('photo-camera-action');
       var uploadAction = document.getElementById('photo-upload-action');
       var fileInput = document.getElementById('student-photo-file');
-      var capture = document.getElementById('student-photo-capture');
       var back = document.getElementById('student-photo-back');
       var save = document.getElementById('student-photo-save');
       var zoom = document.getElementById('student-photo-zoom');
@@ -1358,7 +1359,6 @@
         reader.onerror = function() { setStudentPhotoError_("No s'ha pogut llegir la imatge."); };
         reader.readAsDataURL(file);
       });
-      capture.addEventListener('click', captureStudentCamera_);
       back.addEventListener('click', resetStudentPhotoModal_);
       save.addEventListener('click', saveStudentPhoto_);
       zoom.addEventListener('input', function() {
@@ -1369,6 +1369,7 @@
       canvas.addEventListener('pointermove', movePhotoDrag_);
       canvas.addEventListener('pointerup', endPhotoDrag_);
       canvas.addEventListener('pointercancel', endPhotoDrag_);
+      window.addEventListener('message', handleStudentCameraMessage_);
     }
 
     function openStudentPhotoModal_() {
@@ -1380,13 +1381,13 @@
     }
 
     function closeStudentPhotoModal_() {
-      stopStudentCamera_();
+      closeStudentCameraPopup_();
       document.getElementById('student-photo-modal').classList.add('is-hidden');
       resetStudentPhotoModal_();
     }
 
     function resetStudentPhotoModal_() {
-      stopStudentCamera_();
+      closeStudentCameraPopup_();
       state.photoEditor.source = null;
       state.photoEditor.zoom = 1;
       state.photoEditor.panX = 0;
@@ -1395,7 +1396,6 @@
       state.profilePhotoSaving = false;
       document.getElementById('student-photo-zoom').value = '1';
       document.getElementById('photo-source-actions').classList.remove('is-hidden');
-      document.getElementById('photo-camera-stage').classList.add('is-hidden');
       document.getElementById('photo-editor').classList.add('is-hidden');
       document.getElementById('student-photo-back').classList.add('is-hidden');
       document.getElementById('student-photo-save').classList.add('is-hidden');
@@ -1405,45 +1405,73 @@
 
     function startStudentCamera_() {
       setStudentPhotoError_('');
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setStudentPhotoError_('Aquest navegador no permet accedir a la càmera.');
+      closeStudentCameraPopup_();
+      var token = 'camera-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+      var html = studentCameraPopupHtml_(token);
+      var objectUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+      var popup = window.open(objectUrl, 'tauler_tutor_camera', 'popup=yes,width=720,height=820,resizable=yes,scrollbars=yes');
+      if (!popup) {
+        URL.revokeObjectURL(objectUrl);
+        setStudentPhotoError_('Firefox ha blocat la finestra de la càmera. Permet les finestres emergents per a aquest lloc i torna-ho a provar.');
         return;
       }
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 1280 } }, audio: false })
-        .then(function(stream) {
-          state.photoEditor.stream = stream;
-          var video = document.getElementById('student-photo-video');
-          video.srcObject = stream;
-          document.getElementById('photo-source-actions').classList.add('is-hidden');
-          document.getElementById('photo-camera-stage').classList.remove('is-hidden');
-          document.getElementById('student-photo-back').classList.remove('is-hidden');
-        })
-        .catch(function(error) {
-          setStudentPhotoError_("No s'ha pogut obrir la càmera. Revisa el permís del navegador.");
-          console.error(error);
-        });
+      state.photoEditor.cameraWindow = popup;
+      state.photoEditor.cameraToken = token;
+      state.photoEditor.cameraObjectUrl = objectUrl;
     }
 
-    function stopStudentCamera_() {
-      var stream = state.photoEditor.stream;
-      if (stream && stream.getTracks) stream.getTracks().forEach(function(track) { track.stop(); });
-      state.photoEditor.stream = null;
-      var video = document.getElementById('student-photo-video');
-      if (video) video.srcObject = null;
-    }
-
-    function captureStudentCamera_() {
-      var video = document.getElementById('student-photo-video');
-      if (!video || !video.videoWidth || !video.videoHeight) {
-        setStudentPhotoError_('Espera que la càmera estigui preparada.');
+    function handleStudentCameraMessage_(event) {
+      var data = event && event.data;
+      if (!data || data.source !== 'tauler-tutor-camera') return;
+      if (!state.photoEditor.cameraWindow || event.source !== state.photoEditor.cameraWindow) return;
+      if (data.token !== state.photoEditor.cameraToken) return;
+      if (data.type === 'photo' && data.dataUrl) {
+        closeStudentCameraPopup_();
+        loadPhotoEditorSource_(data.dataUrl);
         return;
       }
-      var canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext('2d').drawImage(video, 0, 0);
-      stopStudentCamera_();
-      loadPhotoEditorSource_(canvas.toDataURL('image/jpeg', 0.94));
+      if (data.type === 'error') {
+        setStudentPhotoError_(data.message || "No s'ha pogut obrir la càmera.");
+      }
+    }
+
+    function closeStudentCameraPopup_() {
+      var popup = state.photoEditor.cameraWindow;
+      if (popup && !popup.closed) popup.close();
+      if (state.photoEditor.cameraObjectUrl) {
+        URL.revokeObjectURL(state.photoEditor.cameraObjectUrl);
+      }
+      state.photoEditor.cameraWindow = null;
+      state.photoEditor.cameraToken = '';
+      state.photoEditor.cameraObjectUrl = '';
+    }
+
+    function studentCameraPopupHtml_(token) {
+      var safeToken = JSON.stringify(token);
+      return [
+        '<!doctype html><html lang="ca"><head><meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width,initial-scale=1">',
+        '<title>Càmera · Tauler de tutoria</title>',
+        '<style>*{box-sizing:border-box}body{margin:0;background:#f6f7f9;color:#17202a;font:15px/1.45 Arial,sans-serif;padding:24px}',
+        'main{max-width:620px;margin:auto;display:grid;gap:16px}h1{font-size:24px;margin:0}p{margin:0;color:#617080}',
+        '.frame{width:min(560px,100%);aspect-ratio:1;overflow:hidden;border:1px solid #d9e0e8;border-radius:8px;background:#111827;justify-self:center}',
+        'video{width:100%;height:100%;display:block;object-fit:cover;transform:scaleX(-1)}.actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}',
+        'button{min-height:42px;border:1px solid #0f766e;border-radius:6px;background:#fff;color:#115e59;cursor:pointer;font:inherit;font-weight:800;padding:9px 16px}',
+        'button.primary{background:#0f766e;color:#fff}button:disabled{cursor:wait;opacity:.6}#error{min-height:22px;color:#b42318;font-weight:700;text-align:center}</style>',
+        '</head><body><main><h1>Fes una foto</h1><p>Activa la càmera i accepta el permís que et demanarà Firefox.</p>',
+        '<div class="frame"><video id="video" autoplay muted playsinline></video></div>',
+        '<div class="actions"><button id="start" class="primary" type="button">Activa la càmera</button>',
+        '<button id="capture" class="primary" type="button" disabled>Captura</button><button id="cancel" type="button">Cancel·la</button></div>',
+        '<div id="error" role="alert"></div><canvas id="canvas" width="640" height="640" hidden></canvas></main>',
+        '<script>(function(){var token=' + safeToken + ';var stream=null;var video=document.getElementById("video");',
+        'var start=document.getElementById("start");var capture=document.getElementById("capture");var error=document.getElementById("error");',
+        'function send(type,payload){if(window.opener)window.opener.postMessage(Object.assign({source:"tauler-tutor-camera",token:token,type:type},payload||{}),"*")}',
+        'function stop(){if(stream&&stream.getTracks)stream.getTracks().forEach(function(track){track.stop()});stream=null}',
+        'start.onclick=function(){error.textContent="";if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){error.textContent="Aquest navegador no permet accedir a la càmera en aquesta finestra.";send("error",{message:error.textContent});return}',
+        'start.disabled=true;navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:1280},height:{ideal:1280}},audio:false}).then(function(value){stream=value;video.srcObject=stream;capture.disabled=false;start.textContent="Càmera activa"}).catch(function(reason){start.disabled=false;error.textContent=reason&&reason.name==="NotAllowedError"?"Firefox no ha concedit el permís de càmera. Revisa el permís de la càmera a la barra d’adreces.":"No s’ha pogut obrir la càmera.";send("error",{message:error.textContent})})};',
+        'capture.onclick=function(){if(!video.videoWidth||!video.videoHeight){error.textContent="Espera que la càmera estigui preparada.";return}var canvas=document.getElementById("canvas");var size=Math.min(video.videoWidth,video.videoHeight);var sx=(video.videoWidth-size)/2;var sy=(video.videoHeight-size)/2;var context=canvas.getContext("2d");context.save();context.translate(640,0);context.scale(-1,1);context.drawImage(video,sx,sy,size,size,0,0,640,640);context.restore();var dataUrl=canvas.toDataURL("image/jpeg",.94);stop();send("photo",{dataUrl:dataUrl});window.close()};',
+        'document.getElementById("cancel").onclick=function(){stop();window.close()};window.onbeforeunload=stop})();<\/script></body></html>'
+      ].join('');
     }
 
     function loadPhotoEditorSource_(dataUrl) {
@@ -1455,7 +1483,6 @@
         state.photoEditor.panY = 0;
         document.getElementById('student-photo-zoom').value = '1';
         document.getElementById('photo-source-actions').classList.add('is-hidden');
-        document.getElementById('photo-camera-stage').classList.add('is-hidden');
         document.getElementById('photo-editor').classList.remove('is-hidden');
         document.getElementById('student-photo-back').classList.remove('is-hidden');
         document.getElementById('student-photo-save').classList.remove('is-hidden');

@@ -112,6 +112,21 @@ function saveStudentPhotoJson(request) {
 }
 
 /**
+ * Run manually once from the Apps Script editor after adding the Drive scope.
+ */
+function authorizeStudentPhotoDrive() {
+  var folder = DriveApp.getFolderById(APP_CONFIG.studentPhotoFolderId);
+  var result = {
+    ok: true,
+    folderId: folder.getId(),
+    folderName: folder.getName(),
+    message: 'Permís de Google Drive concedit correctament.'
+  };
+  console.log(JSON.stringify(result));
+  return result;
+}
+
+/**
  * Client-callable invitation endpoint for pending authorization flows.
  */
 function sendAuthorizationInvitations(requests) {

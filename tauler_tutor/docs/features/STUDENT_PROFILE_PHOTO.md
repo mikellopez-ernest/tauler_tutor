@@ -8,13 +8,13 @@ The student profile header shows a square photo next to the student name. Tutors
 
 - With no saved photo, show a neutral silhouette rendered as a PNG data URL.
 - Clicking either the silhouette or a saved photo opens the photo modal.
-- `Fes una foto` requests the laptop camera through the browser `MediaDevices` API and shows a square live viewport.
+- `Fes una foto` opens a small top-level camera window. The tutor clicks `Activa la càmera`, Firefox asks for camera permission, and the window shows a square live viewport.
 - `Puja una foto` accepts JPG, PNG, or WebP files.
 - Captured and uploaded images open in a square Canvas editor.
 - The tutor can drag the image and adjust zoom before saving.
 - The browser exports a 640 x 640 JPEG for upload.
 
-Camera access requires HTTPS and the tutor's browser permission. If camera access is unavailable or denied, the modal keeps the upload option available and shows a Catalan error.
+Apps Script HTML runs inside a sandboxed iframe. Firefox does not show a camera permission prompt to that iframe unless the top-level document delegates the `camera` Permissions Policy, which Apps Script does not expose. The separate top-level window avoids that restriction while keeping capture inside the same app workflow. Camera access still requires HTTPS, browser permission, and permission for app popups. If access is unavailable or denied, the modal keeps the upload option available and shows a Catalan error.
 
 ## Storage
 
@@ -42,3 +42,11 @@ Drive URLs are not rendered directly in the browser. `loadStudentPhotoJson(stude
 Required Apps Script OAuth scope:
 
 `https://www.googleapis.com/auth/drive`
+
+After deploying a version that adds this scope, the script owner must run this public function once from the Apps Script editor:
+
+```javascript
+authorizeStudentPhotoDrive()
+```
+
+Google shows its authorization dialog. Accept the requested Drive permission. A successful execution returns the configured folder ID, folder name, and `Permís de Google Drive concedit correctament.` No file is created by this authorization check.
