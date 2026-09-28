@@ -31,6 +31,8 @@ The Drive file URL is stored in the Dinantia Student custom field `Observacions`
 3. Preserves non-photo text in `Observacions`.
 4. Replaces the existing Google Drive URL, or appends the URL when none exists.
 
+During `cacheRebuildTutorPanel()`, the URL is read from each Dinantia account's `Observacions` field and written to the `photo_url` header in `Dinantia -> students_cache`. The sheet column position is irrelevant; when `photo_url` is column N, values are written to column N. If the field-definition endpoint is temporarily unavailable, the rebuild falls back to the verified Dinantia field ID `Observacions` instead of blanking the photo cache.
+
 After Dinantia accepts the update, the app writes the URL to `Dinantia -> students_cache.photo_url` and appends a `StudentPhoto` changelog row. If the Dinantia update fails, the newly created Drive file is moved to trash.
 
 ## Authorized Reads

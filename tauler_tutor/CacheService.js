@@ -27,11 +27,14 @@ function cacheRebuildTutorPanel_() {
     var registry = loadTableRegistry_();
     var groupMappings = loadCacheGroupMappings_(registry);
     var accounts = fetchAllDinantiaAccounts_();
-    var photoFieldId = '';
+    var photoFieldId = APP_CONFIG.dinantiaStudentPhotoFieldName;
     try {
       photoFieldId = resolveDinantiaStudentPhotoFieldId_();
     } catch (fieldError) {
-      logWarn_('student_photo_field_not_resolved', { message: fieldError.message || String(fieldError) });
+      logWarn_('student_photo_field_not_resolved', {
+        message: fieldError.message || String(fieldError),
+        fallbackFieldId: photoFieldId
+      });
     }
     var students = cacheBuildStudentsRows_(accounts, groupMappings, photoFieldId);
     var contacts = cacheBuildContactsRows_(accounts, students);
