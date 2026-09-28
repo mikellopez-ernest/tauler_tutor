@@ -132,7 +132,6 @@ function authorizeStudentPhotoDrive() {
     folderName: folder.getName(),
     writeVerified: true,
     testFileId: testFileId,
-    effectiveUser: Session.getEffectiveUser().getEmail(),
     message: 'Permís de lectura i escriptura de Google Drive verificat correctament.'
   };
   console.log(JSON.stringify(result));
