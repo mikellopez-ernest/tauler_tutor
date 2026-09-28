@@ -49,4 +49,6 @@ After deploying a version that adds this scope, the script owner must run this p
 authorizeStudentPhotoDrive()
 ```
 
-Google shows its authorization dialog. Accept the requested Drive permission. A successful execution returns the configured folder ID, folder name, and `Permís de Google Drive concedit correctament.` No file is created by this authorization check.
+The helper calls `ScriptApp.requireScopes` for `https://www.googleapis.com/auth/drive`, so the Apps Script editor shows the missing granular-consent prompt when write access has not been granted. Accept the full Drive permission and run the helper again if the first execution stops after authorization.
+
+The helper then creates `.tauler-tutor-drive-authorization-check.txt` in the configured folder and immediately moves it to trash. A successful execution returns `writeVerified: true`, the effective account, folder details, and `Permís de lectura i escriptura de Google Drive verificat correctament.` Run it with the account that owns the web-app deployment, because the production web app executes as that user.

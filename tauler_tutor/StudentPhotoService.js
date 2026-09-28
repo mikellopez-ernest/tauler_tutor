@@ -38,11 +38,21 @@ function saveStudentPhoto_(request) {
   var userEmail = getCurrentUserEmail_();
   var student = requireAccessibleStudent_(request.studentId);
   var image = parseStudentPhotoDataUrl_(request.dataUrl);
-  var folder = DriveApp.getFolderById(APP_CONFIG.studentPhotoFolderId);
+  var folder;
+  try {
+    folder = DriveApp.getFolderById(APP_CONFIG.studentPhotoFolderId);
+  } catch (error) {
+    throw studentPhotoDriveError_(error);
+  }
   var timestamp = Utilities.formatDate(new Date(), APP_CONFIG.timezone, 'yyyyMMdd-HHmmss');
   var safeStudentId = String(student.id).replace(/[^A-Za-z0-9_-]/g, '_');
   var filename = 'student-' + safeStudentId + '-' + timestamp + '.jpg';
-  var file = folder.createFile(Utilities.newBlob(image.bytes, 'image/jpeg', filename));
+  var file;
+  try {
+    file = folder.createFile(Utilities.newBlob(image.bytes, 'image/jpeg', filename));
+  } catch (error) {
+    throw studentPhotoDriveError_(error);
+  }
   var photoUrl = file.getUrl();
 
   try {
@@ -72,6 +82,14 @@ function saveStudentPhoto_(request) {
     photoUrl: photoUrl,
     dataUrl: 'data:image/jpeg;base64,' + Utilities.base64Encode(image.bytes)
   };
+}
+
+function studentPhotoDriveError_(error) {
+  var message = error && error.message ? error.message : String(error || '');
+  if (/perm[ií]s|permission|authorization|scope|DriveApp/i.test(message)) {
+    return new Error("Falta el permís d'escriptura de Google Drive. Executa authorizeStudentPhotoDrive() manualment des de l'editor d'Apps Script amb el compte propietari del desplegament i accepta el permís complet de Drive.");
+  }
+  return error instanceof Error ? error : new Error(message);
 }
 
 function requireAccessibleStudent_(studentId) {

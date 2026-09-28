@@ -115,12 +115,25 @@ function saveStudentPhotoJson(request) {
  * Run manually once from the Apps Script editor after adding the Drive scope.
  */
 function authorizeStudentPhotoDrive() {
+  ScriptApp.requireScopes(ScriptApp.AuthMode.FULL, [
+    'https://www.googleapis.com/auth/drive'
+  ]);
   var folder = DriveApp.getFolderById(APP_CONFIG.studentPhotoFolderId);
+  var testFile = folder.createFile(Utilities.newBlob(
+    'Tutor panel Drive write authorization check.',
+    'text/plain',
+    '.tauler-tutor-drive-authorization-check.txt'
+  ));
+  var testFileId = testFile.getId();
+  testFile.setTrashed(true);
   var result = {
     ok: true,
     folderId: folder.getId(),
     folderName: folder.getName(),
-    message: 'Permís de Google Drive concedit correctament.'
+    writeVerified: true,
+    testFileId: testFileId,
+    effectiveUser: Session.getEffectiveUser().getEmail(),
+    message: 'Permís de lectura i escriptura de Google Drive verificat correctament.'
   };
   console.log(JSON.stringify(result));
   return result;

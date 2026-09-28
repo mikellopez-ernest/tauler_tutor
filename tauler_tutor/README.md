@@ -91,7 +91,7 @@ rebuildTutorPanelCache()
 
 Cache tables are read models. Canonical writes must happen first in the origin system, then the affected cache is refreshed.
 
-After the student-photo feature is first deployed, run `authorizeStudentPhotoDrive()` once from the Apps Script editor and accept the Google Drive permission. This authorizes the deployment owner to use the private photo folder configured in `APP_CONFIG.studentPhotoFolderId`.
+After the student-photo feature is first deployed, run `authorizeStudentPhotoDrive()` from the Apps Script editor with the deployment owner's account and accept the full Google Drive permission. The helper explicitly requires the write scope, creates a tiny verification file in the configured folder, and immediately moves that file to trash. A successful result therefore verifies both folder access and `Folder.createFile`.
 
 Operational invariant: every student referenced by `contacts_cache.student_id` should also exist in `students_cache` with age and model fields filled. If this is not true, the tutor panel and launcher can intentionally hide or misclassify rows to avoid exposing adult-student data through the parent flow.
 
