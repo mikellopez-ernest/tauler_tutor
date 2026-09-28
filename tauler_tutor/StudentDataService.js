@@ -13,6 +13,7 @@ function enrichStudentsWithLocalBirthdates_(students, studentDataSheetName, grou
       groupName: groupName || '',
       studentDataSheetName: studentDataSheetName || '',
       parents: student.parents || [],
+      fields: student.fields || [],
       birthdate: localInfo.birthdate.display,
       birthdateSortKey: localInfo.birthdate.iso,
       age: age,

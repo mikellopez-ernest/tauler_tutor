@@ -104,6 +104,8 @@ Account objects include:
 - `created`
 - `modified`
 
+Student profile photos use the API-ready Student custom field whose exact name/id is `Observacions`. The app resolves this field through paginated `GET /v1.2/fields/index`, preserves every other custom field, and submits the merged `fields` array through `POST /v1.2/accounts/update/:id`. Existing non-photo text in `Observacions` is preserved; the app replaces an existing Google Drive URL or appends the new URL on its own line.
+
 Important roles:
 
 - `Administrator`

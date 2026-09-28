@@ -719,6 +719,7 @@ Required headers:
 | `study_type` | Inferred study type used by the authorization form. `BAT` maps to `batx`; `FP`, `CF`, `CICLE`, `PFI`, `SMX`, `PCC`, and `AC` map to `fp`; otherwise the default is `eso`. |
 | `is_adult` | `si` when age is 18 or more, otherwise `no`. |
 | `is_14_plus` | `si` when age is 14 or more, otherwise `no`. |
+| `photo_url` | Google Drive file URL extracted from the Dinantia Student custom field `Observacions`. The photo remains private and is served to authorized tutors through the app. |
 
 ### `Dinantia` -> `contacts_cache`
 

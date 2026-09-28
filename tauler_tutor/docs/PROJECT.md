@@ -25,6 +25,7 @@ Current feature specs:
 | `docs/features/ATTENDANCE_PROFILE_TAB.md` | Student profile ASS tab using real Dinantia attendance registers grouped by month. |
 | `docs/features/CONVIVENCIA_PROFILE_TAB.md` | Student profile CONV tab using `Incidències` term configuration and annual incident rows. |
 | `docs/features/TUTORIA_PROFILE_TAB.md` | Student profile TUT tab for family-tutoring meeting records. |
+| `docs/features/STUDENT_PROFILE_PHOTO.md` | Private student profile photo capture, crop, Drive storage, and Dinantia linkage. |
 
 ## Architecture Principles
 

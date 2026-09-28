@@ -27,7 +27,13 @@ function cacheRebuildTutorPanel_() {
     var registry = loadTableRegistry_();
     var groupMappings = loadCacheGroupMappings_(registry);
     var accounts = fetchAllDinantiaAccounts_();
-    var students = cacheBuildStudentsRows_(accounts, groupMappings);
+    var photoFieldId = '';
+    try {
+      photoFieldId = resolveDinantiaStudentPhotoFieldId_();
+    } catch (fieldError) {
+      logWarn_('student_photo_field_not_resolved', { message: fieldError.message || String(fieldError) });
+    }
+    var students = cacheBuildStudentsRows_(accounts, groupMappings, photoFieldId);
     var contacts = cacheBuildContactsRows_(accounts, students);
     var authorizations = cacheBuildAuthorizationsRows_();
 
@@ -219,11 +225,11 @@ function cacheEnsureExplicitHeaders_(sheet, requiredHeaders) {
 function loadStudentsFromCacheForGroups_(groups) {
   var registry = loadTableRegistry_();
   var sheet = openTableSheet_(registry, TABLES.dinantia, SHEETS.studentsCache);
-  var headers = requireHeaders_(sheet, [
+  var headers = ensureHeaderNames_(sheet, [
     'student_id', 'student_name', 'student_email', 'group_name', 'student_data_sheet',
     'parent_ids', 'birthdate', 'birthdate_sort_key', 'age', 'document', 'study_type',
-    'is_adult', 'is_14_plus'
-  ], TABLES.dinantia + ' -> ' + SHEETS.studentsCache);
+    'is_adult', 'is_14_plus', 'photo_url'
+  ]);
   var groupSet = groupSet_(groups);
   var values = sheet.getDataRange().getValues();
   var students = [];
@@ -245,7 +251,8 @@ function loadStudentsFromCacheForGroups_(groups) {
       document: String(row[headers.document] || '').trim(),
       studyType: String(row[headers.study_type] || '').trim(),
       isAdult: String(row[headers.is_adult] || '').trim(),
-      is14Plus: String(row[headers.is_14_plus] || '').trim()
+      is14Plus: String(row[headers.is_14_plus] || '').trim(),
+      photoUrl: String(row[headers.photo_url] || '').trim()
     });
   }
 
@@ -408,7 +415,7 @@ function cacheRefreshAuthorizations_() {
   }
 }
 
-function cacheBuildStudentsRows_(accounts, groupMappings) {
+function cacheBuildStudentsRows_(accounts, groupMappings, photoFieldId) {
   var students = [];
   var studentAccounts = (accounts || []).filter(function(account) {
     return (account.roles || []).indexOf('Student') !== -1;
@@ -442,8 +449,22 @@ function cacheBuildStudentsRows_(accounts, groupMappings) {
       document: student.document,
       study_type: student.studyType,
       is_adult: student.isAdult,
-      is_14_plus: student.is14Plus
+      is_14_plus: student.is14Plus,
+      photo_url: studentPhotoUrlFromFields_(student.fields, photoFieldId)
     };
+  });
+}
+
+function cacheUpdateStudentPhotoUrl_(studentId, photoUrl) {
+  var registry = loadTableRegistry_();
+  var sheet = openTableSheet_(registry, TABLES.dinantia, SHEETS.studentsCache);
+  var headers = ensureHeaderNames_(sheet, ['student_id', 'photo_url']);
+  if (sheet.getLastRow() < 2) return;
+  var ids = sheet.getRange(2, headers.student_id + 1, sheet.getLastRow() - 1, 1).getValues();
+  ids.forEach(function(row, index) {
+    if (String(row[0] || '').trim() === String(studentId || '').trim()) {
+      sheet.getRange(index + 2, headers.photo_url + 1).setValue(photoUrl || '');
+    }
   });
 }
 

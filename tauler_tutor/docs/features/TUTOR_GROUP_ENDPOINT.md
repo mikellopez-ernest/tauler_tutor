@@ -233,9 +233,11 @@ The panel may keep a live fallback during the transition period, but the intende
 
 When a row in the `Inici` student table is clicked, the app must open a full-page student profile view without reloading the browser page.
 
-The profile is read-only.
+The profile tabs are read-only. The student photo is editable by clicking it.
 
 The base profile summary comes from the already-loaded student cache/read model in memory. Opening the profile must not perform a new server request for the base student identity fields. Individual tabs may lazy-load their own heavier summaries when first opened.
+
+The profile header shows a square student photo between `Torna` and the student name. When no photo exists or the stored file cannot be read, it shows the standard generated PNG silhouette. Clicking the photo opens the camera/upload workflow specified in `docs/features/STUDENT_PROFILE_PHOTO.md`.
 
 The top profile summary must show a compact 1x4 matrix on desktop, falling back to one column on narrow screens:
 

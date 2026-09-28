@@ -32,6 +32,21 @@
       formLauncherUrl: '',
       activeProfileStudent: null,
       activeProfileTab: 'med',
+      profilePhotoDataByStudent: {},
+      profilePhotoLoadedByStudent: {},
+      profilePhotoLoadingByStudent: {},
+      profilePhotoSaving: false,
+      photoEditor: {
+        source: null,
+        stream: null,
+        zoom: 1,
+        panX: 0,
+        panY: 0,
+        dragging: false,
+        pointerId: null,
+        lastX: 0,
+        lastY: 0
+      },
       contactSort: { key: 'name', direction: 'asc' }
     };
 
@@ -58,6 +73,7 @@
     bindBulkInviteButton();
     bindRefreshAuthButton();
     bindStudentProfile();
+    bindStudentPhotoModal();
     bindAuthorizationDetailModal();
     bindConvivenciaDetailModal();
     bindTutoriaModal();
@@ -1248,8 +1264,296 @@
       document.getElementById('profile-student-group').textContent = student.groupName || '-';
       document.getElementById('profile-student-birthdate').textContent = student.birthdate || '-';
       document.getElementById('profile-student-age').textContent = calculateAgeFromStudent_(student) || '-';
+      renderStudentProfilePhoto_(student);
       renderStudentProfileTab();
       showView_('student-profile');
+    }
+
+    function renderStudentProfilePhoto_(student) {
+      var image = document.getElementById('student-profile-photo');
+      if (!image || !student) return;
+      var studentId = String(student.id || '').trim();
+      image.src = state.profilePhotoDataByStudent[studentId] || profileSilhouetteDataUrl_();
+      image.alt = student.name ? 'Foto de ' + student.name : "Foto de l'alumne/a";
+      if (!studentId || state.profilePhotoLoadedByStudent[studentId] || state.profilePhotoLoadingByStudent[studentId]) return;
+
+      state.profilePhotoLoadingByStudent[studentId] = true;
+      google.script.run
+        .withSuccessHandler(function(result) {
+          state.profilePhotoLoadingByStudent[studentId] = false;
+          state.profilePhotoLoadedByStudent[studentId] = true;
+          var parsed = parseInitialData(result);
+          if (parsed && parsed.ok && parsed.hasPhoto && parsed.dataUrl) {
+            state.profilePhotoDataByStudent[studentId] = parsed.dataUrl;
+            student.photoUrl = parsed.photoUrl || student.photoUrl || '';
+          }
+          if (state.activeProfileStudent && String(state.activeProfileStudent.id || '') === studentId) {
+            image.src = state.profilePhotoDataByStudent[studentId] || profileSilhouetteDataUrl_();
+          }
+        })
+        .withFailureHandler(function() {
+          state.profilePhotoLoadingByStudent[studentId] = false;
+          state.profilePhotoLoadedByStudent[studentId] = true;
+        })
+        .loadStudentPhotoJson(studentId);
+    }
+
+    var profileSilhouetteCache_ = '';
+
+    function profileSilhouetteDataUrl_() {
+      if (profileSilhouetteCache_) return profileSilhouetteCache_;
+      var canvas = document.createElement('canvas');
+      canvas.width = 160;
+      canvas.height = 160;
+      var context = canvas.getContext('2d');
+      context.fillStyle = '#edf1f5';
+      context.fillRect(0, 0, 160, 160);
+      context.fillStyle = '#617080';
+      context.beginPath();
+      context.arc(80, 55, 30, 0, Math.PI * 2);
+      context.fill();
+      context.beginPath();
+      context.arc(80, 150, 58, Math.PI, Math.PI * 2);
+      context.lineTo(138, 160);
+      context.lineTo(22, 160);
+      context.closePath();
+      context.fill();
+      profileSilhouetteCache_ = canvas.toDataURL('image/png');
+      return profileSilhouetteCache_;
+    }
+
+    function bindStudentPhotoModal() {
+      var button = document.getElementById('student-photo-button');
+      var modal = document.getElementById('student-photo-modal');
+      var close = modal && modal.querySelector('.modal-close');
+      var cameraAction = document.getElementById('photo-camera-action');
+      var uploadAction = document.getElementById('photo-upload-action');
+      var fileInput = document.getElementById('student-photo-file');
+      var capture = document.getElementById('student-photo-capture');
+      var back = document.getElementById('student-photo-back');
+      var save = document.getElementById('student-photo-save');
+      var zoom = document.getElementById('student-photo-zoom');
+      var canvas = document.getElementById('student-photo-canvas');
+      if (!button || !modal || !canvas) return;
+
+      button.addEventListener('click', openStudentPhotoModal_);
+      if (close) close.addEventListener('click', closeStudentPhotoModal_);
+      modal.addEventListener('click', function(event) {
+        if (event.target === modal) closeStudentPhotoModal_();
+      });
+      cameraAction.addEventListener('click', startStudentCamera_);
+      uploadAction.addEventListener('click', function() {
+        fileInput.value = '';
+        fileInput.click();
+      });
+      fileInput.addEventListener('change', function() {
+        var file = fileInput.files && fileInput.files[0];
+        if (!file) return;
+        if (!/^image\/(jpeg|png|webp)$/i.test(file.type || '')) {
+          setStudentPhotoError_('Selecciona una imatge JPG, PNG o WebP.');
+          return;
+        }
+        var reader = new FileReader();
+        reader.onload = function() { loadPhotoEditorSource_(reader.result); };
+        reader.onerror = function() { setStudentPhotoError_("No s'ha pogut llegir la imatge."); };
+        reader.readAsDataURL(file);
+      });
+      capture.addEventListener('click', captureStudentCamera_);
+      back.addEventListener('click', resetStudentPhotoModal_);
+      save.addEventListener('click', saveStudentPhoto_);
+      zoom.addEventListener('input', function() {
+        state.photoEditor.zoom = Number(zoom.value) || 1;
+        drawStudentPhotoCrop_();
+      });
+      canvas.addEventListener('pointerdown', beginPhotoDrag_);
+      canvas.addEventListener('pointermove', movePhotoDrag_);
+      canvas.addEventListener('pointerup', endPhotoDrag_);
+      canvas.addEventListener('pointercancel', endPhotoDrag_);
+    }
+
+    function openStudentPhotoModal_() {
+      var student = state.activeProfileStudent;
+      if (!student) return;
+      resetStudentPhotoModal_();
+      document.getElementById('student-photo-subtitle').textContent = student.name || '';
+      document.getElementById('student-photo-modal').classList.remove('is-hidden');
+    }
+
+    function closeStudentPhotoModal_() {
+      stopStudentCamera_();
+      document.getElementById('student-photo-modal').classList.add('is-hidden');
+      resetStudentPhotoModal_();
+    }
+
+    function resetStudentPhotoModal_() {
+      stopStudentCamera_();
+      state.photoEditor.source = null;
+      state.photoEditor.zoom = 1;
+      state.photoEditor.panX = 0;
+      state.photoEditor.panY = 0;
+      state.photoEditor.dragging = false;
+      state.profilePhotoSaving = false;
+      document.getElementById('student-photo-zoom').value = '1';
+      document.getElementById('photo-source-actions').classList.remove('is-hidden');
+      document.getElementById('photo-camera-stage').classList.add('is-hidden');
+      document.getElementById('photo-editor').classList.add('is-hidden');
+      document.getElementById('student-photo-back').classList.add('is-hidden');
+      document.getElementById('student-photo-save').classList.add('is-hidden');
+      document.getElementById('student-photo-save').disabled = false;
+      setStudentPhotoError_('');
+    }
+
+    function startStudentCamera_() {
+      setStudentPhotoError_('');
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStudentPhotoError_('Aquest navegador no permet accedir a la càmera.');
+        return;
+      }
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 1280 } }, audio: false })
+        .then(function(stream) {
+          state.photoEditor.stream = stream;
+          var video = document.getElementById('student-photo-video');
+          video.srcObject = stream;
+          document.getElementById('photo-source-actions').classList.add('is-hidden');
+          document.getElementById('photo-camera-stage').classList.remove('is-hidden');
+          document.getElementById('student-photo-back').classList.remove('is-hidden');
+        })
+        .catch(function(error) {
+          setStudentPhotoError_("No s'ha pogut obrir la càmera. Revisa el permís del navegador.");
+          console.error(error);
+        });
+    }
+
+    function stopStudentCamera_() {
+      var stream = state.photoEditor.stream;
+      if (stream && stream.getTracks) stream.getTracks().forEach(function(track) { track.stop(); });
+      state.photoEditor.stream = null;
+      var video = document.getElementById('student-photo-video');
+      if (video) video.srcObject = null;
+    }
+
+    function captureStudentCamera_() {
+      var video = document.getElementById('student-photo-video');
+      if (!video || !video.videoWidth || !video.videoHeight) {
+        setStudentPhotoError_('Espera que la càmera estigui preparada.');
+        return;
+      }
+      var canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      stopStudentCamera_();
+      loadPhotoEditorSource_(canvas.toDataURL('image/jpeg', 0.94));
+    }
+
+    function loadPhotoEditorSource_(dataUrl) {
+      var image = new Image();
+      image.onload = function() {
+        state.photoEditor.source = image;
+        state.photoEditor.zoom = 1;
+        state.photoEditor.panX = 0;
+        state.photoEditor.panY = 0;
+        document.getElementById('student-photo-zoom').value = '1';
+        document.getElementById('photo-source-actions').classList.add('is-hidden');
+        document.getElementById('photo-camera-stage').classList.add('is-hidden');
+        document.getElementById('photo-editor').classList.remove('is-hidden');
+        document.getElementById('student-photo-back').classList.remove('is-hidden');
+        document.getElementById('student-photo-save').classList.remove('is-hidden');
+        setStudentPhotoError_('');
+        drawStudentPhotoCrop_();
+      };
+      image.onerror = function() { setStudentPhotoError_('La imatge no és vàlida.'); };
+      image.src = dataUrl;
+    }
+
+    function drawStudentPhotoCrop_() {
+      var canvas = document.getElementById('student-photo-canvas');
+      var source = state.photoEditor.source;
+      if (!canvas || !source) return;
+      var width = source.naturalWidth || source.width;
+      var height = source.naturalHeight || source.height;
+      var baseScale = Math.max(canvas.width / width, canvas.height / height);
+      var scale = baseScale * state.photoEditor.zoom;
+      var drawnWidth = width * scale;
+      var drawnHeight = height * scale;
+      var maxPanX = Math.max(0, (drawnWidth - canvas.width) / 2);
+      var maxPanY = Math.max(0, (drawnHeight - canvas.height) / 2);
+      state.photoEditor.panX = Math.max(-maxPanX, Math.min(maxPanX, state.photoEditor.panX));
+      state.photoEditor.panY = Math.max(-maxPanY, Math.min(maxPanY, state.photoEditor.panY));
+      var x = (canvas.width - drawnWidth) / 2 + state.photoEditor.panX;
+      var y = (canvas.height - drawnHeight) / 2 + state.photoEditor.panY;
+      var context = canvas.getContext('2d');
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(source, x, y, drawnWidth, drawnHeight);
+    }
+
+    function beginPhotoDrag_(event) {
+      if (!state.photoEditor.source) return;
+      state.photoEditor.dragging = true;
+      state.photoEditor.pointerId = event.pointerId;
+      state.photoEditor.lastX = event.clientX;
+      state.photoEditor.lastY = event.clientY;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      event.currentTarget.classList.add('is-dragging');
+    }
+
+    function movePhotoDrag_(event) {
+      if (!state.photoEditor.dragging || event.pointerId !== state.photoEditor.pointerId) return;
+      var canvas = event.currentTarget;
+      var scale = canvas.width / canvas.getBoundingClientRect().width;
+      state.photoEditor.panX += (event.clientX - state.photoEditor.lastX) * scale;
+      state.photoEditor.panY += (event.clientY - state.photoEditor.lastY) * scale;
+      state.photoEditor.lastX = event.clientX;
+      state.photoEditor.lastY = event.clientY;
+      drawStudentPhotoCrop_();
+    }
+
+    function endPhotoDrag_(event) {
+      if (event.pointerId !== state.photoEditor.pointerId) return;
+      state.photoEditor.dragging = false;
+      state.photoEditor.pointerId = null;
+      event.currentTarget.classList.remove('is-dragging');
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    function saveStudentPhoto_() {
+      var student = state.activeProfileStudent;
+      var canvas = document.getElementById('student-photo-canvas');
+      if (!student || !state.photoEditor.source || state.profilePhotoSaving) return;
+      state.profilePhotoSaving = true;
+      var save = document.getElementById('student-photo-save');
+      save.disabled = true;
+      setStudentPhotoError_('');
+      google.script.run
+        .withSuccessHandler(function(result) {
+          state.profilePhotoSaving = false;
+          save.disabled = false;
+          var parsed = parseInitialData(result);
+          if (!parsed || !parsed.ok || !parsed.dataUrl) {
+            setStudentPhotoError_(parsed && parsed.error ? parsed.error.message || parsed.error.details : "No s'ha pogut desar la foto.");
+            return;
+          }
+          var studentId = String(student.id || '');
+          state.profilePhotoDataByStudent[studentId] = parsed.dataUrl;
+          state.profilePhotoLoadedByStudent[studentId] = true;
+          student.photoUrl = parsed.photoUrl || '';
+          renderStudentProfilePhoto_(student);
+          closeStudentPhotoModal_();
+        })
+        .withFailureHandler(function(error) {
+          state.profilePhotoSaving = false;
+          save.disabled = false;
+          setStudentPhotoError_(error && error.message ? error.message : "No s'ha pogut desar la foto.");
+        })
+        .saveStudentPhotoJson({
+          studentId: student.id,
+          dataUrl: canvas.toDataURL('image/jpeg', 0.9)
+        });
+    }
+
+    function setStudentPhotoError_(message) {
+      var error = document.getElementById('student-photo-error');
+      if (error) error.textContent = message || '';
     }
 
     function renderStudentProfileTab() {

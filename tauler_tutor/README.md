@@ -32,7 +32,7 @@ clasp deploy -i AKfycbwOcqce-v40j7kv1wVuhnERUtdup3GMZhdCHXnN-vP_CqlycQl_ttjaClbz
 
 | View | Purpose |
 | --- | --- |
-| `Inici` | Student list, birthdate, age, and read-only student profile navigation for the teacher's visible groups. The profile `MED` tab shows medical data from active authorization responses, and `FAM` shows family contacts. |
+| `Inici` | Student list, birthdate, age, and student profile navigation for the teacher's visible groups. The profile supports private Drive-backed student photos, while `MED` shows medical data and `FAM` shows family contacts. |
 | `Contactes` | Editable Dinantia contact data with validation and changelog tracking. |
 | `Autoritzacions` | Permission matrix, invitation actions, read-only printable form view, and invalidation workflow. |
 
@@ -78,7 +78,7 @@ The panel is optimized to read from cache tables:
 
 | Cache | Purpose |
 | --- | --- |
-| `Dinantia -> students_cache` | Student identity, group, birthdate, age, document, study model flags. |
+| `Dinantia -> students_cache` | Student identity, group, birthdate, age, document, study model flags, and cached profile-photo URL. |
 | `Dinantia -> contacts_cache` | Dinantia parent/contact rows grouped by student. |
 | `Dinantia -> authorizations_cache` | Latest active authorization row and latest invitation summary per student. |
 | `Dinantia -> cache_runs` | Historical cache rebuild attempts. |
@@ -127,6 +127,7 @@ When the document icon is clicked in `Autoritzacions`, the full panel is disable
 | `TeacherService.js` | Teacher and substitution lookup. |
 | `CacheService.js` | Cache rebuild and cache read helpers. |
 | `ContactService.js` | Contact loading and updates. |
+| `StudentPhotoService.js` | Authorized student-photo loading, Drive storage, Dinantia update, and cache refresh. |
 | `AuthorizationService.js` | Authorization read model and invalidation. |
 | `AuthorizationInvitationService.js` | Trusted calls to the launcher. |
 | `DinantiaService.js` | Dinantia API helpers. |
@@ -160,6 +161,7 @@ node -e "const fs=require('fs'); const html=fs.readFileSync('Client.html','utf8'
 | `docs/PROJECT.md` | Architecture and documentation conventions. |
 | `docs/DB_STRUCTURE.md` | Shared database model. |
 | `docs/features/TUTOR_GROUP_ENDPOINT.md` | Tutor endpoint specs. |
+| `docs/features/STUDENT_PROFILE_PHOTO.md` | Student profile photo workflow and storage rules. |
 | `docs/features/AUTHORIZATIONS_PANEL.md` | Authorization panel specs. |
 | `docs/DINANTIA_API_NOTES.md` | Local Dinantia API summary. |
 | `docs/Dinantia-API-Documentation/` | Dinantia API reference snapshot. |

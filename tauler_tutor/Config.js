@@ -2,6 +2,9 @@ var APP_CONFIG = {
   domain: 'iernestlluch.cat',
   timezone: 'Europe/Madrid',
   dinantiaBaseUrl: 'https://app.dinantia.com/api/web',
+  studentPhotoFolderId: '1zBlLMMASc7S0fFCUeC_PRKXx_ZojL2lA',
+  dinantiaStudentPhotoFieldName: 'Observacions',
+  studentPhotoMaxBytes: 5 * 1024 * 1024,
   formLauncherUrl: 'https://script.google.com/macros/s/AKfycbwOgYsVCf-MdEEbpGFFmWyjMB__MrgDowQuo7W6Ky8ymZwkY_-c7gUPm9QGTGUxiYGrYg/exec',
   adminPrivilegeResponsibility: 'ADMIN_PRIVILEGES',
   userTutorErrorMessage: "Sembla que el teu correu no correspon a cap tutoria. En cas que hi hagi un error, contacta amb el cap d'estudis",
@@ -91,7 +94,8 @@ var CHANGELOG_FIELDS = {
   contact1Email: 'Contact1Email',
   contact2Name: 'Contact2Name',
   contact2Phone: 'Contact2Phone',
-  contact2Email: 'Contact2Email'
+  contact2Email: 'Contact2Email',
+  studentPhoto: 'StudentPhoto'
 };
 
 var CONTACT_FIELD_TO_ACCOUNT_FIELD = {

@@ -98,6 +98,20 @@ function saveStudentTutoriaJson(record) {
 }
 
 /**
+ * Client-callable endpoint for the selected student's profile photo.
+ */
+function loadStudentPhotoJson(studentId) {
+  return JSON.stringify(loadStudentPhoto_(studentId));
+}
+
+/**
+ * Client-callable endpoint to save a square student profile photo.
+ */
+function saveStudentPhotoJson(request) {
+  return JSON.stringify(saveStudentPhoto_(request));
+}
+
+/**
  * Client-callable invitation endpoint for pending authorization flows.
  */
 function sendAuthorizationInvitations(requests) {

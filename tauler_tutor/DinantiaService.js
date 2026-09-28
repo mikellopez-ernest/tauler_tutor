@@ -130,8 +130,47 @@ function studentFromAccount_(account) {
   return {
     id: account.id || '',
     name: account.name || '',
-    parents: account.parents || []
+    parents: account.parents || [],
+    fields: account.fields || []
   };
+}
+
+function fetchAllDinantiaFields_() {
+  var credentials = getDinantiaCredentials_();
+  var fields = [];
+  var page = 1;
+
+  while (true) {
+    var body = fetchDinantiaJson_('/v1.2/fields/index?limit=100&page=' + page, credentials);
+    fields = fields.concat(body.data || []);
+    if (!body.pagination || !body.pagination.has_next_page) break;
+    page++;
+  }
+
+  return fields;
+}
+
+function resolveDinantiaStudentPhotoFieldId_() {
+  var cache = CacheService.getScriptCache();
+  var cacheKey = 'dinantia_student_photo_field_id';
+  var cached = cache.get(cacheKey);
+  if (cached) return cached;
+
+  var target = textKey_(APP_CONFIG.dinantiaStudentPhotoFieldName);
+  var fields = fetchAllDinantiaFields_();
+  var matches = fields.filter(function(field) {
+    var roles = field && field.roles ? field.roles : (field && field.role ? [field.role] : []);
+    var supportsStudents = !roles.length || roles.indexOf('Student') !== -1;
+    return supportsStudents && (textKey_(field.name) === target || textKey_(field.id) === target);
+  });
+
+  if (!matches.length) {
+    throw configurationError_("No s'ha trobat el camp Dinantia \"" + APP_CONFIG.dinantiaStudentPhotoFieldName + '" per a Student.');
+  }
+
+  var fieldId = String(matches[0].id || '').trim();
+  cache.put(cacheKey, fieldId, 21600);
+  return fieldId;
 }
 
 function fetchDinantiaContactsForStudents_(students) {
