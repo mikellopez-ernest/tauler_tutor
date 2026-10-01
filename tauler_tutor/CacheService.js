@@ -462,13 +462,16 @@ function cacheUpdateStudentPhotoUrl_(studentId, photoUrl) {
   var registry = loadTableRegistry_();
   var sheet = openTableSheet_(registry, TABLES.dinantia, SHEETS.studentsCache);
   var headers = ensureHeaderNames_(sheet, ['student_id', 'photo_url']);
-  if (sheet.getLastRow() < 2) return;
+  if (sheet.getLastRow() < 2) return 0;
   var ids = sheet.getRange(2, headers.student_id + 1, sheet.getLastRow() - 1, 1).getValues();
+  var updatedRows = 0;
   ids.forEach(function(row, index) {
     if (String(row[0] || '').trim() === String(studentId || '').trim()) {
       sheet.getRange(index + 2, headers.photo_url + 1).setValue(photoUrl || '');
+      updatedRows += 1;
     }
   });
+  return updatedRows;
 }
 
 function cacheBuildContactsRows_(accounts, students) {

@@ -33,11 +33,13 @@ The Drive file URL is stored in the Dinantia Student custom field `Observacions`
 
 During `cacheRebuildTutorPanel()`, the URL is read from each Dinantia account's `Observacions` field and written to the `photo_url` header in `Dinantia -> students_cache`. The sheet column position is irrelevant; when `photo_url` is column N, values are written to column N. If the field-definition endpoint is temporarily unavailable, the rebuild falls back to the verified Dinantia field ID `Observacions` instead of blanking the photo cache.
 
-After Dinantia accepts the update, the app writes the URL to `Dinantia -> students_cache.photo_url` and appends a `StudentPhoto` changelog row. If the Dinantia update fails, the newly created Drive file is moved to trash.
+After Dinantia accepts the update, the app immediately writes the same URL to every matching `Dinantia -> students_cache.photo_url` row and verifies that at least one row was updated. It then appends a `StudentPhoto` changelog row. This double write makes the new photo available from the cache without waiting for a complete cache rebuild.
+
+If the Dinantia update fails, the newly created Drive file is moved to trash. If Dinantia succeeds but the cache update fails, the Drive file is preserved because Dinantia already references it. The save reports the cache error and `cacheRebuildTutorPanel()` is the repair path.
 
 ## Authorized Reads
 
-Drive URLs are not rendered directly in the browser. `loadStudentPhotoJson(studentId)` first resolves the logged-in teacher and confirms that the student belongs to one of that teacher's visible groups. It then reads the private Drive file server-side and returns an image data URL.
+Drive URLs are not rendered directly in the browser. `loadStudentPhotoJson(studentId)` first resolves the logged-in teacher and confirms that the student belongs to one of that teacher's visible groups. The URL is read exclusively from `Dinantia -> students_cache.photo_url`; profile rendering never calls the Dinantia API. A blank cache value therefore displays the standard silhouette until a photo is saved or the cache is rebuilt. When a URL exists, the app reads the private Drive file server-side and returns an image data URL.
 
 `saveStudentPhotoJson(request)` performs the same student-access check before accepting an image. The decoded payload must be an image data URL and cannot exceed 5 MB.
 

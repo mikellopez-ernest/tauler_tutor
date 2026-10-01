@@ -2,12 +2,6 @@ function loadStudentPhoto_(studentId) {
   var student = requireAccessibleStudent_(studentId);
   var photoUrl = String(student.photoUrl || '').trim();
 
-  if (!photoUrl) {
-    var account = fetchDinantiaAccount_(student.id, getDinantiaCredentials_());
-    photoUrl = studentPhotoUrlFromFields_(account && account.fields, resolveDinantiaStudentPhotoFieldId_());
-    if (photoUrl) cacheUpdateStudentPhotoUrl_(student.id, photoUrl);
-  }
-
   if (!photoUrl) return { ok: true, hasPhoto: false, studentId: student.id };
 
   var fileId = driveFileIdFromUrl_(photoUrl);
@@ -54,16 +48,36 @@ function saveStudentPhoto_(request) {
     throw studentPhotoDriveError_(error);
   }
   var photoUrl = file.getUrl();
+  var oldPhotoUrl = '';
 
   try {
     var account = fetchDinantiaAccount_(student.id, getDinantiaCredentials_());
     if (!account) throw new Error("No s'ha trobat l'alumne/a a Dinantia.");
     var fieldId = resolveDinantiaStudentPhotoFieldId_();
     var oldFieldValue = dinantiaFieldValue_(account.fields, fieldId);
-    var oldPhotoUrl = studentPhotoUrlFromValue_(oldFieldValue);
+    oldPhotoUrl = studentPhotoUrlFromValue_(oldFieldValue);
     var fields = mergeDinantiaFieldValue_(account.fields, fieldId, mergeStudentPhotoUrlIntoValue_(oldFieldValue, photoUrl));
     updateDinantiaAccountFields_(student.id, { id: student.id, fields: fields });
-    cacheUpdateStudentPhotoUrl_(student.id, photoUrl);
+  } catch (error) {
+    file.setTrashed(true);
+    throw error;
+  }
+
+  var cacheRowsUpdated;
+  try {
+    cacheRowsUpdated = cacheUpdateStudentPhotoUrl_(student.id, photoUrl);
+    if (!cacheRowsUpdated) {
+      throw new Error("La foto s'ha desat a Dinantia, però no s'ha trobat l'alumne/a a students_cache. Executa cacheRebuildTutorPanel() per reparar la memòria cau.");
+    }
+  } catch (error) {
+    logError_('student_photo_cache_update_failed_after_dinantia', error, {
+      studentId: student.id,
+      photoUrl: photoUrl
+    });
+    throw error;
+  }
+
+  try {
     appendChangelogRows_([{
       studentId: student.id,
       fieldChanged: CHANGELOG_FIELDS.studentPhoto,
@@ -71,15 +85,20 @@ function saveStudentPhoto_(request) {
       newValue: photoUrl
     }], userEmail);
   } catch (error) {
-    file.setTrashed(true);
-    throw error;
+    logError_('student_photo_changelog_failed', error, { studentId: student.id, photoUrl: photoUrl });
   }
 
-  logInfo_('student_photo_saved', { studentId: student.id, fileId: file.getId(), userEmail: userEmail });
+  logInfo_('student_photo_saved', {
+    studentId: student.id,
+    fileId: file.getId(),
+    cacheRowsUpdated: cacheRowsUpdated,
+    userEmail: userEmail
+  });
   return {
     ok: true,
     studentId: student.id,
     photoUrl: photoUrl,
+    cacheRowsUpdated: cacheRowsUpdated,
     dataUrl: 'data:image/jpeg;base64,' + Utilities.base64Encode(image.bytes)
   };
 }

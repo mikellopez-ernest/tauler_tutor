@@ -78,7 +78,7 @@ The panel is optimized to read from cache tables:
 
 | Cache | Purpose |
 | --- | --- |
-| `Dinantia -> students_cache` | Student identity, group, birthdate, age, document, study model flags, and cached profile-photo URL. |
+| `Dinantia -> students_cache` | Student identity, group, birthdate, age, document, study model flags, and cached profile-photo URL. Profile-photo reads use this cache without calling the Dinantia API; saves update both Dinantia `Observacions` and the cache immediately. |
 | `Dinantia -> contacts_cache` | Dinantia parent/contact rows grouped by student. |
 | `Dinantia -> authorizations_cache` | Latest active authorization row and latest invitation summary per student. |
 | `Dinantia -> cache_runs` | Historical cache rebuild attempts. |
