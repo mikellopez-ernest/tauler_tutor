@@ -1275,11 +1275,21 @@
       var image = document.getElementById('student-profile-photo');
       if (!image || !student) return;
       var studentId = String(student.id || '').trim();
-      image.src = state.profilePhotoDataByStudent[studentId] || profileSilhouetteDataUrl_();
+      var cachedPhotoUrl = String(student.photoUrl || '').trim();
+      var photoData = state.profilePhotoDataByStudent[studentId] || '';
+      image.src = photoData || profileSilhouetteDataUrl_();
       image.alt = student.name ? 'Foto de ' + student.name : "Foto de l'alumne/a";
-      if (!studentId || state.profilePhotoLoadedByStudent[studentId] || state.profilePhotoLoadingByStudent[studentId]) return;
+      if (!studentId || !cachedPhotoUrl || photoData || state.profilePhotoLoadedByStudent[studentId]) {
+        setStudentProfilePhotoLoading_(studentId, false);
+        return;
+      }
+      if (state.profilePhotoLoadingByStudent[studentId]) {
+        setStudentProfilePhotoLoading_(studentId, true);
+        return;
+      }
 
       state.profilePhotoLoadingByStudent[studentId] = true;
+      setStudentProfilePhotoLoading_(studentId, true);
       google.script.run
         .withSuccessHandler(function(result) {
           state.profilePhotoLoadingByStudent[studentId] = false;
@@ -1290,14 +1300,28 @@
             student.photoUrl = parsed.photoUrl || student.photoUrl || '';
           }
           if (state.activeProfileStudent && String(state.activeProfileStudent.id || '') === studentId) {
-            image.src = state.profilePhotoDataByStudent[studentId] || profileSilhouetteDataUrl_();
+            renderStudentProfilePhoto_(student);
           }
         })
         .withFailureHandler(function() {
           state.profilePhotoLoadingByStudent[studentId] = false;
           state.profilePhotoLoadedByStudent[studentId] = true;
+          if (state.activeProfileStudent && String(state.activeProfileStudent.id || '') === studentId) {
+            renderStudentProfilePhoto_(student);
+          }
         })
         .loadStudentPhotoJson(studentId);
+    }
+
+    function setStudentProfilePhotoLoading_(studentId, loading) {
+      var activeStudentId = String(state.activeProfileStudent && state.activeProfileStudent.id || '').trim();
+      if (String(studentId || '').trim() !== activeStudentId) return;
+      var button = document.getElementById('student-photo-button');
+      var loader = document.getElementById('student-profile-photo-loader');
+      if (!button || !loader) return;
+      button.classList.toggle('is-loading', !!loading);
+      button.setAttribute('aria-busy', loading ? 'true' : 'false');
+      loader.hidden = !loading;
     }
 
     var profileSilhouetteCache_ = '';

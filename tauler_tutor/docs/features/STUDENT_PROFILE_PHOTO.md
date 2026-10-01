@@ -7,6 +7,7 @@ The student profile header shows a square photo next to the student name. Tutors
 ## User Interface
 
 - With no saved photo, show a neutral silhouette rendered as a PNG data URL.
+- When `students_cache.photo_url` contains a URL and the private Drive image is being loaded, show a centered animated loading icon inside the photo frame. Remove it when loading succeeds or fails.
 - Clicking either the silhouette or a saved photo opens the photo modal.
 - `Fes una foto` opens a small top-level camera window. The tutor clicks `Activa la càmera`, Firefox asks for camera permission, and the window shows a square live viewport.
 - `Puja una foto` accepts JPG, PNG, or WebP files.
@@ -39,7 +40,7 @@ If the Dinantia update fails, the newly created Drive file is moved to trash. If
 
 ## Authorized Reads
 
-Drive URLs are not rendered directly in the browser. `loadStudentPhotoJson(studentId)` first resolves the logged-in teacher and confirms that the student belongs to one of that teacher's visible groups. The URL is read exclusively from `Dinantia -> students_cache.photo_url`; profile rendering never calls the Dinantia API. A blank cache value therefore displays the standard silhouette until a photo is saved or the cache is rebuilt. When a URL exists, the app reads the private Drive file server-side and returns an image data URL.
+Drive URLs are not rendered directly in the browser. `loadStudentPhotoJson(studentId)` first resolves the logged-in teacher and confirms that the student belongs to one of that teacher's visible groups. The URL is read exclusively from `Dinantia -> students_cache.photo_url`; profile rendering never calls the Dinantia API. A blank cache value displays the standard silhouette and does not call the photo endpoint. When a URL exists, the photo frame displays its loading icon while the app reads the private Drive file server-side and returns an image data URL. A failed load removes the icon and falls back to the silhouette.
 
 `saveStudentPhotoJson(request)` performs the same student-access check before accepting an image. The decoded payload must be an image data URL and cannot exceed 5 MB.
 
